@@ -418,28 +418,33 @@ php artisan migrate:fresh
 
 because it deletes existing database tables and data.
 
-📁 Important Project Structure
+## 📁 Important Project Structure
 
+```text
 feedback-system/
 │
-├── app/                    # Application code
-├── database/
-│   ├── migrations/         # Database structure
-│   └── seeders/            # Initial/sample data
-├── public/                 # Public assets
-├── resources/              # React/frontend resources
-├── routes/                 # Laravel routes
-├── storage/                # Laravel generated files
-├── tests/                  # Tests
+├── app/                         # Laravel application code
 │
-├── .env                    # Local configuration (DO NOT COMMIT)
-├── .env.example            # Environment template (COMMIT)
-├── .gitignore              # Git exclusions
-├── composer.json           # PHP dependencies
-├── composer.lock           # Locked PHP dependency versions
-├── package.json            # JavaScript dependencies/scripts
-├── package-lock.json       # Locked JavaScript dependency versions
-└── README.md               # Project documentation
+├── database/
+│   ├── migrations/              # Database table structure
+│   └── seeders/                 # Initial/sample data
+│
+├── public/                      # Publicly accessible files
+├── resources/                   # React/frontend resources
+├── routes/                      # Laravel routes
+├── storage/                     # Laravel generated files
+├── tests/                       # Automated tests
+│
+├── .env                         # Local configuration ⚠️ DO NOT COMMIT
+├── .env.example                 # Environment configuration template
+├── .gitignore                   # Files excluded from Git
+│
+├── composer.json                # PHP/Laravel dependencies
+├── composer.lock                # Locked PHP dependency versions
+├── package.json                 # JavaScript/React dependencies
+├── package-lock.json            # Locked JavaScript dependency versions
+│
+└── README.md                    # Project documentation
 
 ✅ Quick Setup Checklist
 
