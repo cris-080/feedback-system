@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Models;
+
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+class User extends Authenticatable
+{
+    // 1. Tell Laravel the actual table name
+    protected $table = 'account';
+
+    // 2. Tell Laravel your primary key is 'user_id', not 'id'
+    protected $primaryKey = 'user_id';
+
+    // 3. Tell Laravel to use 'password_hash' for authenticating logins
+    public function getAuthPassword()
+    {
+        return $this->password_hash;
+    }
+
+    protected $fillable = [
+        'firstname',
+        'lastname',
+        'username',
+        'email',
+        'password_hash',
+        'role',
+        'department_id',
+    ];
+
+    protected $hidden = [
+        'password_hash', // Hide your custom password column
+        'remember_token',
+    ];
+
+    
+}
