@@ -41,6 +41,9 @@ export default function Login({ status, canResetPassword }) {
                         <h1 className="text-2xl font-black tracking-tight leading-none text-white">
                             CLSU <span className="text-[#FFD700]">FMS</span>
                         </h1>
+                        <p className="text-[11px] text-white/70 uppercase tracking-widest font-medium">
+                            Feedback Management System
+                        </p>
                     </div>
                 </div>
 

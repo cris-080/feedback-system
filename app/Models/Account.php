@@ -6,12 +6,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Notifications\Notifiable;
 use App\Models\Department;
 
 class Account extends Authenticatable
 {
     use HasFactory;
-
+    use HasFactory, Notifiable;
     protected $table = 'account';
     protected $primaryKey = 'user_id';
     
