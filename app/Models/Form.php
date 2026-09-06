@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 
 class Form extends Model
 {
+    use SoftDeletes;
     protected $table = 'forms';
     protected $primaryKey = 'form_id';
     public $timestamps = false;
@@ -365,20 +367,60 @@ public static function getPaginatedActiveForms($filters, $perPage = 10)
             ->orderBy('display_order', 'asc')
             ->get();
 
-        // 2. Group fields by step_number
+        // 2. Fetch live department services for injection
+        $liveServices = [];
+        if ($this->department_id) {
+            // Pull live services directly from the model
+            $liveServices = \App\Models\DepartmentService::where('department_id', $this->department_id)
+                ->pluck('service_name')
+                ->toArray();
+        }
+
+        // 3. Group fields by step_number
         $grouped = $fields->groupBy('step_number');
 
-        // 3. Format directly into step-indexed arrays matching React's expectation (e.g., steps[1] = [...fields])
+        // 4. Format directly into step-indexed arrays
         $steps = [];
+        
+        // Notice we are passing $stepNumber into the closure now!
         foreach ($grouped as $stepNumber => $stepFields) {
-            $steps[$stepNumber] = $stepFields->map(function ($field) {
+            $steps[$stepNumber] = $stepFields->map(function ($field) use ($liveServices, $stepNumber) {
+                
+                $label = strtolower(trim($field->field_label));
+                $isServiceField = false;
+                
+                // STRICT SCOPE: The "Service Availed" field only ever exists in Step 1.
+                // We completely ignore Step 2 (CC), Step 3 (SQD), and Step 4 (Overall) 
+                // so they never get accidentally overwritten!
+                if ($stepNumber == 1) {
+                    $isServiceField = (
+                        (str_contains($label, 'service') && !str_contains($label, 'provider')) || 
+                        str_contains($label, 'avail') || 
+                        (str_contains($label, 'transaction') && !str_contains($label, 'transaction type'))
+                    );
+                }
+
+                // SAFETY CHECK: Only override if the original field is a choice-based input
+                $isChoiceInput = in_array($field->input_type, ['dropdown', 'radio', 'multiselect']);
+
+                // Inject live services if all checks pass
+                $options = ($isServiceField && $isChoiceInput && !empty($liveServices)) 
+                    ? $liveServices 
+                    : $field->options->pluck('option_label')->toArray();
+                
+                // Force input type to multiselect ONLY for the matching service field
+                $inputType = $field->input_type;
+                if ($isServiceField && $isChoiceInput && !empty($liveServices)) {
+                    $inputType = 'multiselect';
+                }
+
                 return [
                     'field_id'      => $field->field_id,
                     'field_label'   => $field->field_label,
-                    'input_type'    => $field->input_type,
+                    'input_type'    => $inputType, 
                     'is_required'   => (bool) $field->is_required,
                     'display_order' => $field->display_order,
-                    'options'       => $field->options->pluck('option_label')->toArray(),
+                    'options'       => $options,
                 ];
             })->values()->toArray();
         }

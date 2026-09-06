@@ -3,9 +3,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Head, Link, router, usePage, useForm } from '@inertiajs/react';
 import SuperAdminLayout from '../../Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
-import axios from 'axios'; // Added axios for the deployment request
 
-export default function ManageForms({ forms, uniqueDepartments, filters }) {
+
+export default function ManageForms({ forms, uniqueDepartments, filters, isSuperAdmin }) {
     const { flash } = usePage().props;
     
     // Safely fallback to an empty array if uniqueDepartments is undefined
@@ -23,6 +23,8 @@ export default function ManageForms({ forms, uniqueDepartments, filters }) {
 
    
     useEffect(() => {
+        if (!isSuperAdmin) return; // Skip filtering listener if not SuperAdmin
+
         if (isInitialRender.current) {
             isInitialRender.current = false;
             return;
@@ -42,7 +44,7 @@ export default function ManageForms({ forms, uniqueDepartments, filters }) {
         }, 300);
 
         return () => clearTimeout(timeout);
-    }, [searchQuery, statusFilter, departmentFilter]);
+    }, [searchQuery, statusFilter, departmentFilter, isSuperAdmin]);
 
     // --- SWEETALERT2 TOAST NOTIFICATIONS ---
     useEffect(() => {
@@ -121,178 +123,128 @@ export default function ManageForms({ forms, uniqueDepartments, filters }) {
         focal_person_email: ''
     });
 
-    const handleSendLink = (form) => {
-        if (!form.department_id) {
-            Swal.fire({
-                title: 'Cannot Deploy Kit',
-                text: 'This is a General form. You must assign it to a specific department before you can deploy a kit.',
-                icon: 'warning',
-                confirmButtonColor: '#f59e0b'
-            });
-            return;
-        }
-
-        // Safely extract the email if it exists in your database join
-        const syncedEmail = form.focal_person_email || form.department?.focal_person_email || '';
-
-        // Set the state using the whole form object
-        setDeployData({
-            department_id: form.department_id,
-            department_name: form.department_name || 'Selected Department', 
-            label: `${form.department_name || 'Department'} Walk-in Kiosk`,
-            focal_person_email: syncedEmail 
-        });
-        
-        setIsDeployModalOpen(true);
-    };
-
-    const submitDeployment = async (e) => {
-        e.preventDefault();
-        setIsSending(true);
-
-        try {
-            await axios.post(route('superadmin.qrcodes.store'), deployData);
-            
-            Swal.fire({
-                title: 'Kit Deployed!',
-                text: 'The QR Code and Kiosk Link have been successfully emailed.',
-                icon: 'success',
-                confirmButtonColor: '#16a34a'
-            });
-
-            setIsDeployModalOpen(false);
-            resetDeploy();
-        } catch (error) {
-            console.error("Deployment Error:", error);
-            Swal.fire({
-                title: 'Error',
-                text: 'Failed to deploy the kit. Check your network or mailer settings.',
-                icon: 'error',
-                confirmButtonColor: '#d33'
-            });
-        } finally {
-            setIsSending(false);
-        }
-    };
+  
+    
 
     // Check if any filters are active
     const hasActiveFilters = Boolean(statusFilter || departmentFilter);
+    const formList = forms?.data || forms || [];
 
     return (
-        <SuperAdminLayout headerTitle="Manage Department Forms">
+        <SuperAdminLayout headerTitle={isSuperAdmin ? "Manage Evaluation Forms" : "Department Evaluation Forms"}>
             <Head title="Manage Forms" />
             <div className="p-8 bg-gray-50 min-h-screen">
                 
                 <div className="max-w-7xl mx-auto space-y-6">
                     
-                    {/* Toolbar Section */}
-                    <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
-                        
-                        <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
+                    {/* --- TOOLBAR SECTION (SuperAdmin ONLY) --- */}
+                    {isSuperAdmin && (
+                        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
                             
-                            {/* Search Bar UI */}
-                            <div className="relative w-full sm:w-64 md:w-72">
-                                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                    <i className="fa-solid fa-magnifying-glass text-gray-400"></i>
-                                </div>
-                                <input 
-                                    type="text" 
-                                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#009639] focus:border-[#009639] text-sm transition duration-150 ease-in-out" 
-                                    placeholder="Search form title, ID..." 
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-                                {searchQuery && (
-                                    <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
-                                        <i className="fa-solid fa-xmark"></i>
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* --- COLLAPSIBLE FILTER MENU BUTTON & DROPDOWN --- */}
-                            <div className="relative w-full sm:w-auto">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                    className={`w-full sm:w-auto p-2.5 rounded-md border text-sm font-semibold transition flex items-center justify-center relative ${
-                                        hasActiveFilters 
-                                            ? 'bg-emerald-50 border-[#009639] text-[#1E6031]' 
-                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                    }`}
-                                    title="Filter Forms"
-                                >
-                                    <i className="fa-solid fa-filter text-base"></i>
-                                  
-                                    {hasActiveFilters && (
-                                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#009639] opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#009639]"></span>
-                                        </span>
-                                    )}
-                                </button>
-
-                                {/* Dropdown Menu */}
-                                {isFilterOpen && (
-                                    <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-30 p-4 space-y-3">
-                                        <div className="flex justify-between items-center border-b pb-2">
-                                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Filter Forms</span>
-                                            {hasActiveFilters && (
-                                                <button 
-                                                    onClick={() => { setStatusFilter(''); setDepartmentFilter(''); }}
-                                                    className="text-xs text-red-600 hover:underline font-semibold"
-                                                >
-                                                    Reset All
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        {/* Status Filter */}
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-600 mb-1">By Status</label>
-                                            <select 
-                                                className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
-                                                value={statusFilter}
-                                                onChange={(e) => setStatusFilter(e.target.value)}
-                                            >
-                                                <option value="">All Statuses</option>
-                                                <option value="Active">Active</option>
-                                                <option value="Draft">Draft</option>
-                                                <option value="Archived">Archived</option>
-                                            </select>
-                                        </div>
-
-                                        {/* Department Filter */}
-                                        <div>
-                                            <label className="block text-xs font-semibold text-gray-600 mb-1">By Department</label>
-                                            <select 
-                                                className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
-                                                value={departmentFilter}
-                                                onChange={(e) => setDepartmentFilter(e.target.value)}
-                                            >
-                                                <option value="">All Departments</option>
-                                                {safeDepartments.map(dept => (
-                                                    <option key={dept} value={dept}>
-                                                        {dept}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
+                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
+                                
+                                {/* Search Bar UI */}
+                                <div className="relative w-full sm:w-64 md:w-72">
+                                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <i className="fa-solid fa-magnifying-glass text-gray-400"></i>
                                     </div>
-                                )}
+                                    <input 
+                                        type="text" 
+                                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#009639] focus:border-[#009639] text-sm transition duration-150 ease-in-out" 
+                                        placeholder="Search form title, ID..." 
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                    {searchQuery && (
+                                        <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
+                                            <i className="fa-solid fa-xmark"></i>
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* --- COLLAPSIBLE FILTER MENU BUTTON & DROPDOWN --- */}
+                                <div className="relative w-full sm:w-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsFilterOpen(!isFilterOpen)}
+                                        className={`w-full sm:w-auto p-2.5 rounded-md border text-sm font-semibold transition flex items-center justify-center relative ${
+                                            hasActiveFilters 
+                                                ? 'bg-emerald-50 border-[#009639] text-[#1E6031]' 
+                                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                        title="Filter Forms"
+                                    >
+                                        <i className="fa-solid fa-filter text-base"></i>
+                                      
+                                        {hasActiveFilters && (
+                                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#009639] opacity-75"></span>
+                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#009639]"></span>
+                                            </span>
+                                        )}
+                                    </button>
+
+                                    {/* Dropdown Menu */}
+                                    {isFilterOpen && (
+                                        <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-30 p-4 space-y-3">
+                                            <div className="flex justify-between items-center border-b pb-2">
+                                                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Filter Forms</span>
+                                                {hasActiveFilters && (
+                                                    <button 
+                                                        onClick={() => { setStatusFilter(''); setDepartmentFilter(''); }}
+                                                        className="text-xs text-red-600 hover:underline font-semibold"
+                                                    >
+                                                        Reset All
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* Status Filter */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">By Status</label>
+                                                <select 
+                                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
+                                                    value={statusFilter}
+                                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                                >
+                                                    <option value="">All Statuses</option>
+                                                    <option value="Active">Active</option>
+                                                    <option value="Draft">Draft</option>
+                                                    <option value="Archived">Archived</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Department Filter */}
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">By Department</label>
+                                                <select 
+                                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
+                                                    value={departmentFilter}
+                                                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                                                >
+                                                    <option value="">All Departments</option>
+                                                    {safeDepartments.map(dept => (
+                                                        <option key={dept} value={dept}>
+                                                            {dept}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                             </div>
 
+                            {/* Action Buttons */}
+                            <div className="flex w-full xl:w-auto gap-3 flex-col sm:flex-row">
+                                <Link href={route('superadmin.forms.builder')} className="bg-blue-600 hover:bg-blue-600 text-white px-6 py-2 rounded-md font-semibold text-sm transition shadow-sm w-full sm:w-auto text-center flex items-center justify-center whitespace-nowrap">
+                                    <i className="fa-solid fa-plus mr-2"></i> Create Form
+                                </Link>
+                                
+                            </div>
                         </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex w-full xl:w-auto gap-3 flex-col sm:flex-row">
-                            <Link href={route('superadmin.forms.builder')} className="bg-blue-600 hover:bg-blue-600 text-white px-6 py-2 rounded-md font-semibold text-sm transition shadow-sm w-full sm:w-auto text-center flex items-center justify-center whitespace-nowrap">
-                                <i className="fa-solid fa-plus mr-2"></i> Create Form
-                            </Link>
-                            <Link href="/superAdmin/archives" className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-md font-semibold text-sm transition shadow-sm w-full sm:w-auto text-center flex items-center justify-center whitespace-nowrap">
-                                <i className="fa-solid fa-box-archive mr-2"></i> View Archives
-                            </Link>
-                        </div>
-                    </div>
+                    )}
 
                     {/* Forms Data Table */}
                     <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
@@ -304,13 +256,15 @@ export default function ManageForms({ forms, uniqueDepartments, filters }) {
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Form Title</th>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Department</th>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Status</th>
-                                        <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
+                                        {isSuperAdmin && (
+                                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {!(forms?.data || forms).length ? (
                                         <tr>
-                                            <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                                            <td colSpan={isSuperAdmin ? 5 : 4} className="px-6 py-12 text-center text-gray-500">
                                                 <i className="fa-solid fa-filter-circle-xmark text-4xl mb-4 block text-gray-300"></i>
                                                 <p className="text-base font-semibold">No forms found</p>
                                                 <p className="text-sm mt-1">Try adjusting your search or filter settings.</p>
@@ -329,35 +283,34 @@ export default function ManageForms({ forms, uniqueDepartments, filters }) {
                                                     {form.status === 'Draft' && <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-yellow-100 text-yellow-800">Draft</span>}
                                                     {form.status === 'Archived' && <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-gray-100 text-gray-800">Archived</span>}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
-                                                    
-                                                    {form.status === 'Draft' && (
-                                                        <button onClick={() => handlePublish(form.form_id, form.title)} 
-                                                            className="w-8 h-8 bg-green-100 text-green-600 hover:bg-green-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Publish">
-                                                            <i className="fa-solid fa-upload"></i>
+                                                {isSuperAdmin && (
+                                                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+                                                        
+                                                        {form.status === 'Draft' && (
+                                                            <button onClick={() => handlePublish(form.form_id, form.title)} 
+                                                                className="w-8 h-8 bg-green-100 text-green-600 hover:bg-green-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Publish">
+                                                                <i className="fa-solid fa-upload"></i>
+                                                            </button>
+                                                        )}
+                                                        
+                                                        <button onClick={() => handleArchive(form.form_id, form.title)} 
+                                                            className="w-8 h-8 bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white rounded inline-flex justify-center items-center transition" title="Archive">
+                                                            <i className="fa-solid fa-box-archive"></i>
                                                         </button>
-                                                    )}
-                                                    
-                                                    <button onClick={() => handleArchive(form.form_id, form.title)} 
-                                                        className="w-8 h-8 bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white rounded inline-flex justify-center items-center transition" title="Archive">
-                                                        <i className="fa-solid fa-box-archive"></i>
-                                                    </button>
-                                                    
-                                                    <button onClick={() => handleClone(form.form_id)} 
-                                                        className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Clone">
-                                                        <i className="fa-solid fa-copy"></i>
-                                                    </button>
+                                                        
+                                                        <button onClick={() => handleClone(form.form_id)} 
+                                                            className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Clone">
+                                                            <i className="fa-solid fa-copy"></i>
+                                                        </button>
 
-                                                    <button onClick={() => handleSendLink(form)} 
-                                                        className="w-8 h-8 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Deploy Evaluation Kit">
-                                                        <i className="fa-solid fa-paper-plane"></i>
-                                                    </button>
-                                                                                                        
-                                                    <Link href={`/superAdmin/forms/${form.form_id}/edit`} 
-                                                        className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit">
-                                                        <i className="fa-solid fa-pen"></i>
-                                                    </Link>
-                                                </td>
+                                                        
+                                                                                                            
+                                                        <Link href={`/superAdmin/forms/${form.form_id}/edit`} 
+                                                            className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit">
+                                                            <i className="fa-solid fa-pen"></i>
+                                                        </Link>
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))
                                     )}

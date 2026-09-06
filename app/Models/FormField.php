@@ -132,7 +132,7 @@ class FormField extends Model
                 'field_id' => 'temp_9',
                 'step_number' => 1,
                 'field_label' => 'Name of Service Provider:',
-                'input_type' => 'text',
+                'input_type' => 'dropdown',
                 'is_required' => true,
                 'options' => []
             ],

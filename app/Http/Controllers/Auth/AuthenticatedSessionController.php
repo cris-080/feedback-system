@@ -17,14 +17,21 @@ class AuthenticatedSessionController extends Controller
     /**
      * Display the login view.
      */
-    public function create(): Response
+    public function create(): Response|RedirectResponse
     {
+        if (Auth::check()) {
+            $role = strtolower(trim(Auth::user()->role ?? ''));
+
+            return $role === 'superadmin'
+                ? redirect()->route('superadmin.dashboard')
+                : redirect()->route('focalperson.dashboard');
+        }
+
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
         ]);
     }
-
     /**
      * Handle an incoming authentication request.
      */
@@ -34,20 +41,19 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        // 1. Get the authenticated user's role
         $role = $request->user()->role;
 
-        // 2. Determine their default dashboard based on their specific role
-        $fallbackUrl = match ($role) {
+        // Route SuperAdmins and Focal Persons to the unified RBAC command center.
+        // Feedback Committee goes to their specific requests view.
+       $fallbackUrl = match ($role) {
             'SuperAdmin'         => '/superAdmin/dashboard',
-            'Feedback Committee' => '/admin/dashboard',
-            default              => '/dashboard',
+            'Feedback Committee' => '/feedback-committee/requests',
+            default              => '/focalPerson/dashboard', // Focal Person Default
         };
 
-        // 3. Get the intended URL (if they clicked a link before logging in), or use the fallback
         $targetUrl = session()->pull('url.intended', $fallbackUrl);
 
-        // 4. Use Inertia::location to force a full page reload and fix Ziggy route caching
+        // Using Inertia::location forces a full page reload to clear Ziggy route cache
         return Inertia::location($targetUrl);
     }
     

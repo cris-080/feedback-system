@@ -49,7 +49,7 @@ export default function Users({ accounts, departments, roles, filters }) {
         email: '',
         password: '',
         role: '',
-        department_id: ''
+        department_id: '',
     });
 
     // --- SWEETALERT2 TOAST & ERROR NOTIFICATIONS ---
@@ -79,7 +79,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                 email: user.email,
                 password: '',
                 role: user.role,
-                department_id: user.department_id || ''
+                department_id: user.department_id || '',
             });
         } else {
             setIsEditing(false);
@@ -349,7 +349,7 @@ export default function Users({ accounts, departments, roles, filters }) {
 
                                 </div>
 
-                                {/* Add Account Button - Updated Theme */}
+                                {/* Add Account Button */}
                                 <button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md font-semibold text-sm transition shadow-sm whitespace-nowrap w-full xl:w-auto flex items-center justify-center">
                                     <i className="fa-solid fa-user-plus mr-2"></i> Add Account
                                 </button>
@@ -377,7 +377,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                             </tr>
                                         ) : (
                                             accounts.data.map(acc => {
-                                                const userId = acc.user_id; // FIX: Updated to match your database primary key
+                                                const userId = acc.user_id; 
                                                 const fullName = `${acc.firstname} ${acc.lastname}`;
 
                                                 return (
@@ -462,7 +462,6 @@ export default function Users({ accounts, departments, roles, filters }) {
                         </>
                     )}
 
-
                     {/* --- TAB 2: ROLES SECTION --- */}
                     {activeTab === 'roles' && (
                         <div className="space-y-6">
@@ -482,7 +481,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                         <button
                                             type="button"
                                             onClick={() => setActiveTab('roles')}
-                                            className="px-4 py-1.5 rounded-md text-xs font-bold bg-[#009639] text-white shadow-sm"
+                                            className="px-4 py-1.5 rounded-md text-xs font-bold bg-blue-600 text-white shadow-sm"
                                         >
                                             <i className="fa-solid fa-user-shield mr-1.5"></i> Roles
                                         </button>
@@ -497,7 +496,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                 <button 
                                     type="button"
                                     onClick={openCreateRoleModal}
-                                    className="bg-[#009639] text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-[#1E6031] transition shadow-sm flex items-center"
+                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition shadow-sm flex items-center"
                                 >
                                     <i className="fa-solid fa-plus mr-2"></i> Add New Role
                                 </button>
@@ -523,7 +522,6 @@ export default function Users({ accounts, departments, roles, filters }) {
                                         <div className="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
                                             <span><strong>{role.accounts_count || 0}</strong> Active Users</span>
                                             
-                                            {/* Edit allowed for all roles; Delete restricted for system core roles */}
                                             <div className="space-x-3">
                                                 <button type="button" onClick={() => openEditRoleModal(role)} className="text-blue-600 hover:text-blue-800 font-bold">Edit</button>
                                                 {!role.is_system && (
@@ -541,108 +539,207 @@ export default function Users({ accounts, departments, roles, filters }) {
             </div>
 
             {/* Modal for Creating & Editing Account */}
-            {showModal && (
-                <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black transition-opacity duration-300 ease-out ${animateModal ? 'bg-opacity-50 opacity-100' : 'bg-opacity-0 opacity-0'}`} onClick={closeModal}>
-                    <div className={`bg-white rounded-lg shadow-xl w-full max-w-3xl overflow-hidden transition-all duration-300 ease-out ${animateModal ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-95'}`} onClick={(e) => e.stopPropagation()}>
-                        
-                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-800">{isEditing ? 'Edit Account' : 'Add New Account'}</h3>
-                            <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition"><i className="fa-solid fa-xmark text-xl"></i></button>
-                        </div>
-
-                        <form onSubmit={submitForm} className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">First Name <span className="text-red-500">*</span></label>
-                                    <input type="text" className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" value={data.firstname} onChange={e => setData('firstname', e.target.value)} required />
-                                    {errors.firstname && <div className="text-red-500 text-xs mt-1">{errors.firstname}</div>}
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">Last Name <span className="text-red-500">*</span></label>
-                                    <input type="text" className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" value={data.lastname} onChange={e => setData('lastname', e.target.value)} required />
-                                    {errors.lastname && <div className="text-red-500 text-xs mt-1">{errors.lastname}</div>}
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">Username <span className="text-red-500">*</span></label>
-                                    <input type="text" className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" value={data.username} onChange={e => setData('username', e.target.value)} required />
-                                    {errors.username && <div className="text-red-500 text-xs mt-1">{errors.username}</div>}
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">Email Address <span className="text-red-500">*</span></label>
-                                    <input type="email" className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" value={data.email} onChange={e => setData('email', e.target.value)} required />
-                                    {errors.email && <div className="text-red-500 text-xs mt-1">{errors.email}</div>}
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">
-                                        {isEditing ? 'New Password' : 'Temporary Password'} {!isEditing && <span className="text-red-500">*</span>}
-                                    </label>
-                                    <input type="text" className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" 
-                                        placeholder={isEditing ? 'Leave blank to keep current password' : ''}
-                                        value={data.password} onChange={e => setData('password', e.target.value)} required={!isEditing} />
-                                    {errors.password && <div className="text-red-500 text-xs mt-1">{errors.password}</div>}
-                                </div>
-                                
-                              <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">System Role <span className="text-red-500">*</span></label>
-                                    <select className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" 
-                                        value={data.role} onChange={e => {
-                                            const selected = e.target.value;
-                                            setData('role', selected);
-                                            
-                                            // Clear the department if they are a system-wide admin
-                                            if(selected === 'SuperAdmin' || selected === 'Feedback Committee') {
-                                                setData('department_id', '');
-                                            }
-                                        }} required>
-                                        <option value="" disabled>-- Select a Role --</option>
-                                        {roles.map((role) => (
-                                            <option key={role.role_id} value={role.role_name}>
-                                                {role.role_name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {/* Display the backend validation error here */}
-                                    {errors.role && <div className="text-red-500 text-xs mt-1 font-semibold animate-pulse">{errors.role}</div>}
-                                </div>
-                                
-                                {/* FIX: Show department dropdown for any role EXCEPT system-wide roles */}
-                                {(data.role !== 'SuperAdmin' && data.role !== 'Feedback Committee' && data.role !== '') && (
-                                    <div className="animate-fade-in-up">
-                                        <label className="block text-sm font-semibold mb-1 text-gray-700">Assigned Department <span className="text-red-500">*</span></label>
-                                        <select className="w-full border-gray-300 rounded shadow-sm focus:ring focus:ring-blue-200" 
-                                            value={data.department_id || ''} onChange={e => setData('department_id', e.target.value)} required>
-                                            <option value="">-- Select Department --</option>
-                                            {departments.map(dept => (
-                                                <option key={dept.department_id} value={dept.department_id}>
-                                                    {dept.department_name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {errors.department_id && <div className="text-red-500 text-xs mt-1">{errors.department_id}</div>}
-                                    </div>
-                                )}
-                            </div>
-                            
-                            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                                <button type="button" onClick={closeModal} className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-semibold transition">
-                                    Cancel
-                                </button>
-                                <button type="submit" disabled={processing} className="px-5 py-2 bg-[#009639] text-white rounded font-semibold hover:bg-[#1E6031] transition disabled:opacity-50">
-                                    {processing ? 'Saving...' : isEditing ? 'Update Account' : 'Add Account'}
-                                </button>
-                            </div>
-                        </form>
+{showModal && (
+    <div 
+        className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 transition-opacity duration-300 ease-out ${animateModal ? 'opacity-100' : 'opacity-0'}`} 
+        onClick={closeModal}
+    >
+        <div 
+            className={`bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden transition-all duration-300 ease-out flex flex-col max-h-[90vh] ${animateModal ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-6 scale-95'}`} 
+            onClick={(e) => e.stopPropagation()}
+        >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50/80">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#009639]/10 text-[#009639] flex items-center justify-center font-bold">
+                        <i className={`fa-solid ${isEditing ? 'fa-user-pen' : 'fa-user-plus'}`}></i>
+                    </div>
+                    <div>
+                        <h3 className="text-base font-bold text-gray-900 leading-tight">
+                            {isEditing ? 'Edit Account' : 'Provision New Account'}
+                        </h3>
+                        <p className="text-xs text-gray-500">Configure credentials, access boundaries, and institutional role</p>
                     </div>
                 </div>
-            )}
+                <button 
+                    onClick={closeModal} 
+                    className="w-8 h-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition flex items-center justify-center"
+                >
+                    <i className="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form onSubmit={submitForm} className="overflow-y-auto p-6 space-y-6">
+                
+                {/* Section 1: Personal Details */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-1.5">
+                        <i className="fa-regular fa-id-card text-xs text-[#009639]"></i>
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Personal Information</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-700">First Name <span className="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
+                                placeholder="Juan" 
+                                value={data.firstname} 
+                                onChange={e => setData('firstname', e.target.value)} 
+                                required 
+                            />
+                            {errors.firstname && <div className="text-red-500 text-xs mt-1 font-medium">{errors.firstname}</div>}
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-700">Last Name <span className="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
+                                placeholder="Dela Cruz" 
+                                value={data.lastname} 
+                                onChange={e => setData('lastname', e.target.value)} 
+                                required 
+                            />
+                            {errors.lastname && <div className="text-red-500 text-xs mt-1 font-medium">{errors.lastname}</div>}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Section 2: Account & Authentication */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-1.5">
+                        <i className="fa-solid fa-shield-halved text-xs text-[#009639]"></i>
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Credentials & Security</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-700">Username <span className="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
+                                placeholder="juandelacruz" 
+                                value={data.username} 
+                                onChange={e => setData('username', e.target.value)} 
+                                required 
+                            />
+                            {errors.username && <div className="text-red-500 text-xs mt-1 font-medium">{errors.username}</div>}
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-semibold mb-1 text-gray-700">Email Address <span className="text-red-500">*</span></label>
+                            <input 
+                                type="email" 
+                                className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
+                                placeholder="example@clsu.edu.ph" 
+                                value={data.email} 
+                                onChange={e => setData('email', e.target.value)} 
+                                required 
+                            />
+                            {errors.email && <div className="text-red-500 text-xs mt-1 font-medium">{errors.email}</div>}
+                        </div>
+
+                        <div className="sm:col-span-2">
+                            <label className="block text-xs font-semibold mb-1 text-gray-700">
+                                {isEditing ? 'Update Password' : 'Initial Temporary Password'} {!isEditing && <span className="text-red-500">*</span>}
+                            </label>
+                            <input 
+                                type="text" 
+                                className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
+                                placeholder={isEditing ? 'Leave blank to preserve current password' : 'Enter temporary password'}
+                                value={data.password} 
+                                onChange={e => setData('password', e.target.value)} 
+                                required={!isEditing} 
+                            />
+                            {errors.password && <div className="text-red-500 text-xs mt-1 font-medium">{errors.password}</div>}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Section 3: Access Control & Permissions */}
+                <div className="bg-gray-50 border border-gray-200/80 rounded-xl p-4 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-gray-200/70 pb-2">
+                        <i className="fa-solid fa-lock text-xs text-amber-600"></i>
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-700">Access Scope & Role Assignment</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className={(data.role === 'SuperAdmin' || data.role === 'Feedback Committee' || data.role === '') ? 'sm:col-span-2' : ''}>
+                            <label className="block text-xs font-semibold mb-1 text-gray-700">System Role <span className="text-red-500">*</span></label>
+                            <select 
+                                className="w-full text-sm bg-white border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639] cursor-pointer" 
+                                value={data.role} 
+                                onChange={e => {
+                                    const selected = e.target.value;
+                                    setData(prev => ({
+                                        ...prev, 
+                                        role: selected,
+                                        department_id: (selected === 'SuperAdmin' || selected === 'Feedback Committee') ? '' : prev.department_id,
+                                    }));
+                                }} 
+                                required
+                            >
+                                <option value="" disabled>-- Select a Role --</option>
+                                {roles.map((role) => (
+                                    <option key={role.role_id} value={role.role_name}>
+                                        {role.role_name}
+                                    </option>
+                                ))}
+                            </select>
+                            {errors.role && <div className="text-red-500 text-xs mt-1 font-semibold">{errors.role}</div>}
+                        </div>
+                        
+                        {/* Dynamic Department Scope */}
+                        {(data.role !== 'SuperAdmin' && data.role !== 'Feedback Committee' && data.role !== '') && (
+                            <div className="animate-fade-in-up">
+                                <label className="block text-xs font-semibold mb-1 text-gray-700">Department Scope <span className="text-red-500">*</span></label>
+                                <select 
+                                    className="w-full text-sm bg-white border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639] cursor-pointer" 
+                                    value={data.department_id || ''} 
+                                    onChange={e => setData('department_id', e.target.value)} 
+                                    required
+                                >
+                                    <option value="">-- Select Department --</option>
+                                    {departments.map(dept => (
+                                        <option key={dept.department_id} value={dept.department_id}>
+                                            {dept.department_name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.department_id && <div className="text-red-500 text-xs mt-1 font-medium">{errors.department_id}</div>}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer Controls */}
+                <div className="flex justify-end gap-2.5 pt-4 border-t border-gray-100">
+                    <button 
+                        type="button" 
+                        onClick={closeModal} 
+                        className="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        type="submit" 
+                        disabled={processing} 
+                        className="px-5 py-2 text-xs font-bold text-white bg-[#009639] hover:bg-[#1E6031] rounded-lg transition shadow-xs disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {processing && <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>}
+                        <span>{processing ? 'Saving...' : isEditing ? 'Update Account' : 'Create Account'}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+)}
 
             {/* Modal for Creating & Editing Roles */}
             {showRoleModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-xl">
                         <h3 className="text-lg font-bold text-gray-900 mb-4">
                             {editingRole ? (editingRole.is_system ? 'Edit System Role Details' : 'Edit Custom Role') : 'Create Custom Role'}

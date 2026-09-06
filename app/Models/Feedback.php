@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon; // Required for date range calculations
+use Carbon\Carbon;
 
 class Feedback extends Model
 {
@@ -13,22 +13,19 @@ class Feedback extends Model
     public $timestamps = false; 
 
     /**
-     * Process and store the submitted feedback, answers, and AI sentiment in a secure transaction.
+     * Process and store the submitted feedback, answers, and AI sentiment.
      */
     public static function processSubmission(array $validated)
     {
         DB::transaction(function () use ($validated) {
-            // A. Fetch QR ID
             $qrRecord = DB::table('qr_code')
                 ->select('qr_id')
                 ->where('department_id', $validated['department_id'])
                 ->first();
             $qrId = $qrRecord ? $qrRecord->qr_id : 1;
 
-            // B. Generate Control Number
             $controlNumber = 'CTRL-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
 
-            // C. Insert Parent Feedback Record
             $responseId = DB::table('feedback')->insertGetId([
                 'control_number' => $controlNumber,
                 'email_address'  => $validated['email_address'],
@@ -38,15 +35,14 @@ class Feedback extends Model
                 'status'         => 'Valid',
             ]);
 
-            // D. Insert AI Sentiment Analysis into its dedicated table matching your schema
+            // Insert strictly into available schema columns
             DB::table('sentiment_analysis')->insert([
                 'response_id'      => $responseId,
                 'sentiment'        => $validated['sentiment'] ?? 'Uncategorized',
-                'confidence_score' => isset($validated['ai_confidence']) ? ($validated['ai_confidence'] / 100) : 0,
+                'confidence_score' => (int) ($validated['ai_confidence'] ?? 0),
                 'analyzed_at'      => now(),
             ]);
 
-            // E. Insert Answers
             $answersToInsert = [];
             foreach ($validated['answers'] as $fieldId => $answerValue) {
                 if (is_array($answerValue)) {
@@ -111,7 +107,7 @@ class Feedback extends Model
         }
     }
 
-   /**
+    /**
      * Get total filtered feedback count by range and department.
      */
     public static function getFilteredCount($range, $departmentId = 'overall')
@@ -128,9 +124,6 @@ class Feedback extends Model
     }
 
     /**
-     * Get harassment alert count based on a dynamic question search.
-     */
-/**
      * Get harassment alert count based on dynamic search, range, and department.
      */
     public static function getHarassmentAlerts($range, $departmentId = 'overall')
@@ -170,21 +163,55 @@ class Feedback extends Model
     }
 
     /**
-     * Get trend data formatted for Recharts.
+     * Get trend data formatted for Recharts with zero-filled timeline skeletons.
      */
     public static function getTrendData($range, $departmentId)
     {
-        // Added custom_date so specific dates group hourly/daily instead of monthly
-        $isDaily = in_array($range, ['today', 'week', 'custom_date']);
-        $dateFormat = $isDaily ? '%b %d' : '%b';
-        $groupByFormat = $isDaily ? 'DATE(feedback.submitted_at)' : 'MONTH(feedback.submitted_at)';
+        $now = Carbon::now();
+        $skeleton = [];
 
+        // 1. Build a complete chronological timeline skeleton based on range
+        if ($range === 'week') {
+            $start = (clone $now)->startOfWeek();
+            $end = (clone $now)->endOfWeek();
+            while ($start <= $end) {
+                $label = $start->format('M d');
+                $skeleton[$label] = ['month' => $label, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
+                $start->addDay();
+            }
+            $dateFormat = '%b %d';
+        } elseif ($range === 'today' || $range === 'custom_date') {
+            for ($h = 0; $h < 24; $h++) {
+                $time = Carbon::today()->setHour($h)->setMinute(0);
+                $label = $time->format('h:00 A');
+                $skeleton[$label] = ['month' => $label, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
+            }
+            $dateFormat = '%h:00 %p';
+        } elseif ($range === 'year' || $range === 'all') {
+            for ($m = 1; $m <= 12; $m++) {
+                $monthName = Carbon::create(null, $m, 1)->format('M');
+                $skeleton[$monthName] = ['month' => $monthName, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
+            }
+            $dateFormat = '%b';
+        } else {
+            $targetMonth = ($range === 'custom_month' && request('specific_month')) 
+                ? Carbon::parse(request('specific_month')) 
+                : $now;
+            
+            $daysInMonth = $targetMonth->daysInMonth;
+            for ($d = 1; $d <= $daysInMonth; $d++) {
+                $label = $targetMonth->copy()->day($d)->format('M d');
+                $skeleton[$label] = ['month' => $label, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
+            }
+            $dateFormat = '%b %d';
+        }
+
+        // 2. Fetch recorded sentiment counts from the database
         $query = DB::table('sentiment_analysis')
             ->join('feedback', 'sentiment_analysis.response_id', '=', 'feedback.response_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->select(
                 DB::raw("DATE_FORMAT(feedback.submitted_at, '{$dateFormat}') as time_label"),
-                DB::raw("{$groupByFormat} as time_group"),
                 'sentiment_analysis.sentiment',
                 DB::raw('COUNT(*) as total')
             );
@@ -195,49 +222,65 @@ class Feedback extends Model
 
         self::applyDateFilter($query, 'feedback.submitted_at', $range);
 
-        $rawTrends = $query->groupBy('time_group', 'time_label', 'sentiment_analysis.sentiment')
-                           ->orderBy('time_group')
+        $rawTrends = $query->groupBy('time_label', 'sentiment_analysis.sentiment')
                            ->get();
 
-        $formatted = [];
+        // 3. Populate skeleton with actual database totals
         foreach ($rawTrends as $row) {
             $label = $row->time_label;
-            if (!isset($formatted[$label])) {
-                $formatted[$label] = ['month' => $label, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
+            if (isset($skeleton[$label])) {
+                $sentiment = $row->sentiment;
+                if (isset($skeleton[$label][$sentiment])) {
+                    $skeleton[$label][$sentiment] = (int) $row->total;
+                }
             }
-            $formatted[$label][$row->sentiment] = (int) $row->total;
         }
 
-        return array_values($formatted);
+        return array_values($skeleton);
     }
 
     /**
      * Get sentiment scores aggregated by department for bar charts.
      */
+    /**
+     * Get office performance metrics (Best to Worst).
+     */
     public static function getDepartmentScores($range)
     {
-        $query = DB::table('sentiment_analysis')
-            ->join('feedback', 'sentiment_analysis.response_id', '=', 'feedback.response_id')
-            ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
-            ->join('department', 'forms.department_id', '=', 'department.department_id')
-            ->select(
-                'department.department_id',
-                'department.department_name as name',
-                DB::raw('SUM(CASE WHEN sentiment_analysis.sentiment = "Positive" THEN 1 ELSE 0 END) as pos_count'),
-                DB::raw('COUNT(*) as total_count')
-            );
-
-        self::applyDateFilter($query, 'feedback.submitted_at', $range);
-        
-        $raw = $query->groupBy('department.department_id', 'department.department_name')->get();
-
+        $departments = DB::table('department')->get();
         $scores = [];
-        foreach ($raw as $item) {
-            $score = $item->total_count > 0 ? round(($item->pos_count / $item->total_count) * 100) : 0;
-            // Shorten names for cleaner chart axes
-            $shortName = str_replace(['Department of ', 'Office of '], '', $item->name);
-            $scores[] = ['name' => $shortName, 'score' => $score];
+
+        foreach ($departments as $dept) {
+            $query = DB::table('feedback')
+                ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+                ->leftJoin('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
+                ->where('forms.department_id', $dept->department_id);
+
+            self::applyDateFilter($query, 'feedback.submitted_at', $range);
+
+            $total = (clone $query)->count();
+
+            if ($total === 0) {
+                $score = 0;
+            } else {
+                // Calculate percentage of Positive + Neutral (non-negative) ratings
+                $positiveCount = (clone $query)->whereIn('sentiment_analysis.sentiment', ['Positive', 'Neutral'])->count();
+                $score = round(($positiveCount / $total) * 100);
+            }
+
+            $shortName = str_replace(['Department of ', 'Office of ', 'College of '], '', $dept->department_name);
+
+            $scores[] = [
+                'department_id' => $dept->department_id,
+                'name'          => $shortName,
+                'full_name'     => $dept->department_name,
+                'score'         => $score,
+                'total'         => $total,
+            ];
         }
+
+        // Sort from Highest (Best) to Lowest (Worst)
+        usort($scores, fn($a, $b) => $b['score'] <=> $a['score']);
 
         return $scores;
     }
@@ -362,7 +405,6 @@ class Feedback extends Model
             $sqdKey = strtoupper($matches[0]);
             $rawAnswer = trim($row->answer_text);
 
-            // Detect numeric score (e.g., "5", "5 - Strongly Agree") or pure text
             $score = null;
             if (preg_match('/^[1-5]/', $rawAnswer, $scoreMatch)) {
                 $score = $scoreMatch[0];
@@ -384,7 +426,8 @@ class Feedback extends Model
     }
 
     /**
-     * Resilient Demographics query
+   /**
+     * Resilient Demographics query with strict label and value matching.
      */
     public static function getDemographics($range, $departmentId, $searchKeyword)
     {
@@ -392,8 +435,29 @@ class Feedback extends Model
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
-            ->where('form_fields.field_label', 'LIKE', '%' . $searchKeyword . '%')
             ->select('feedback_answers.answer_text as name', DB::raw('COUNT(*) as value'));
+
+        $keyword = strtolower(trim($searchKeyword));
+
+        if ($keyword === 'transaction' || $keyword === 'transaction type') {
+            $query->where('form_fields.field_label', 'Transaction Type')
+                  ->whereIn('feedback_answers.answer_text', ['Internal', 'External']);
+        } elseif ($keyword === 'sex') {
+            $query->where('form_fields.field_label', 'Sex')
+                  ->whereIn('feedback_answers.answer_text', ['Male', 'Female']);
+        } elseif ($keyword === 'client') {
+            $query->where(function ($q) {
+                $q->where('form_fields.field_label', 'Client Type')
+                  ->orWhere('form_fields.field_label', 'Client Classification');
+            });
+        } elseif ($keyword === 'region') {
+            $query->where(function ($q) {
+                $q->where('form_fields.field_label', 'like', '%region of residence%')
+                  ->orWhere('form_fields.field_label', 'like', '%region%');
+            });
+        } else {
+            $query->where('form_fields.field_label', 'LIKE', '%' . $searchKeyword . '%');
+        }
 
         if ($departmentId !== 'overall') {
             $query->where('forms.department_id', $departmentId);
@@ -401,10 +465,21 @@ class Feedback extends Model
 
         self::applyDateFilter($query, 'feedback.submitted_at', $range);
 
-        return $query->whereNotNull('feedback_answers.answer_text')
-                     ->where('feedback_answers.answer_text', '!=', '')
-                     ->groupBy('feedback_answers.answer_text')
-                     ->get();
+        $results = $query->whereNotNull('feedback_answers.answer_text')
+                         ->where('feedback_answers.answer_text', '!=', '')
+                         ->groupBy('feedback_answers.answer_text');
+
+        // Apply ranking and limit for open-text demographics like Region
+        if ($keyword === 'region') {
+            $results->orderByDesc('value')->limit(8);
+        }
+
+        return $results->get()->map(function ($item) {
+            return [
+                'name'  => trim($item->name),
+                'value' => (int) $item->value, // Cast to integer for Recharts
+            ];
+        });
     }
 
     /**
@@ -434,7 +509,6 @@ class Feedback extends Model
             $label = $row->field_label;
             $ans = strtolower(trim($row->answer_text));
 
-            // CC1: Awareness
             if (stripos($label, 'CC1') !== false) {
                 $cc1Total++;
                 if (preg_match('/^[1-3]/', $ans) || stripos($ans, 'know') !== false || stripos($ans, 'learned') !== false) {
@@ -444,7 +518,6 @@ class Feedback extends Model
                 }
             }
 
-            // CC2: Visibility
             if (stripos($label, 'CC2') !== false && $ans !== 'n/a' && $ans !== '5. n/a') {
                 $cc2Total++;
                 if (stripos($ans, 'easy to see') !== false) {
@@ -452,7 +525,6 @@ class Feedback extends Model
                 }
             }
 
-            // CC3: Helpfulness
             if (stripos($label, 'CC3') !== false && $ans !== 'n/a' && $ans !== '5. n/a') {
                 $cc3Total++;
                 if (stripos($ans, 'helped') !== false && stripos($ans, 'did not help') === false) {
@@ -470,17 +542,27 @@ class Feedback extends Model
     }
 
     /**
-     * Extract Top Recurring Words from open-ended feedback text.
-     * Only includes words that appear at least $minOccurrences times.
+     * Get top recurring complaint terms strictly from negative/mixed sentiment comments.
      */
-    public static function getTopRecurringWords($range, $departmentId, $limit = 10, $minOccurrences = 2)
+    public static function getTopRecurringWords($range, $departmentId)
     {
         $query = DB::table('feedback_answers')
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
-            ->where('form_fields.field_label', 'LIKE', '%Suggestions%')
-            ->select('feedback_answers.answer_text');
+            ->join('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
+            // Match input_type column in form_fields schema
+            ->whereIn('form_fields.input_type', ['textarea', 'text'])
+            // Exclude non-complaint / demographic fields
+            ->where('form_fields.field_label', 'NOT LIKE', '%Sex%')
+            ->where('form_fields.field_label', 'NOT LIKE', '%Client%')
+            ->where('form_fields.field_label', 'NOT LIKE', '%Transaction%')
+            ->where('form_fields.field_label', 'NOT LIKE', '%CC%')
+            ->where('form_fields.field_label', 'NOT LIKE', '%SQD%')
+            ->where('form_fields.field_label', 'NOT LIKE', '%Age%')
+            ->where('form_fields.field_label', 'NOT LIKE', '%Region%')
+            // Pull only from Negative or Mixed remarks
+            ->whereIn('sentiment_analysis.sentiment', ['Negative', 'Mixed']);
 
         if ($departmentId !== 'overall') {
             $query->where('forms.department_id', $departmentId);
@@ -488,48 +570,41 @@ class Feedback extends Model
 
         self::applyDateFilter($query, 'feedback.submitted_at', $range);
 
-        $answers = $query->pluck('answer_text');
+        $answers = $query->pluck('feedback_answers.answer_text');
 
-        // Common English and Tagalog stop words to filter out
-        $stopWords = [
-            'the', 'and', 'is', 'in', 'it', 'of', 'to', 'for', 'on', 'with', 'at', 'by', 'from', 'this', 'that', 'an', 'be', 'are', 'was', 'as', 'or', 'so',
-            'ang', 'mga', 'sa', 'na', 'ng', 'po', 'ko', 'mo', 'ni', 'kay', 'si', 'ay', 'at', 'pa', 'din', 'rin', 'ito', 'yan', 'yun', 'ung', 'nang', 'dahil',
-            'para', 'kami', 'tayo', 'sila', 'nila', 'namin', 'natin', 'lahat', 'mas', 'pero', 'kasi', 'ung', 'yung', 'kung', 'naka', 'ba', 'naman', 'ninyo',
-            'na', 'n/a', 'none', 'wala', 'no', 'sir', 'maam', 'pls', 'please'
+        // Stopwords to strip conversational filler and non-complaint terms
+        $stopwords = [
+            'ang', 'ng', 'sa', 'mga', 'na', 'at', 'po', 'opo', 'ay', 'ko', 'mo', 'ni', 
+            'kami', 'namin', 'sila', 'nila', 'ito', 'iyon', 'yan', 'yon', 'para', 'pero', 
+            'the', 'and', 'is', 'in', 'to', 'of', 'for', 'it', 'on', 'with', 'as', 'at', 
+            'was', 'by', 'an', 'be', 'this', 'that', 'from', 'n/a', 'none', 'wala', 'hindi',
+            'student', 'citizen', 'internal', 'external', 'male', 'female', 'yes', 'no'
         ];
 
         $wordCounts = [];
 
         foreach ($answers as $text) {
-            if (empty($text)) continue;
+            if (empty($text) || is_numeric($text)) continue;
 
-            // Remove special characters, punctuation, and split by whitespace
-            $clean = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', mb_strtolower($text));
-            $words = preg_split('/\s+/', $clean, -1, PREG_SPLIT_NO_EMPTY);
+            $cleanText = preg_replace('/[^\p{L}\p{N}\s]/u', '', mb_strtolower($text));
+            $words = preg_split('/\s+/', $cleanText, -1, PREG_SPLIT_NO_EMPTY);
 
-            // Deduplicate per single response so one user spamming a word doesn't skew count
-            $uniqueWordsInSubmission = array_unique($words);
-
-            foreach ($uniqueWordsInSubmission as $word) {
-                if (mb_strlen($word) < 3 || in_array($word, $stopWords)) {
-                    continue;
-                }
+            foreach ($words as $word) {
+                if (mb_strlen($word) < 4 || in_array($word, $stopwords)) continue;
                 $wordCounts[$word] = ($wordCounts[$word] ?? 0) + 1;
             }
         }
-
-        // Filter out words that appear fewer times than the minimum threshold
-        $recurringWords = array_filter($wordCounts, function ($count) use ($minOccurrences) {
-            return $count >= $minOccurrences;
+        // Filter: Keep ONLY words that occur at least 2 times
+        $recurringCounts = array_filter($wordCounts, function ($count) {
+            return $count >= 2;
         });
+        arsort($recurringCounts);
 
-        arsort($recurringWords);
-
-        $formatted = [];
-        foreach (array_slice($recurringWords, 0, $limit) as $word => $count) {
-            $formatted[] = ['word' => ucfirst($word), 'count' => $count];
+        $result = [];
+        foreach (array_slice($recurringCounts, 0, 8, true) as $word => $count) {
+            $result[] = ['word' => ucfirst($word), 'count' => $count];
         }
 
-        return $formatted;
+        return $result;
     }
 }

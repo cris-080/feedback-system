@@ -4,19 +4,18 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Contracts\Encryption\DecryptException;
 use App\Models\Form;
 use App\Models\Department;
 use App\Models\Feedback;
-use App\Services\GeminiSentimentService; // NEW: Import the AI Service
+use App\Services\GeminiSentimentService;
 use Inertia\Inertia;
 
 class PublicFeedbackController extends Controller
 {
-    /**
-     * Renders the public feedback form.
-     */
-    public function show(Request $request)
+   public function show(Request $request)
     {
         if (!$request->has('token')) {
             abort(403, 'Access Denied: Missing secure token.');
@@ -26,18 +25,15 @@ class PublicFeedbackController extends Controller
         $qrId = null;
         $formId = null;
 
-        // 1. Try to decrypt the token (Checks if it came from the Email Mailer)
         try {
             $decrypted = Crypt::decryptString($token);
             if (is_numeric($decrypted)) {
-                $formId = $decrypted; // It's a valid emailed Form ID!
+                $formId = $decrypted;
             }
         } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
-            // Decryption failed. This means it is NOT an email link.
-            // It must be a raw QR Code string. We move to step 2.
+            // Decryption failed. 
         }
 
-        // 2. If it wasn't an email token, check the QR Code database
         if (!$formId) {
             $qrCode = \App\Models\QrCode::where('qr_token', $token)
                             ->where('is_active', 1)
@@ -47,9 +43,8 @@ class PublicFeedbackController extends Controller
                 abort(404, 'Access Denied: This link is invalid or has been deactivated.');
             }
 
-            $qrId = $qrCode->qr_id; // Capture the QR ID so we know which desk was scanned
+            $qrId = $qrCode->qr_id;
 
-            // Find the active form for this QR code's department
             $activeForm = \App\Models\Form::where('department_id', $qrCode->department_id)
                         ->where('status', 'Active')
                         ->first();
@@ -61,23 +56,46 @@ class PublicFeedbackController extends Controller
             $formId = $activeForm->form_id;
         }
 
-        // 3. Fetch the full form details using the resolved Form ID
         $fullForm = \App\Models\Form::getActiveForm($formId);
 
         if (!$fullForm) {
             abort(404, 'No active feedback form is currently available for this link.');
         }
 
+        // --- FETCH AND CACHE REGIONS FOR 30 DAYS ---
+        $phRegions = Cache::remember('ph_regions', 2592000, function () {
+            try {
+                $response = Http::timeout(5)->get('https://psgc.gitlab.io/api/regions/');
+                if ($response->successful()) {
+                    $data = $response->json();
+                    // Sort alphabetically by region name
+                    usort($data, fn($a, $b) => strcmp($a['name'], $b['name']));
+                    return $data;
+                }
+            } catch (\Exception $e) {
+                // Safe fallback if the API is ever down
+                return [['name' => 'Central Luzon', 'regionName' => 'Region III']];
+            }
+            return [];
+        });
+
+        // FETCH DEPARTMENT AND EAGER LOAD SERVICE PROVIDERS
+        $department = \App\Models\Department::with('service_providers')
+            ->where('department_id', $fullForm->department_id)
+            ->first();
+
         return Inertia::render('Feedback/Index', [
-            'form'           => $fullForm,
-            'departmentName' => \App\Models\Department::getNameOrDefault($fullForm->department_id),
-            'isCC'           => $fullForm->form_type !== 'Non-CC',
-            'steps'          => $fullForm->getFormattedSteps(),
-            'qr_id'          => $qrId // This will be null for emailed links, but holds the ID for scans!
+            'form'             => $fullForm,
+            'departmentName'   => $department ? $department->department_name : 'General',
+            'serviceProviders' => $department ? $department->service_providers : [], // PASS TO FRONTEND
+            'isCC'             => $fullForm->form_type !== 'Non-CC',
+            'steps'            => $fullForm->getFormattedSteps(),
+            'qr_id'            => $qrId,
+            'ph_regions'       => $phRegions // PASS CACHED REGIONS TO FRONTEND
         ]);
     }
 
-    /**
+  /**
      * Handles the feedback submission.
      */
     public function store(Request $request)
@@ -90,14 +108,61 @@ class PublicFeedbackController extends Controller
             'answers'       => 'required|array',
         ]);
 
-        // 2. Ask Gemini to analyze the entire array of student answers
-        $aiAnalysis = GeminiSentimentService::analyze(json_encode($validated['answers']));
+        // 2. Extract qualitative text (suggestions / comments / harassment details)
+        $textAnswers = [];
+        $placeholders = ['n/a', 'na', 'none', 'wala', 'no', 'none so far', 'ok', 'okay', 'n / a', 'none po', 'nothing'];
 
-        // 3. Merge the AI insights into our validated payload
-        $validated['sentiment']       = $aiAnalysis['sentiment_category'] ?? 'Uncategorized';
-        $validated['ai_confidence']   = $aiAnalysis['confidence_score'] ?? 0;
-        $validated['theme']           = $aiAnalysis['key_theme'] ?? 'Analysis Pending';
-        $validated['english_summary'] = $aiAnalysis['translated_summary'] ?? 'AI analysis temporarily unavailable.';
+        // Retrieve form fields to explicitly pinpoint open-ended qualitative questions
+        $fullForm = \App\Models\Form::getActiveForm($validated['form_id']);
+        $qualitativeFieldIds = [];
+
+        if ($fullForm) {
+            foreach ($fullForm->getFormattedSteps() as $step => $fields) {
+                foreach ($fields as $field) {
+                    $fieldId = is_object($field) ? $field->field_id : $field['field_id'];
+                    $inputType = is_object($field) ? $field->input_type : $field['input_type'];
+                    $fieldLabel = strtolower(is_object($field) ? $field->field_label : $field['field_label']);
+                    
+                    // Identify fields meant for actual comments/details
+                    $isHarassmentDetails = str_contains($fieldLabel, 'if yes') || str_contains($fieldLabel, 'detail');
+                    $isSuggestion = str_contains($fieldLabel, 'suggestion') || str_contains($fieldLabel, 'comment') || str_contains($fieldLabel, 'remark');
+
+                    if ($inputType === 'text' && ($isSuggestion || $isHarassmentDetails)) {
+                        $qualitativeFieldIds[] = $fieldId;
+                    }
+                }
+            }
+        }
+
+        foreach ($validated['answers'] as $fieldId => $answer) {
+            // ONLY process answers that belong to the targeted qualitative text fields
+            if (in_array($fieldId, $qualitativeFieldIds) && is_string($answer)) {
+                $clean = trim(strtolower($answer));
+                
+                // If it's not a numeric scale score (1-5) and not a placeholder, keep it for NLP analysis
+                if (!empty($clean) && !is_numeric($clean) && !in_array($clean, $placeholders) && strlen($clean) > 3) {
+                    $textAnswers[] = $answer;
+                }
+            }
+        }
+
+        // 3. Perform AI Analysis or apply Neutral default
+        if (!empty($textAnswers)) {
+            // Concatenate meaningful text comments for Gemini
+            $feedbackText = implode(" | ", $textAnswers);
+            $aiAnalysis = GeminiSentimentService::analyze($feedbackText);
+
+            $validated['sentiment']       = $aiAnalysis['sentiment_category'] ?? 'Neutral';
+            $validated['ai_confidence']   = (int) ($aiAnalysis['confidence_score'] ?? 80);
+            $validated['theme']           = $aiAnalysis['key_theme'] ?? 'General Feedback';
+            $validated['english_summary'] = $aiAnalysis['translated_summary'] ?? 'Standard feedback submitted.';
+        } else {
+            // User left text blank or entered a placeholder -> Fallback to Neutral
+            $validated['sentiment']       = 'Neutral';
+            $validated['ai_confidence']   = 100;
+            $validated['theme']           = 'No Comments Provided';
+            $validated['english_summary'] = 'The respondent completed the transaction without providing qualitative comments.';
+        }
 
         // 4. Delegate Database Transaction to the Model
         Feedback::processSubmission($validated);

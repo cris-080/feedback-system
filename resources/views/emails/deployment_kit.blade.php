@@ -11,17 +11,17 @@
         <p>Hello,</p>
         <p>Here is the official Client Satisfaction Measurement (CSM) deployment kit for your specific desk/location: <strong>{{ $qrCode->label }}</strong>.</p>
         
-        <h3 style="color: #1f2937; margin-top: 30px;">Option 1: Desktop / Tablet Kiosk</h3>
+        <h3 style="color: #1f2937; margin-top: 30px;">Desktop / Tablet Kiosk</h3>
         <p>If you are providing a device for citizens to use, please click the button below and leave the link open on your screen:</p>
         <p style="margin: 20px 0;">
-            <a href="{{ route('feedback.show', ['token' => $qrCode->qr_token]) }}" style="background-color: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+            <a href="{{ route('feedback.show', ['token' => $qrCode->qr_token,'kiosk' => 'true']) }}" style="background-color: #16a34a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
                 Open Kiosk Form
             </a>
         </p>
         
         <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
         
-        <h3 style="color: #1f2937;">Option 2: Print for Walk-ins</h3>
+        <h3 style="color: #1f2937;">QR-Code</h3>
         <p>If you prefer citizens to use their own smartphones, please print the QR code below and display it clearly at your desk.</p>
         
         <div style="text-align: center; margin: 30px 0;">

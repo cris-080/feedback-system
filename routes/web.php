@@ -11,10 +11,13 @@ use App\Http\Middleware\SuperAdminMiddleware;
 use App\Http\Controllers\FeedbackCommittee\FeedbackCommitteeRequestController;
 use App\Http\Controllers\PublicFeedbackController;
 use App\Http\Controllers\SuperAdmin\RoleController;
-use App\Http\Controllers\SuperAdmin\QrCodeController;
+use App\Http\Controllers\SuperAdmin\ArchiveController;
+use App\Http\Middleware\FocalPersonMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth; // NEW: Imported Auth facade for role checking
+use App\Http\Controllers\FocalPerson\FocalDepartmentController;
+use App\Http\Controllers\SuperAdmin\FeedbackController;
+use Illuminate\Support\Facades\Auth; 
 use Inertia\Inertia;
 
 /*
@@ -23,41 +26,52 @@ use Inertia\Inertia;
 |--------------------------------------------------------------------------
 */
 
- // Public Feedback Portal
-    Route::get('/feedback', [PublicFeedbackController::class, 'show'])->name('feedback.show');
-    // Applied Rate Limiter Here
-    Route::post('/feedback', [PublicFeedbackController::class, 'store'])->middleware('throttle:form-submissions')->name('feedback.store');
+// Public Feedback Portal
+Route::get('/feedback', [PublicFeedbackController::class, 'show'])->name('feedback.show');
+// Applied Rate Limiter Here
+Route::post('/feedback', [PublicFeedbackController::class, 'store'])->middleware('throttle:form-submissions')->name('feedback.store');
 
 // Welcome Page
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    if (Auth::check()) {
+        $role = strtolower(trim(Auth::user()->role ?? ''));
+        
+        if ($role === 'superadmin') {
+            return redirect()->route('superadmin.dashboard');
+        }
+        if ($role === 'feedback committee' || $role === 'feedbackcommittee') {
+            return redirect()->route('feedback_committee.requests.index');
+        }
+
+        return redirect()->route('focalperson.dashboard');
+    }
+
+    // If unauthenticated, redirect directly to login
+    return redirect()->route('login');
 });
 
 /*
 |--------------------------------------------------------------------------
-| Standard Authenticated Routes (Breeze Defaults)
+| Standard Authenticated Routes
 |--------------------------------------------------------------------------
 */
-// NEW: Intercept SuperAdmin and route them correctly
-Route::get('/dashboard', function () {
-    $user = Auth::user();
-
-    if ($user->role === 'SuperAdmin') {
-        return redirect()->route('superadmin.dashboard'); 
-    }
-
-    // You can add more checks here later for Feedback Committee or Focal Persons
-    // if they get their own custom dashboards!
-
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
 Route::middleware('auth')->group(function () {
+    
+    // The "Traffic Cop" Route 
+    // Catches default auth redirects and routes users based on their role
+    Route::get('/dashboard', function () {
+        $role = strtolower(trim(Auth::user()->role ?? ''));
+        
+        if ($role === 'superadmin') {
+            return redirect()->route('superadmin.dashboard');
+        }
+        if ($role === 'feedback committee' || $role === 'feedbackcommittee') {
+            return redirect()->route('feedback_committee.requests.index');
+        }
+        
+        return redirect()->route('focalperson.dashboard');
+    })->name('dashboard');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -65,13 +79,41 @@ Route::middleware('auth')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| SuperAdmin Routes
+| Focal Person Routes
+|--------------------------------------------------------------------------
+*/
+// Dedicated URL structure for Focal Persons
+Route::middleware(['auth', FocalPersonMiddleware::class])->prefix('focalPerson')->name('focalperson.')->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
+    Route::get('/forms', [FormController::class, 'focalPersonIndex'])->name('forms.index');
+    
+    // My Department Config
+    Route::get('/department', [FocalDepartmentController::class, 'index'])->name('department.index');
+    
+    // Services
+    Route::post('/department/services', [FocalDepartmentController::class, 'storeService'])->name('department.services.store');
+    Route::delete('/department/services/{id}', [FocalDepartmentController::class, 'destroyService'])->name('department.services.destroy');
+    
+    // Positions
+    Route::post('/department/positions', [FocalDepartmentController::class, 'storePosition'])->name('department.positions.store');
+    Route::delete('/department/positions/{id}', [FocalDepartmentController::class, 'destroyPosition'])->name('department.positions.destroy');
+    
+    // Providers
+    Route::post('/department/providers', [FocalDepartmentController::class, 'storeProvider'])->name('department.providers.store');
+    Route::delete('/department/providers/{id}', [FocalDepartmentController::class, 'destroyProvider'])->name('department.providers.destroy');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Strict SuperAdmin Routes
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->name('superadmin.')->group(function () {
 
-    // Superadmin Dashboard
+    // Dashboards & Feedback
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
 
     // Admin Requests Management
     Route::get('/requests', [AdminRequestController::class, 'index'])->name('requests.index');
@@ -88,15 +130,26 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
     Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])->name('departments.destroy');
     Route::put('/departments/{id}', [DepartmentController::class, 'update'])->name('departments.update');
+
+    // Service Providers
+    Route::post('/departments/{department}/providers', [DepartmentController::class, 'storeProvider'])
+        ->name('departments.providers.store');
+
+    Route::delete('/departments/providers/{provider}', [DepartmentController::class, 'destroyProvider'])
+        ->name('departments.providers.destroy');
+
+    //Position Management
+    Route::post('/departments/positions/bulk', [DepartmentController::class, 'bulkStorePosition'])->name('departments.positions.bulk');
+    Route::get('/api/departments/{department}/positions', [DepartmentController::class, 'getPositionsByDepartment'])
+    ->name('api.departments.positions');
+    
     // Services Management
     Route::post('/departments/{department}/services', [DepartmentController::class, 'addService'])->name('departments.services.store');
     Route::delete('/services/{service}', [DepartmentController::class, 'removeService'])->name('departments.services.destroy');
 
-   // Archive Management
-    Route::get('/archives', [FormController::class, 'archives'])->name('forms.archives');
+    // Archive Management
+    Route::get('/archives-forms', [FormController::class, 'archives'])->name('forms.archives');
     Route::put('/forms/{id}/restore', [FormController::class, 'restore'])->name('forms.restore');
-    
-    // THIS MUST BE A DELETE ROUTE TO MATCH YOUR REACT COMPONENT
     Route::delete('/forms/{id}/soft-delete', [FormController::class, 'softDelete'])->name('forms.soft-delete');
 
     // User Management Routes
@@ -105,54 +158,39 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
 
-    // Form Deletion
+    // Form Builder & Deletion
     Route::delete('/forms/{id}', [FormController::class, 'destroy'])->name('forms.destroy');
-
     Route::get('/forms/{id}/edit', [FormBuilderController::class, 'edit'])->name('forms.edit');
     Route::post('/forms/{id}/edit', [FormBuilderController::class, 'update'])->middleware('throttle:form-submissions')->name('forms.update');
-    
-    // Form Builder (Creating Forms)
     Route::get('/form-builder', [FormBuilderController::class, 'create'])->name('forms.builder');
-    // Applied Rate Limiter Here
     Route::post('/form-builder', [FormBuilderController::class, 'store'])->middleware('throttle:form-submissions')->name('forms.store');
-    
-    //Mailing the Focal Person for a Department
-    Route::post('/departments/{department}/email-link', [DepartmentController::class, 'emailFocalPerson'])->name('departments.email-link');
-    
-    // Form Management (Displaying, Archiving, Publishing)
     Route::get('/forms', [FormController::class, 'index'])->name('forms.index');
+    
+    // Form Management Actions
     Route::put('/forms/{form}/archive', [FormController::class, 'archive'])->name('forms.archive');
     Route::put('/forms/{form}/publish', [FormController::class, 'publish'])->name('forms.publish');
     Route::post('/forms/{form}/clone', [FormController::class, 'clone'])->name('forms.clone');
 
-    // Route to generate and store a new QR code
-    Route::post('/qrcodes/generate', [QrCodeController::class, 'store'])->name('qrcodes.store');
+    // Central Archives System
+    Route::get('/archives', [ArchiveController::class, 'index'])->name('archives.index');
+    Route::put('/departments/{id}/restore', [DepartmentController::class, 'restore'])->name('departments.restore');
+    Route::delete('/departments/{id}/force-delete', [DepartmentController::class, 'forceDelete'])->name('departments.force-delete');
+    Route::delete('/forms/{id}/force-delete', [FormController::class, 'forceDelete'])->name('forms.force-delete');
 
-    // // Add this line to load the page
-    // Route::get('/qrcodes', [QrCodeController::class, 'index'])->name('qrcodes.index');
-    
-    // This is the one we made earlier to handle the form submission
+    Route::post('/departments/{department}/positions', [DepartmentController::class, 'storePosition'])->name('departments.positions.store');
+    Route::delete('/positions/{position}', [DepartmentController::class, 'destroyPosition'])->name('departments.positions.destroy');
+    Route::get('/api/departments/{department}/positions', [DepartmentController::class, 'getPositionsByDepartment'])->name('api.departments.positions');
 
 });
-
 
 /*
 |--------------------------------------------------------------------------
 | Feedback Committee Routes
 |--------------------------------------------------------------------------
 */
-// NEW: Route group for the Feedback Committee requests
 Route::middleware(['auth'])->prefix('feedback-committee')->name('feedback_committee.')->group(function () {
-    
-    // These evaluate to /feedback-committee/requests and name('feedback_committee.requests.index'/'store')
     Route::get('/requests', [FeedbackCommitteeRequestController::class, 'index'])->name('requests.index');
     Route::post('/requests', [FeedbackCommitteeRequestController::class, 'store'])->name('requests.store');
-
-});
-// Temporary Route to Preview Email Design
-Route::get('/preview-email', function () {
-    // We pass fake data just to see how the template looks
-    return new \App\Mail\FormLinkMail('http://localhost:8000/feedback?dept=1', 'Registrar Office');
 });
 
 require __DIR__.'/auth.php';

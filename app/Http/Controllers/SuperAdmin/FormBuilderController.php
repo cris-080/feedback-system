@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use App\Models\Department;
 use App\Models\DepartmentService;
+use App\Models\ServiceProvider; // <-- NEW: Import ServiceProvider
 use App\Models\FormField;
 use App\Models\Form;
 use Inertia\Inertia;
@@ -18,14 +19,14 @@ class FormBuilderController extends Controller
      */
     public function create()
     {
-        // 1. Ask Models for necessary Builder data & Return View
         return Inertia::render('SuperAdmin/FormBuilder', [
-            'departments'        => Department::all(), // Adjust if you use a specific scope
-            'departmentServices' => DepartmentService::getGroupedServices(),
+            'departments'         => Department::all(), 
+            'departmentServices'  => DepartmentService::getGroupedServices(),
             
-            // THIS IS THE MISSING LINK! 
-            // It grabs the hardcoded array from your model and sends it to React.
-            'initialFields'      => FormField::getBaselineFieldsFormatted(),
+            // NEW: Fetch all providers grouped by department so React can read them instantly
+            'departmentProviders' => ServiceProvider::all()->groupBy('department_id'), 
+            
+            'initialFields'       => FormField::getBaselineFieldsFormatted(),
         ]);
     }
     
@@ -85,15 +86,16 @@ class FormBuilderController extends Controller
      */
     public function edit($id)
     {
-        // 1. Fetch the form and eager load all fields and options using your Fat Model method
         $form = Form::getFormWithFields($id);
         
-        // 2. Pass the data to React
         return Inertia::render('SuperAdmin/EditForm', [
-            'currentForm'        => $form,
-            'existingFields'     => $form->getFormattedFields(), // Uses the formatter inside Form.php
-            'departments'        => Department::getDropdownList(),
-            'departmentServices' => DepartmentService::getGroupedServices(),
+            'currentForm'         => $form,
+            'existingFields'      => $form->getFormattedFields(), 
+            'departments'         => Department::getDropdownList(),
+            'departmentServices'  => DepartmentService::getGroupedServices(),
+            
+            // NEW: Pass the providers here as well for editing
+            'departmentProviders' => ServiceProvider::all()->groupBy('department_id'), 
         ]);
     }
 

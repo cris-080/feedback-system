@@ -22,6 +22,7 @@ class StoreAccountRequest extends FormRequest
             'password'      => ['required', 'string', 'min:8'],
             'role'          => ['required', 'string', 'in:Focal Person,Feedback Committee,SuperAdmin'],
             'department_id' => ['nullable', 'integer', 'exists:department,department_id'],
+            'position'      => ['nullable', 'string', 'max:255'],   
         ];
     }
 

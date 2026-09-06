@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
-use App\Models\Department; // NEW: Import Department for auto-sync
+use App\Models\Department;
 
 class Account extends Authenticatable
 {
@@ -106,7 +106,6 @@ class Account extends Authenticatable
         ]);
 
         // --- BULLETPROOF AUTO-SYNC ---
-        // Use $data directly and make case-insensitive to ensure it triggers
         if (strtolower($data['role']) === 'focal person' && !empty($data['department_id'])) {
             Department::where('department_id', $data['department_id'])
                       ->update(['focal_person_id' => $account->user_id]);
@@ -114,6 +113,7 @@ class Account extends Authenticatable
 
         return $account;
     }
+
     public function updateUser(array $data): bool
     {
         if (empty($data['role_id']) && !empty($data['role'])) {
@@ -138,11 +138,9 @@ class Account extends Authenticatable
         $updated = $this->update($payload);
 
         // --- BULLETPROOF AUTO-SYNC ---
-        // 1. Remove this user from ANY department they were previously assigned to
         Department::where('focal_person_id', $this->user_id)
                   ->update(['focal_person_id' => null]);
 
-        // 2. Assign them to the NEW department if they are a Focal Person
         if (strtolower($data['role']) === 'focal person' && !empty($data['department_id'])) {
             Department::where('department_id', $data['department_id'])
                       ->update(['focal_person_id' => $this->user_id]);

@@ -24,12 +24,25 @@ class FormController extends Controller
 
     public function index(Request $request)
     {
+        $user = auth()->user();
+        $isSuperAdmin = $user->role === 'SuperAdmin';
+        
         $filters = $request->only(['search', 'department']);
+
+        // RBAC: If the user is a Focal Person, forcefully override the department filter
+        // so they can ONLY see forms belonging to their specific department.
+        if (!$isSuperAdmin) {
+            $departmentName = Department::where('department_id', $user->department_id)->value('department_name');
+            $filters['department'] = $departmentName; 
+        }
 
         return Inertia::render('SuperAdmin/ManageForms', [
             'forms'             => FormResource::collection(Form::getPaginatedActiveForms($filters)),
-            'uniqueDepartments' => Department::orderBy('department_name', 'asc')->pluck('department_name'),
-            'filters'           => $filters
+            
+            // Only SuperAdmins need the full list of unique departments for the dropdown filter
+            'uniqueDepartments' => $isSuperAdmin ? Department::orderBy('department_name', 'asc')->pluck('department_name') : [],
+            'filters'           => $filters,
+            'isSuperAdmin'      => $isSuperAdmin // Pass to React so you can hide the department filter dropdown
         ]);
     }
 
@@ -60,6 +73,7 @@ class FormController extends Controller
 
         return back()->with('success', "Form published successfully! Previous active {$form->form_type} form for this department has been archived.");
     }
+    
     public function clone($id)
     {
         $form = Form::with('fields.options')->findOrFail($id);
@@ -119,11 +133,60 @@ class FormController extends Controller
         ]);
     }
 
+    /**
+     * Restore a soft-deleted or archived form.
+     */
     public function restore($id)
     {
-        $form = Form::findOrFail($id);
+        $form = Form::withTrashed()->findOrFail($id);
+
+        // If it was soft-deleted, restore it
+        if ($form->trashed()) {
+            $form->restore();
+        }
+
+        // Reset the status back to Draft so it doesn't accidentally go live immediately
         $form->update(['status' => 'Draft']);
 
         return back()->with('success', 'Form successfully restored to Active Drafts.');
+    }
+
+    /**
+     * Permanently delete a form from the system.
+     */
+    public function forceDelete($id)
+    {
+        $form = Form::withTrashed()->findOrFail($id);
+        
+        // Permanently remove the record from the database
+        $form->forceDelete();
+
+        return back()->with('success', 'Form permanently deleted from the system.');
+    }
+
+    /**
+     * Display the Active Deployment Kit for Focal Persons.
+     */
+    public function focalPersonIndex()
+    {
+        $user = auth()->user();
+        $departmentId = $user->department_id;
+        
+        $activeForm = Form::getActiveFormByDepartment($departmentId);
+        $deploymentData = null;
+        
+        if ($activeForm) {
+            $secureToken = \Illuminate\Support\Facades\Crypt::encryptString($activeForm->form_id);
+            $baseUrl = url('/feedback?token=' . $secureToken);
+            
+            $deploymentData = [
+                'kiosk_link' => $baseUrl . '&kiosk=true',
+                'qr_image_url' => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2'
+            ];
+        }
+
+        return inertia('FocalPerson/FocalPersonForms', [
+            'deploymentData' => $deploymentData
+        ]);
     }
 }
