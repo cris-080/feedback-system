@@ -37,7 +37,7 @@ export default function Login({ status, canResetPassword }) {
                         className="h-14 w-14 object-contain drop-shadow-md"
                     />
                     <div>
-                        <p className="text-xs uppercase tracking-widest text-[#FFD700] font-bold">Republic of the Philippines</p>
+                     
                         <h1 className="text-2xl font-black tracking-tight leading-none text-white">
                             CLSU <span className="text-[#FFD700]">FMS</span>
                         </h1>
@@ -46,9 +46,7 @@ export default function Login({ status, canResetPassword }) {
 
                 {/* Hero Editorial Copy */}
                 <div className="relative z-10 my-auto py-10 max-w-xl">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/10 text-emerald-100 border border-white/15 mb-6">
-                        <i className="fa-solid fa-shield-halved mr-2 text-[#FFD700]"></i> Role-Scoped Administrative Gateway
-                    </span>
+                   
                     <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight text-white tracking-tight">
                         Central Luzon State University <span className="text-[#FFD700]">Feedback Management System</span>
                     </h2>
