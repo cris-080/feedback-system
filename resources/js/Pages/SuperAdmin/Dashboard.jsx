@@ -3,118 +3,129 @@ import SuperAdminLayout from '../../Layouts/SuperAdminLayout';
 import { 
     LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect,useMemo } from 'react';
 
 export default function Dashboard({ metrics, recentAccounts, recentForms, isSuperAdmin, deploymentData }) {
-    // Active server filter states from backend
-    const currentRange = metrics?.current_range || 'month';
-    const currentDept = metrics?.current_department || 'overall';
-    const specificDate = metrics?.specific_date || '';
-    const specificMonth = metrics?.specific_month || '';
+        // Active server filter states from backend
+        const currentRange = metrics?.current_range || 'month';
+        const currentDept = metrics?.current_department || 'overall';
+        const specificDate = metrics?.specific_date || '';
+        const specificMonth = metrics?.specific_month || '';
+        const activeFilterCount = (isSuperAdmin && currentDept !== 'overall' ? 1 : 0) + 
+            (currentRange !== 'month' ? 1 : 0) +
+            (specificDate ? 1 : 0) + 
+            (specificMonth ? 1 : 0);
 
-    // Local draft states
-    const [filterOpen, setFilterOpen] = useState(false);
-    const [tempDept, setTempDept] = useState(currentDept);
-    const [tempRange, setTempRange] = useState(currentRange);
-    const [tempDate, setTempDate] = useState(specificDate);
-    const [tempMonth, setTempMonth] = useState(specificMonth);
-    const filterRef = useRef(null);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+        // Local draft states
+        const [filterOpen, setFilterOpen] = useState(false);
+        const [tempDept, setTempDept] = useState(currentDept);
+        const [tempRange, setTempRange] = useState(currentRange);
+        const [tempDate, setTempDate] = useState(specificDate);
+        const [tempMonth, setTempMonth] = useState(specificMonth);
+        const filterRef = useRef(null);
+        const [isRefreshing, setIsRefreshing] = useState(false);
+        const [timeRange, setTimeRange] = useState('30d');
 
-    useEffect(() => {
-        setTempDept(currentDept);
-        setTempRange(currentRange);
-        setTempDate(specificDate);
-        setTempMonth(specificMonth);
-    }, [currentDept, currentRange, specificDate, specificMonth]);
+        useEffect(() => {
+            setTempDept(currentDept);
+            setTempRange(currentRange);
+            setTempDate(specificDate);
+            setTempMonth(specificMonth);
+        }, [currentDept, currentRange, specificDate, specificMonth]);
 
-    // Live Chart Data from Backend Metrics
-    const trendData = metrics?.trendData || [];
-    const sqdData = metrics?.sqd_data || [];
-    const clientTypeData = metrics?.client_types || [];
-    const sexData = metrics?.sex_demographics || [];
-    const transactionTypeData = metrics?.transaction_types || [];
-    const regionData = metrics?.region_demographics || []; // <-- REGION DATA
-    const ccMetrics = metrics?.cc_metrics || { awareness_rate: 0, visibility_rate: 0, helpfulness_rate: 0, total_responses: 0 };
-    const topWords = metrics?.top_words || [];
+        // Live Chart Data from Backend Metrics
+        const trendData = metrics?.trendData || [];
+        const sqdData = metrics?.sqd_data || [];
+        const clientTypeData = metrics?.client_types || [];
+        const sexData = metrics?.sex_demographics || [];
+        const transactionTypeData = metrics?.transaction_types || [];
+        const regionData = metrics?.region_demographics || []; 
+        const ccMetrics = metrics?.cc_metrics || { awareness_rate: 0, visibility_rate: 0, helpfulness_rate: 0, total_responses: 0 };
+        const topWords = metrics?.top_words || [];
+        const departmentData = metrics?.department_scores && metrics.department_scores.length > 0 
+            ? metrics.department_scores 
+            : [
+                { name: 'Admission', score: 88 },
+                { name: 'Info Tech', score: 72 },
+                { name: 'Infirmary', score: 95 },
+            ];
+        const harassmentCount = metrics?.harassment_reports || 0;
 
-    const departmentData = metrics?.department_scores && metrics.department_scores.length > 0 
-        ? metrics.department_scores 
-        : [
-            { name: 'Admission', score: 88 },
-            { name: 'Info Tech', score: 72 },
-            { name: 'Infirmary', score: 95 },
-        ];
+        const handleRefresh = () => {
+            setIsRefreshing(true);
+            router.visit(window.location.href, {
+                preserveScroll: true,
+                preserveState: false, 
+                replace: true,
+                onFinish: () => setIsRefreshing(false),
+            });
+        };
 
-    const harassmentCount = metrics?.harassment_reports || 0;
+        const handleApplyFilters = () => {
+            const params = {};
+            if (isSuperAdmin && tempDept !== 'overall') params.department = tempDept;
+            if (tempRange && tempRange !== 'month') params.range = tempRange;
+            if (tempRange === 'custom_date' && tempDate) params.specific_date = tempDate;
+            if (tempRange === 'custom_month' && tempMonth) params.specific_month = tempMonth;
 
-    const handleRefresh = () => {
-        setIsRefreshing(true);
-        router.visit(window.location.href, {
-            preserveScroll: true,
-            preserveState: false, 
-            replace: true,
-            onFinish: () => setIsRefreshing(false),
-        });
-    };
-
-    const handleApplyFilters = () => {
-        const params = {};
-        if (isSuperAdmin && tempDept !== 'overall') params.department = tempDept;
-        if (tempRange && tempRange !== 'month') params.range = tempRange;
-        if (tempRange === 'custom_date' && tempDate) params.specific_date = tempDate;
-        if (tempRange === 'custom_month' && tempMonth) params.specific_month = tempMonth;
-
-        const currentRoute = isSuperAdmin ? 'superadmin.dashboard' : 'focalperson.dashboard';
-        
-        router.get(route(currentRoute), params, {
-            preserveState: true,
-            preserveScroll: true,
-        });
-        setFilterOpen(false);
-    };
-
-   // 1. Calculate active filters based on whether non-default filters exist
-    const activeFilterCount = (isSuperAdmin && currentDept !== 'overall' ? 1 : 0) + 
-                        (currentRange !== 'month' ? 1 : 0) +
-                        (specificDate ? 1 : 0) + 
-                        (specificMonth ? 1 : 0);
-
-    const handleResetFilters = () => {
-        setTempDept('overall');
-        setTempRange('month');
-        setTempDate('');
-        setTempMonth('');
-
-        const currentRoute = isSuperAdmin ? 'superadmin.dashboard' : 'focalperson.dashboard';
-
-        router.get(
-            route(currentRoute),
-            {}, 
-            { preserveState: true, preserveScroll: true }
-        );
-        setFilterOpen(false);
-    };
-    
-    useEffect(() => {
-        function handleClickOutside(e) {
-            if (filterRef.current && !filterRef.current.contains(e.target)) {
-                setFilterOpen(false);
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);     
+            const currentRoute = isSuperAdmin ? 'superadmin.dashboard' : 'focalperson.dashboard';
             
-    const deptArray = Object.values(metrics?.departments || {});
-    const focalDeptName = !isSuperAdmin && deptArray.length > 0 
-        ? deptArray[0].department_name 
-        : 'Department';
+            router.get(route(currentRoute), params, {
+                preserveState: true,
+                preserveScroll: true,
+            });
+            setFilterOpen(false);
+            };
 
-    const dashboardTitle = isSuperAdmin 
-        ? "Executive Dashboard" 
-        : `${focalDeptName} Dashboard`;
+        const handleResetFilters = () => {
+            setTempDept('overall');
+            setTempRange('month');
+            setTempDate('');
+            setTempMonth('');
 
+            const currentRoute = isSuperAdmin ? 'superadmin.dashboard' : 'focalperson.dashboard';
+
+            router.get(
+                route(currentRoute),
+                {}, 
+                { preserveState: true, preserveScroll: true }
+            );
+            setFilterOpen(false);
+        };
+        
+        useEffect(() => {
+            function handleClickOutside(e) {
+                if (filterRef.current && !filterRef.current.contains(e.target)) {
+                    setFilterOpen(false);
+                }
+            }
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }, []);     
+                
+        const deptArray = Object.values(metrics?.departments || {});
+        const focalDeptName = !isSuperAdmin && deptArray.length > 0 
+            ? deptArray[0].department_name 
+            : 'Department';
+
+        const dashboardTitle = isSuperAdmin 
+            ? "Executive Dashboard" 
+            : `${focalDeptName} Dashboard`;
+
+        // Determine if we should show the 7D/30D/90D tabs
+        const showLocalTabs = currentRange === 'month' || currentRange === 'all';
+
+        const filteredTrendData = useMemo(() => {
+            if (!trendData || trendData.length === 0) return [];
+            
+            // If viewing Today (hourly), Year (monthly), etc., do not slice the data.
+            if (!showLocalTabs) {
+                return trendData;
+            }
+            
+            const sliceCount = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+            return trendData.slice(-sliceCount);
+        }, [trendData, timeRange, showLocalTabs]);
     return (
         <SuperAdminLayout headerTitle={dashboardTitle}>
             <Head title={dashboardTitle} />
@@ -370,32 +381,69 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                     
                     {/* Line Chart */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 lg:col-span-3 transition duration-200 hover:shadow-md">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
                             <div>
                                 <h2 className="text-base font-bold text-gray-900 tracking-tight">Departmental Sentiment Trend</h2>
+                                <p className="text-xs text-gray-500 mt-0.5">Sentiment metrics over the selected timeline</p>
                             </div>
 
-                            <div className="flex items-center gap-2 sm:gap-3 bg-gray-50/80 px-3 py-1.5 rounded-lg border border-gray-200/60 text-xs">
-                                <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                    Positive: {trendData.reduce((acc, curr) => acc + (Number(curr.Positive) || 0), 0)}
-                                </span>
-                                <span className="text-gray-300">|</span>
-                                <span className="flex items-center gap-1.5 font-medium text-amber-700">
-                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                                    Neutral: {trendData.reduce((acc, curr) => acc + (Number(curr.Neutral) || 0), 0)}
-                                </span>
-                                <span className="text-gray-300">|</span>
-                                <span className="flex items-center gap-1.5 font-medium text-rose-700">
-                                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                                    Negative: {trendData.reduce((acc, curr) => acc + (Number(curr.Negative) || 0), 0)}
-                                </span>
+                            <div className="flex flex-wrap items-center gap-3">
+
+
+
+                                {/* Sentiment Totals Pill */}
+                                <div className="flex items-center gap-2 sm:gap-3 bg-gray-50/80 px-3 py-1.5 rounded-lg border border-gray-200/60 text-xs">
+                                    <span className="flex items-center gap-1.5 font-medium text-emerald-700">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                        Positive: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Positive) || 0), 0)}
+                                    </span>
+                                    <span className="text-gray-300">|</span>
+                                    <span className="flex items-center gap-1.5 font-medium text-amber-700">
+                                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                        Neutral: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Neutral) || 0), 0)}
+                                    </span>
+                                    <span className="text-gray-300">|</span>
+                                    <span className="flex items-center gap-1.5 font-medium text-rose-700">
+                                        <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                        Negative: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Negative) || 0), 0)}
+                                    </span>
+                                </div>
+
+                                
+                                {/* 7D / 30D / 90D Filter Tabs */}
+                                {showLocalTabs && (
+                                    <div className="flex items-center bg-gray-100/90 p-1 rounded-lg border border-gray-200/60 shadow-inner">
+                                        {[
+                                            { label: '7 Days', value: '7d' },
+                                            { label: '30 Days', value: '30d' },
+                                            { label: '90 Days', value: '90d' },
+                                        ].map((tab) => {
+                                            const isSelected = timeRange === tab.value;
+                                            return (
+                                                <button
+                                                    key={tab.value}
+                                                    type="button"
+                                                    onClick={() => setTimeRange(tab.value)}
+                                                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all duration-150 ${
+                                                        isSelected
+                                                            ? 'bg-[#1E6031] text-white shadow-sm'
+                                                            : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                                                    }`}
+                                                >
+                                                    {tab.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                
                             </div>
                         </div>
 
                         <div className="w-full h-80">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={trendData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                                <LineChart data={filteredTrendData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
                                     <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} dy={8} />
                                     <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, (dataMax) => (dataMax === 0 ? 5 : Math.ceil(dataMax * 1.25))]} />

@@ -246,6 +246,22 @@ export default function EditForm({ currentForm, existingFields, departments, dep
                                 <div key={`step-${step}`} className="bg-white p-6 rounded-lg border-2 border-blue-600 mb-8 shadow-sm">
                                     <h3 className="text-lg font-bold text-blue-700 border-b pb-3 mb-6">{getStepTitle(step)}</h3>
                                     
+                                    {/* RESTORED: Step 1 Instruction Edit Field */}
+                                    {step === 1 && (
+                                        <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-md">
+                                            <label className="block text-sm font-bold text-blue-800 mb-2"><i className="fa-solid fa-circle-info mr-1"></i> Step 1 Instructions</label>
+                                            <textarea className="w-full border-blue-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-700" rows="3" value={data.step_1_instruction} onChange={e => setData('step_1_instruction', e.target.value)}></textarea>
+                                        </div>
+                                    )}
+
+                                    {/* RESTORED: Step 2 Instruction Edit Field */}
+                                    {step === 2 && data.form_type === 'CC' && (
+                                        <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-md">
+                                            <label className="block text-sm font-bold text-blue-800 mb-2"><i className="fa-solid fa-circle-info mr-1"></i> Step 2 Instructions</label>
+                                            <textarea className="w-full border-blue-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-700" rows="2" value={data.step_2_instruction} onChange={e => setData('step_2_instruction', e.target.value)}></textarea>
+                                        </div>
+                                    )}
+                                    
                                     {data.fields.filter(f => f.step_number === step).map((field, index) => {
                                         
                                         // --- UPDATED LOCK LOGIC ---

@@ -69,7 +69,7 @@ class DashboardController extends Controller
             'specific_date'       => $request->get('specific_date'),
             'specific_month'      => $request->get('specific_month'),
 
-            'trendData'           => Feedback::getTrendData($range, $selectedDepartment),
+           'trendData'           => Feedback::getTrendData(in_array($range, ['month', 'all']) ? '90_days' : $range, $selectedDepartment),
             'department_scores'   => Feedback::getDepartmentScores($range),
             'sqd_data'            => Feedback::getSqdData($range, $selectedDepartment),
             'client_types'        => Feedback::getDemographics($range, $selectedDepartment, 'Client'),

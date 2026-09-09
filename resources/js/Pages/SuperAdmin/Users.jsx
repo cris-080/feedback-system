@@ -726,7 +726,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                     <button 
                         type="submit" 
                         disabled={processing} 
-                        className="px-5 py-2 text-xs font-bold text-white bg-[#009639] hover:bg-[#1E6031] rounded-lg transition shadow-xs disabled:opacity-50 flex items-center gap-2"
+                        className="px-5 py-2 text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition shadow-xs disabled:opacity-50 flex items-center gap-2"
                     >
                         {processing && <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>}
                         <span>{processing ? 'Saving...' : isEditing ? 'Update Account' : 'Create Account'}</span>
@@ -780,7 +780,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                 <button 
                                     type="submit" 
                                     disabled={roleProcessing}
-                                    className="px-4 py-2 bg-[#009639] text-white rounded-md font-bold hover:bg-[#1E6031] text-sm"
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-md font-bold hover:bg-blue-600 text-sm"
                                 >
                                     {editingRole ? 'Update Role' : 'Save Role'}
                                 </button>

@@ -482,7 +482,7 @@ export default function Departments({ departments, filters }) {
                                                 let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
                                                 
                                                 if (link.active) {
-                                                    className += "z-10 bg-[#009639] border-[#009639] text-white";
+                                                    className += "z-10 bg-blue-600 border-blue-500 text-white";
                                                 } else if (!link.url) {
                                                     className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
                                                 } else {

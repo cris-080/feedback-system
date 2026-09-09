@@ -11,7 +11,6 @@ use App\Models\Department;
 
 class Account extends Authenticatable
 {
-    use HasFactory;
     use HasFactory, Notifiable;
     protected $table = 'account';
     protected $primaryKey = 'user_id';

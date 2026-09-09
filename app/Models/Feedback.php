@@ -193,7 +193,19 @@ class Feedback extends Model
                 $skeleton[$monthName] = ['month' => $monthName, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
             }
             $dateFormat = '%b';
+        } elseif ($range === '90_days') {
+            // NEW: Build a 90-day skeleton ending today
+            $start = (clone $now)->subDays(89)->startOfDay(); // 89 days ago + today = 90 days
+            $end = (clone $now)->endOfDay();
+            
+            while ($start <= $end) {
+                $label = $start->format('M d');
+                $skeleton[$label] = ['month' => $label, 'Positive' => 0, 'Negative' => 0, 'Neutral' => 0, 'Mixed' => 0];
+                $start->addDay();
+            }
+            $dateFormat = '%b %d';
         } else {
+            // Fallback for custom month or current month
             $targetMonth = ($range === 'custom_month' && request('specific_month')) 
                 ? Carbon::parse(request('specific_month')) 
                 : $now;
@@ -220,12 +232,18 @@ class Feedback extends Model
             $query->where('forms.department_id', $departmentId);
         }
 
-        self::applyDateFilter($query, 'feedback.submitted_at', $range);
+        // 3. Apply Date Filtering Logic
+        if ($range === '90_days') {
+            // Custom filter override to grab exactly the last 90 days
+            $query->where('feedback.submitted_at', '>=', Carbon::now()->subDays(89)->startOfDay());
+        } else {
+            // Standard filter fallback
+            self::applyDateFilter($query, 'feedback.submitted_at', $range);
+        }
 
-        $rawTrends = $query->groupBy('time_label', 'sentiment_analysis.sentiment')
-                           ->get();
+        $rawTrends = $query->groupBy('time_label', 'sentiment_analysis.sentiment')->get();
 
-        // 3. Populate skeleton with actual database totals
+        // 4. Populate skeleton with actual database totals
         foreach ($rawTrends as $row) {
             $label = $row->time_label;
             if (isset($skeleton[$label])) {
