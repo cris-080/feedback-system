@@ -16,14 +16,22 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
-        $isSuperAdmin = $user->role === 'SuperAdmin';
+        $rawRole = strtolower(trim($user->role ?? ''));
+        
+        // Define strict roles
+        $isSuperAdmin = $rawRole === 'superadmin';
+        $isFeedbackCommittee = $rawRole === 'feedback committee' || $rawRole === 'feedbackcommittee';
+        
+        // The SuperGroup can view data across all departments
+        $isSuperGroup = $isSuperAdmin || $isFeedbackCommittee;
+        
         $departmentId = $user->department_id;
 
         // 1. Capture Request Parameters & Enforce RBAC
         $range = $request->query('range', 'month');
         
-        if ($isSuperAdmin) {
-            // SuperAdmin can filter by any department or view 'overall'
+        if ($isSuperGroup) {
+            // SuperAdmins and Feedback Committee can filter by any department or view 'overall'
             $selectedDepartment = $request->query('department', 'overall');
         } else {
             // Focal Person is STRICTLY locked to their own department
@@ -37,7 +45,7 @@ class DashboardController extends Controller
         $deploymentData = null;
         $activeForm = null;
 
-        if (!$isSuperAdmin && $departmentId) {
+        if (!$isSuperGroup && $departmentId) {
             $activeForm = Form::getActiveFormByDepartment($departmentId);
             
             if ($activeForm) {
@@ -54,10 +62,12 @@ class DashboardController extends Controller
         // 4. Assemble Metrics
         $metrics = [
             // SuperAdmins see global stats; Focal Persons see limited general stats
-            'total_users'         => $isSuperAdmin ? Account::getTotalCount() : 0,
-            'total_departments'   => $isSuperAdmin ? $departments->count() : 1,
-            'active_forms'        => $isSuperAdmin ? Form::getActiveCount() : ($activeForm ? 1 : 0),
-            'departments'         => $isSuperAdmin ? $departments : $departments->where('department_id', $departmentId)->values(),
+           'total_users'         => $isSuperAdmin ? Account::getTotalCount() : 0,
+            'total_departments'   => $isSuperGroup ? $departments->count() : 1,
+            'active_forms'        => $isSuperGroup ? Form::getActiveCount() : ($activeForm ? 1 : 0),
+            
+            // Allow Feedback Committee to populate the filter dropdown
+            'departments'         => $isSuperGroup ? $departments : $departments->where('department_id', $departmentId)->values(),
 
             // Scoped by the forced $selectedDepartment variable
             'total_feedback'      => Feedback::getFilteredCount($range, $selectedDepartment),

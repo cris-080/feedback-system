@@ -14,6 +14,7 @@ use App\Http\Controllers\SuperAdmin\RoleController;
 use App\Http\Controllers\SuperAdmin\ArchiveController;
 use App\Http\Middleware\FocalPersonMiddleware;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FocalPerson\FocalDepartmentController;
 use App\Http\Controllers\SuperAdmin\FeedbackController;
@@ -36,17 +37,14 @@ Route::get('/', function () {
     if (Auth::check()) {
         $role = strtolower(trim(Auth::user()->role ?? ''));
         
-        if ($role === 'superadmin') {
+        // Both SuperAdmin and Feedback Committee share the main dashboard
+        if ($role === 'superadmin' || $role === 'feedback committee' || $role === 'feedbackcommittee') {
             return redirect()->route('superadmin.dashboard');
-        }
-        if ($role === 'feedback committee' || $role === 'feedbackcommittee') {
-            return redirect()->route('feedback_committee.requests.index');
         }
 
         return redirect()->route('focalperson.dashboard');
     }
 
-    // If unauthenticated, redirect directly to login
     return redirect()->route('login');
 });
 
@@ -57,16 +55,11 @@ Route::get('/', function () {
 */
 Route::middleware('auth')->group(function () {
     
-    // The "Traffic Cop" Route 
-    // Catches default auth redirects and routes users based on their role
     Route::get('/dashboard', function () {
         $role = strtolower(trim(Auth::user()->role ?? ''));
         
-        if ($role === 'superadmin') {
+        if ($role === 'superadmin' || $role === 'feedback committee' || $role === 'feedbackcommittee') {
             return redirect()->route('superadmin.dashboard');
-        }
-        if ($role === 'feedback committee' || $role === 'feedbackcommittee') {
-            return redirect()->route('feedback_committee.requests.index');
         }
         
         return redirect()->route('focalperson.dashboard');
@@ -85,6 +78,12 @@ Route::middleware('auth')->group(function () {
 // Dedicated URL structure for Focal Persons
 Route::middleware(['auth', FocalPersonMiddleware::class])->prefix('focalPerson')->name('focalperson.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    
+    // Reports Route
+    Route::get('/reports', function () {
+        return inertia('FocalPerson/Reports');
+    })->name('reports.index');
+    
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
     Route::get('/forms', [FormController::class, 'focalPersonIndex'])->name('forms.index');
     
@@ -113,6 +112,12 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
 
     // Dashboards & Feedback
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    
+    // NEW: Placeholder route for SuperAdmin Reports to prevent Ziggy crash
+    Route::get('/reports', function () {
+        return inertia('SuperAdmin/Reports');
+    })->name('reports.index');
+
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
 
     // Admin Requests Management
@@ -127,9 +132,9 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
 
     // Department Management
     Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
-    Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
-    Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])->name('departments.destroy');
-    Route::put('/departments/{id}', [DepartmentController::class, 'update'])->name('departments.update');
+    Route::post('/departments', [DepartmentController::class, 'store'])->middleware('throttle:admin-crud')->name('departments.store');
+    Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])->middleware('throttle:admin-crud')->name('departments.destroy');
+    Route::put('/departments/{id}', [DepartmentController::class, 'update'])->middleware('throttle:admin-crud')->name('departments.update');
 
     // Service Providers
     Route::post('/departments/{department}/providers', [DepartmentController::class, 'storeProvider'])
@@ -154,9 +159,9 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
 
     // User Management Routes
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
-    Route::post('/users', [UserController::class, 'store'])->name('users.store');
-    Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
-    Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
+    Route::post('/users', [UserController::class, 'store'])->middleware('throttle:account-creation')->name('users.store');
+    Route::delete('/users/{id}', [UserController::class, 'destroy'])->middleware('throttle:admin-crud')->name('users.destroy');
+    Route::put('/users/{id}', [UserController::class, 'update'])->middleware('throttle:admin-crud')->name('users.update');
 
     // Form Builder & Deletion
     Route::delete('/forms/{id}', [FormController::class, 'destroy'])->name('forms.destroy');
@@ -167,6 +172,10 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     Route::get('/forms', [FormController::class, 'index'])->name('forms.index');
     
     // Form Management Actions
+    Route::get('/forms/{id}/preview', function ($id) {
+        $token = Crypt::encryptString($id);
+        return redirect("/feedback?kiosk=true&token={$token}");
+    })->name('forms.preview');
     Route::put('/forms/{form}/archive', [FormController::class, 'archive'])->name('forms.archive');
     Route::put('/forms/{form}/publish', [FormController::class, 'publish'])->name('forms.publish');
     Route::post('/forms/{form}/clone', [FormController::class, 'clone'])->name('forms.clone');
@@ -180,6 +189,7 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     Route::post('/departments/{department}/positions', [DepartmentController::class, 'storePosition'])->name('departments.positions.store');
     Route::delete('/positions/{position}', [DepartmentController::class, 'destroyPosition'])->name('departments.positions.destroy');
     Route::get('/api/departments/{department}/positions', [DepartmentController::class, 'getPositionsByDepartment'])->name('api.departments.positions');
+    
 
 });
 
@@ -190,7 +200,12 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
 */
 Route::middleware(['auth'])->prefix('feedback-committee')->name('feedback_committee.')->group(function () {
     Route::get('/requests', [FeedbackCommitteeRequestController::class, 'index'])->name('requests.index');
-    Route::post('/requests', [FeedbackCommitteeRequestController::class, 'store'])->name('requests.store');
+    Route::get('/reports', function () { return inertia('FeedbackCommittee/Reports'); })->name('reports.index');
+    Route::post('/requests', [FeedbackCommitteeRequestController::class, 'store']) ->middleware('throttle:committee-requests')  ->name('requests.store');
+        
+    // Delete route for cancelling a request
+    Route::delete('/requests/{id}', [FeedbackCommitteeRequestController::class, 'destroy'])
+        ->name('requests.destroy');
 });
 
 require __DIR__.'/auth.php';

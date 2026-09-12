@@ -49,7 +49,7 @@ class Form extends Model
 
     public function scopeArchived($query)
     {
-        $query->whereIn('status', ['Archived', 'Archived_Version', 'Deleted']);
+        $query->whereIn('status', ['Archived', 'Archived', 'Deleted']);
     }
 
     public function scopeSearch($query, $search)
@@ -144,7 +144,7 @@ public static function getPaginatedActiveForms($filters, $perPage = 10)
     {
         $query = self::leftJoin('department as d', 'forms.department_id', '=', 'd.department_id')
             ->select('forms.form_id', 'forms.title', 'forms.status', 'forms.department_id', 'd.department_name')
-            ->whereNotIn('forms.status', ['Archived', 'Archived_Version', 'Deleted']);
+            ->whereNotIn('forms.status', ['Archived', 'Archived', 'Deleted']);
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];
@@ -192,7 +192,7 @@ public static function getPaginatedActiveForms($filters, $perPage = 10)
     {
         return self::join('department as d', 'forms.department_id', '=', 'd.department_id')
             ->select('d.department_name')
-            ->whereNotIn('forms.status', ['Archived', 'Archived_Version', 'Deleted'])
+            ->whereNotIn('forms.status', ['Archived', 'Archived', 'Deleted'])
             ->distinct()
             ->orderBy('d.department_name', 'asc')
             ->pluck('department_name');

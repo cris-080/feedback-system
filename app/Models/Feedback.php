@@ -12,6 +12,18 @@ class Feedback extends Model
     protected $primaryKey = 'response_id';
     public $timestamps = false; 
 
+    // Allow mass assignment for transaction_date along with existing fields
+    protected $fillable = [
+        'form_id',
+        'client_type',
+        'client_classification',
+        'transaction_type',
+        'transaction_date',
+        'sex',
+        'age',
+        // ... (Keep your other mass assignable fields here if any)
+    ];
+
     /**
      * Process and store the submitted feedback, answers, and AI sentiment.
      */
@@ -26,13 +38,15 @@ class Feedback extends Model
 
             $controlNumber = 'CTRL-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
 
+            // Insert into the feedback table, including the new transaction_date
             $responseId = DB::table('feedback')->insertGetId([
-                'control_number' => $controlNumber,
-                'email_address'  => $validated['email_address'],
-                'submitted_at'   => now(),
-                'qr_id'          => $qrId,
-                'form_id'        => $validated['form_id'],
-                'status'         => 'Valid',
+                'control_number'   => $controlNumber,
+                'email_address'    => $validated['email_address'],
+                'transaction_date' => $validated['transaction_date'], // Inserted here
+                'submitted_at'     => now(),
+                'qr_id'            => $qrId,
+                'form_id'          => $validated['form_id'],
+                'status'           => 'Valid',
             ]);
 
             // Insert strictly into available schema columns
@@ -258,9 +272,6 @@ class Feedback extends Model
     }
 
     /**
-     * Get sentiment scores aggregated by department for bar charts.
-     */
-    /**
      * Get office performance metrics (Best to Worst).
      */
     public static function getDepartmentScores($range)
@@ -444,7 +455,6 @@ class Feedback extends Model
     }
 
     /**
-   /**
      * Resilient Demographics query with strict label and value matching.
      */
     public static function getDemographics($range, $departmentId, $searchKeyword)
@@ -569,9 +579,7 @@ class Feedback extends Model
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->join('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
-            // Match input_type column in form_fields schema
             ->whereIn('form_fields.input_type', ['textarea', 'text'])
-            // Exclude non-complaint / demographic fields
             ->where('form_fields.field_label', 'NOT LIKE', '%Sex%')
             ->where('form_fields.field_label', 'NOT LIKE', '%Client%')
             ->where('form_fields.field_label', 'NOT LIKE', '%Transaction%')
@@ -579,7 +587,6 @@ class Feedback extends Model
             ->where('form_fields.field_label', 'NOT LIKE', '%SQD%')
             ->where('form_fields.field_label', 'NOT LIKE', '%Age%')
             ->where('form_fields.field_label', 'NOT LIKE', '%Region%')
-            // Pull only from Negative or Mixed remarks
             ->whereIn('sentiment_analysis.sentiment', ['Negative', 'Mixed']);
 
         if ($departmentId !== 'overall') {
@@ -590,7 +597,6 @@ class Feedback extends Model
 
         $answers = $query->pluck('feedback_answers.answer_text');
 
-        // Stopwords to strip conversational filler and non-complaint terms
         $stopwords = [
             'ang', 'ng', 'sa', 'mga', 'na', 'at', 'po', 'opo', 'ay', 'ko', 'mo', 'ni', 
             'kami', 'namin', 'sila', 'nila', 'ito', 'iyon', 'yan', 'yon', 'para', 'pero', 
@@ -612,7 +618,6 @@ class Feedback extends Model
                 $wordCounts[$word] = ($wordCounts[$word] ?? 0) + 1;
             }
         }
-        // Filter: Keep ONLY words that occur at least 2 times
         $recurringCounts = array_filter($wordCounts, function ($count) {
             return $count >= 2;
         });

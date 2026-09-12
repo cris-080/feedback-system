@@ -14,7 +14,7 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AuthenticatedSessionController extends Controller
 {
-    /**
+   /**
      * Display the login view.
      */
     public function create(): Response|RedirectResponse
@@ -22,9 +22,11 @@ class AuthenticatedSessionController extends Controller
         if (Auth::check()) {
             $role = strtolower(trim(Auth::user()->role ?? ''));
 
-            return $role === 'superadmin'
-                ? redirect()->route('superadmin.dashboard')
-                : redirect()->route('focalperson.dashboard');
+            if ($role === 'superadmin' || $role === 'feedback committee' || $role === 'feedbackcommittee') {
+                return redirect()->route('superadmin.dashboard');
+            }
+
+            return redirect()->route('focalperson.dashboard');
         }
 
         return Inertia::render('Auth/Login', [
@@ -32,6 +34,7 @@ class AuthenticatedSessionController extends Controller
             'status' => session('status'),
         ]);
     }
+
     /**
      * Handle an incoming authentication request.
      */
@@ -41,13 +44,13 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        $role = $request->user()->role;
+        $role = strtolower(trim($request->user()->role ?? ''));
 
-        // Route SuperAdmins and Focal Persons to the unified RBAC command center.
-        // Feedback Committee goes to their specific requests view.
+        // Route SuperAdmins and Feedback Committee to the unified RBAC command center.
        $fallbackUrl = match ($role) {
-            'SuperAdmin'         => '/superAdmin/dashboard',
-            'Feedback Committee' => '/feedback-committee/requests',
+            'superadmin'         => '/superAdmin/dashboard',
+            'feedback committee' => '/superAdmin/dashboard',
+            'feedbackcommittee'  => '/superAdmin/dashboard',
             default              => '/focalPerson/dashboard', // Focal Person Default
         };
 

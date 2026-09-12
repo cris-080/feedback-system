@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
 
-export default function Departments({ departments, filters }) {
+export default function Departments({ departments, filters, isSuperAdmin }) {
     const { flash } = usePage().props;
     const [activeServiceDept, setActiveServiceDept] = useState(null);
     const [activePositionDept, setActivePositionDept] = useState(null);
@@ -69,7 +69,7 @@ export default function Departments({ departments, filters }) {
     });
     const [showBulkModal, setShowBulkModal] = useState(false);
 
-    // --- SWEETALERT2 TOAST NOTIFICATIONS ---
+    // --- SWEETALERT2 TOAST NOTIFICATIONS (For minor actions) ---
     useEffect(() => {
         if (flash?.success) {
             Swal.fire({
@@ -85,9 +85,9 @@ export default function Departments({ departments, filters }) {
         }
     }, [flash]);
 
-    // --- MODAL CONTROLS ---
+   // --- MODAL CONTROLS ---
     const openModal = (dept = null) => {
-        if (dept) {
+        if (dept && dept.department_id) {
             setIsEditing(true);
             setEditDeptId(dept.department_id);
             setData({
@@ -98,7 +98,8 @@ export default function Departments({ departments, filters }) {
         } else {
             setIsEditing(false);
             setEditDeptId(null);
-            reset('name', 'description');
+            // Explicitly clear the fields instead of using reset()
+            setData({ name: '', description: '' });
             setSyncedEmail('');
         }
         setShowModal(true);
@@ -109,48 +110,89 @@ export default function Departments({ departments, filters }) {
         setAnimateModal(false);
         setTimeout(() => {
             setShowModal(false);
-            reset('name', 'description');
+            // Explicitly clear the fields on close
+            setData({ name: '', description: '' });
             clearErrors();
             setIsEditing(false);
             setEditDeptId(null);
             setSyncedEmail('');
         }, 300); 
     };
-
     // --- ACTIONS ---
     const submitDepartment = (e) => {
         e.preventDefault();
         if (isEditing) {
-            put(route('superadmin.departments.update', editDeptId), { onSuccess: () => closeModal() });
+            put(route('superadmin.departments.update', editDeptId), { 
+                onSuccess: () => {
+                    closeModal();
+                    Swal.fire({
+                        title: 'Updated!',
+                        text: 'The department has been successfully updated.',
+                        icon: 'success',
+                        confirmButtonColor: '#009639'
+                    });
+                }
+            });
         } else {
-            post(route('superadmin.departments.store'), { onSuccess: () => closeModal() });
+            post(route('superadmin.departments.store'), { 
+                onSuccess: () => {
+                    closeModal();
+                    Swal.fire({
+                        title: 'Created!',
+                        text: 'The new department has been successfully created.',
+                        icon: 'success',
+                        confirmButtonColor: '#009639'
+                    });
+                }
+            });
         }
     };
 
     const handleDelete = (id, name) => {
         Swal.fire({
-            title: 'Delete Department?',
-            text: `WARNING: Deleting "${name}" will also permanently delete all associated services and users. This cannot be undone!`,
-            icon: 'error',
+            title: 'Archive Department?',
+            text: `Are you sure you want to archive "${name}"? It will be moved to the archives.`,
+            icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc2626',
             cancelButtonColor: '#6b7280',
-            confirmButtonText: 'Yes, Delete it!'
+            confirmButtonText: 'Yes, Archive it!'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.departments.destroy', id), { preserveScroll: true });
+                router.delete(route('superadmin.departments.destroy', id), { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({
+                            title: 'Archived!',
+                            text: 'The department has been successfully archived.',
+                            icon: 'success',
+                            confirmButtonColor: '#009639'
+                        });
+                    }
+                });
             }
         });
     };
 
-    // Services
+    // --- Services ---
     const submitService = (e, deptId) => {
         e.preventDefault();
+        
+        // Prevent Duplicate Service Check
+        const currentDept = deptList.find(d => d.department_id === deptId);
+        const isDuplicate = currentDept?.services?.some(s => s.service_name.trim().toLowerCase() === serviceData.service_name.trim().toLowerCase());
+        
+        if (isDuplicate) {
+            Swal.fire({ title: 'Duplicate Found', text: 'This service already exists in this department.', icon: 'warning', confirmButtonColor: '#f59e0b' });
+            return;
+        }
+
         postService(route('superadmin.departments.services.store', deptId), {
             preserveScroll: true,
             onSuccess: () => {
                 resetService();
                 setActiveServiceDept(null);
+                Swal.fire({ title: 'Service Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
             },
         });
     };
@@ -166,19 +208,35 @@ export default function Departments({ departments, filters }) {
             confirmButtonText: 'Remove'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.departments.services.destroy', serviceId), { preserveScroll: true });
+                router.delete(route('superadmin.departments.services.destroy', serviceId), { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({ title: 'Removed!', text: 'The service has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                    }
+                });
             }
         });
     };
 
-    // Positions
+    // --- Positions ---
     const submitPosition = (e, deptId) => {
         e.preventDefault();
+
+        // Prevent Duplicate Position Check
+        const currentDept = deptList.find(d => d.department_id === deptId);
+        const isDuplicate = currentDept?.positions?.some(p => p.position_name.trim().toLowerCase() === positionData.position_name.trim().toLowerCase());
+        
+        if (isDuplicate) {
+            Swal.fire({ title: 'Duplicate Found', text: 'This position already exists in this department.', icon: 'warning', confirmButtonColor: '#f59e0b' });
+            return;
+        }
+
         postPosition(route('superadmin.departments.positions.store', deptId), {
             preserveScroll: true,
             onSuccess: () => {
                 resetPosition();
                 setActivePositionDept(null);
+                Swal.fire({ title: 'Position Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
             },
         });
     };
@@ -194,23 +252,38 @@ export default function Departments({ departments, filters }) {
             confirmButtonText: 'Remove'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.departments.positions.destroy', positionId), { preserveScroll: true });
+                router.delete(route('superadmin.departments.positions.destroy', positionId), { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({ title: 'Removed!', text: 'The position has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                    }
+                });
             }
         });
     };
 
-    // Providers
+   // --- Providers ---
     const submitProvider = (e, deptId) => {
         e.preventDefault();
+
+        // Prevent Duplicate Provider Check
+        const currentDept = deptList.find(d => d.department_id === deptId);
+        const isDuplicate = currentDept?.service_providers?.some(p => p.name.trim().toLowerCase() === providerData.name.trim().toLowerCase());
+        
+        if (isDuplicate) {
+            Swal.fire({ title: 'Duplicate Found', text: 'This provider already exists in this department.', icon: 'warning', confirmButtonColor: '#f59e0b' });
+            return;
+        }
+
         postProvider(route('superadmin.departments.providers.store', deptId), {
             preserveScroll: true,
             onSuccess: () => {
                 resetProvider();
                 setActiveProviderDept(null);
+                Swal.fire({ title: 'Provider Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
             },
         });
     };
-
     const handleDeleteProvider = (providerId, providerName) => {
         Swal.fire({
             title: 'Remove Provider?',
@@ -222,7 +295,12 @@ export default function Departments({ departments, filters }) {
             confirmButtonText: 'Remove'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.departments.providers.destroy', providerId), { preserveScroll: true });
+                router.delete(route('superadmin.departments.providers.destroy', providerId), { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({ title: 'Removed!', text: 'The provider has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                    }
+                });
             }
         });
     };
@@ -241,6 +319,12 @@ export default function Departments({ departments, filters }) {
             onSuccess: () => {
                 setShowBulkModal(false);
                 resetBulk();
+                Swal.fire({
+                    title: 'Positions Added!',
+                    text: 'The position was successfully assigned to the selected departments.',
+                    icon: 'success',
+                    confirmButtonColor: '#009639'
+                });
             }
         });
     };
@@ -288,9 +372,14 @@ export default function Departments({ departments, filters }) {
                                 <i className="fa-solid fa-layer-group mr-2"></i> Bulk Add Position
                             </button>
                             
-                            <button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-md font-semibold transition shadow-sm whitespace-nowrap w-full sm:w-auto flex items-center justify-center">
-                                <i className="fa-solid fa-building-circle-check mr-2"></i> Add Department
+                            {isSuperAdmin && (
+                            <button 
+                                onClick={() => openModal()} 
+                                className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2.5 rounded-md font-semibold text-sm transition shadow-sm flex items-center"
+                            >
+                                <i className="fa-solid fa-plus mr-2"></i> Add Department
                             </button>
+                            )}
                         </div>
                     </div>
 
@@ -305,7 +394,9 @@ export default function Departments({ departments, filters }) {
                                         <th className="px-5 py-4 text-left font-semibold uppercase tracking-wider">Services</th>
                                         <th className="px-5 py-4 text-left font-semibold uppercase tracking-wider">Positions</th>
                                         <th className="px-5 py-4 text-left font-semibold uppercase tracking-wider">Service Providers</th>
-                                        <th className="px-5 py-4 text-center font-semibold uppercase tracking-wider">Actions</th>
+                                       {isSuperAdmin && (
+                                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider w-32">Actions</th>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -452,14 +543,24 @@ export default function Departments({ departments, filters }) {
                                                 </td>
                                                 
                                                 {/* Actions */}
-                                                <td className="px-5 py-4 text-center whitespace-nowrap space-x-2">
-                                                    <button onClick={() => openModal(dept)} className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit Department">
-                                                        <i className="fa-solid fa-pen"></i>
-                                                    </button>
-                                                    <button onClick={() => handleDelete(dept.department_id, dept.department_name)} className="w-8 h-8 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Delete Department">
-                                                        <i className="fa-solid fa-trash"></i>
-                                                    </button>
-                                                </td>
+                                                {isSuperAdmin && (
+                                                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+                                                        <button 
+                                                            onClick={() => openModal(dept)}
+                                                            className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" 
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fa-solid fa-pen"></i>
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDelete(dept.department_id, dept.department_name)}
+                                                            className="w-8 h-8 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white rounded inline-flex justify-center items-center transition" 
+                                                            title="Archive"
+                                                        >
+                                                            <i className="fa-solid fa-box-archive"></i>
+                                                        </button>
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))
                                     )}
@@ -482,7 +583,7 @@ export default function Departments({ departments, filters }) {
                                                 let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
                                                 
                                                 if (link.active) {
-                                                    className += "z-10 bg-blue-600 border-blue-500 text-white";
+                                                    className += "z-10 bg-[#009639] border-[#009639] text-white";
                                                 } else if (!link.url) {
                                                     className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
                                                 } else {
@@ -561,7 +662,7 @@ export default function Departments({ departments, filters }) {
                         
                             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 mt-4">
                                 <button type="button" onClick={closeModal} className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-semibold transition">Cancel</button>
-                                <button type="submit" disabled={processing} className="px-5 py-2 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700 transition disabled:opacity-50">
+                                <button type="submit" disabled={processing} className="px-5 py-2 bg-[#009639] text-white rounded font-semibold hover:bg-[#1E6031] transition disabled:opacity-50">
                                     {processing ? 'Saving...' : isEditing ? 'Update Department' : 'Save Department'}
                                 </button>
                             </div>

@@ -34,6 +34,13 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
         return new Date(dateString).toLocaleDateString('en-US', options);
     };
 
+    // New helper for the Date of Transaction (removes the timestamp)
+    const formatDateOnly = (dateString) => {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'short', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString('en-US', options);
+    };
+
     const renderSentimentBadge = (sentiment, score) => {
         if (!sentiment) {
             return <span className="text-gray-400 text-xs italic">Pending Analysis</span>;
@@ -181,48 +188,48 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                     </div>
 
                    {/* Server-Side Pagination */}
-{feedbacks?.links && (
-    <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-        <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between w-full">
-            
-            {/* 1. This ALWAYS shows as long as pagination data exists */}
-            <div>
-                <p className="text-sm text-gray-700">
-                    Showing <span className="font-bold">{feedbacks.from || 0}</span> to <span className="font-bold">{feedbacks.to || 0}</span> of <span className="font-bold">{feedbacks.total || 0}</span> results
-                </p>
-            </div>
-            
-            {/* 2. This ONLY shows the buttons if there is more than 1 page (> 3 links) */}
-            <div>
-                {feedbacks.links.length > 3 && (
-                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                        {feedbacks.links.map((link, index) => {
-                            let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
-                            
-                            if (link.active) {
-                                className += "z-10 bg-[#009639] border-[#009639] text-white";
-                            } else if (!link.url) {
-                                className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
-                            } else {
-                                className += "bg-white border-gray-300 text-gray-600 hover:bg-gray-100";
-                            }
-                            
-                            if (index === 0) className += " rounded-l-md";
-                            if (index === feedbacks.links.length - 1) className += " rounded-r-md";
+                    {feedbacks?.links && (
+                        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between w-full">
+                                
+                                {/* 1. This ALWAYS shows as long as pagination data exists */}
+                                <div>
+                                    <p className="text-sm text-gray-700">
+                                        Showing <span className="font-bold">{feedbacks.from || 0}</span> to <span className="font-bold">{feedbacks.to || 0}</span> of <span className="font-bold">{feedbacks.total || 0}</span> results
+                                    </p>
+                                </div>
+                                
+                                {/* 2. This ONLY shows the buttons if there is more than 1 page (> 3 links) */}
+                                <div>
+                                    {feedbacks.links.length > 3 && (
+                                        <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                            {feedbacks.links.map((link, index) => {
+                                                let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
+                                                
+                                                if (link.active) {
+                                                    className += "z-10 bg-[#009639] border-[#009639] text-white";
+                                                } else if (!link.url) {
+                                                    className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
+                                                } else {
+                                                    className += "bg-white border-gray-300 text-gray-600 hover:bg-gray-100";
+                                                }
+                                                
+                                                if (index === 0) className += " rounded-l-md";
+                                                if (index === feedbacks.links.length - 1) className += " rounded-r-md";
 
-                            return link.url ? (
-                                <Link key={index} href={link.url} preserveScroll preserveState className={className} dangerouslySetInnerHTML={{ __html: link.label }} />
-                            ) : (
-                                <span key={index} className={className} dangerouslySetInnerHTML={{ __html: link.label }} />
-                            );
-                        })}
-                    </nav>
-                )}
-            </div>
-            
-        </div>
-    </div>
-)}
+                                                return link.url ? (
+                                                    <Link key={index} href={link.url} preserveScroll preserveState className={className} dangerouslySetInnerHTML={{ __html: link.label }} />
+                                                ) : (
+                                                    <span key={index} className={className} dangerouslySetInnerHTML={{ __html: link.label }} />
+                                                );
+                                            })}
+                                        </nav>
+                                    )}
+                                </div>
+                                
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -261,7 +268,14 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <DataField label="Control Number" value={selectedFeedback.control_number} />
                                         <DataField label="Department / Office" value={selectedFeedback.department_name} />
-                                        <DataField label="Date & Time" value={formatDateTime(selectedFeedback.submitted_at)} />
+                                        
+                                        {/* Changed "Date & Time" to "Date of Transaction" using transaction_date or falling back to submitted_at for old records */}
+                                        <DataField 
+                                            label="Date of Transaction" 
+                                            value={selectedFeedback.transaction_date 
+                                                ? formatDateOnly(selectedFeedback.transaction_date) 
+                                                : formatDateOnly(selectedFeedback.submitted_at)} 
+                                        />
                                         
                                         <DataField label="Client Classification" value={getFieldValue(['client classification', 'client type', 'client'])} />
                                         <DataField label="Transaction Type" value={getFieldValue(['transaction type'])} />

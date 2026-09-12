@@ -5,9 +5,9 @@ import SuperAdminLayout from '../../Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
 
 
-export default function ManageForms({ forms, uniqueDepartments, filters, isSuperAdmin }) {
-    const { flash } = usePage().props;
-    
+export default function ManageForms({forms, uniqueDepartments, filters, isSuperAdmin }) {
+    const { flash, auth } = usePage().props; // <-- auth is defined here
+    const userRole = auth?.user?.role?.toLowerCase() || '';
     // Safely fallback to an empty array if uniqueDepartments is undefined
     const safeDepartments = uniqueDepartments || [];
 
@@ -74,7 +74,21 @@ export default function ManageForms({ forms, uniqueDepartments, filters, isSuper
             confirmButtonText: '<i class="fa-solid fa-upload"></i> Yes, Publish it!'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.put(route('superadmin.forms.publish', formId), {}, { preserveScroll: true });
+                router.put(route('superadmin.forms.publish', formId), {}, { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({
+                            title: 'Published!',
+                            text: `"${formTitle}" has been successfully published.`,
+                            icon: 'success',
+                            toast: true,
+                            position: 'top-end',
+                            timer: 3000,
+                            timerProgressBar: true,
+                            showConfirmButton: false
+                        });
+                    }
+                });
             }
         });
     };
@@ -90,7 +104,21 @@ export default function ManageForms({ forms, uniqueDepartments, filters, isSuper
             confirmButtonText: '<i class="fa-solid fa-box-archive"></i> Yes, Archive it!'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.put(route('superadmin.forms.archive', formId), {}, { preserveScroll: true });
+                router.put(route('superadmin.forms.archive', formId), {}, { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({
+                            title: 'Archived!',
+                            text: `"${formTitle}" has been successfully archived.`,
+                            icon: 'success',
+                            toast: true,
+                            position: 'top-end',
+                            timer: 3000,
+                            timerProgressBar: true,
+                            showConfirmButton: false
+                        });
+                    }
+                });
             }
         });
     };
@@ -106,11 +134,24 @@ export default function ManageForms({ forms, uniqueDepartments, filters, isSuper
             confirmButtonText: '<i class="fa-solid fa-copy"></i> Yes, Clone it!'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.post(route('superadmin.forms.clone', formId), {}, { preserveScroll: true });
+                router.post(route('superadmin.forms.clone', formId), {}, { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({
+                            title: 'Cloned Successfully!',
+                            text: 'The form blueprint has been duplicated as a Draft.',
+                            icon: 'success',
+                            toast: true,
+                            position: 'top-end',
+                            timer: 3000,
+                            timerProgressBar: true,
+                            showConfirmButton: false
+                        });
+                    }
+                });
             }
         });
     };
-
    
     // --- DEPLOYMENT KIT MODAL STATE & HANDLERS ---
     const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
@@ -256,15 +297,13 @@ export default function ManageForms({ forms, uniqueDepartments, filters, isSuper
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Form Title</th>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Department</th>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Status</th>
-                                        {isSuperAdmin && (
-                                            <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
-                                        )}
+                                        <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {!(forms?.data || forms).length ? (
                                         <tr>
-                                            <td colSpan={isSuperAdmin ? 5 : 4} className="px-6 py-12 text-center text-gray-500">
+                                            <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                                 <i className="fa-solid fa-filter-circle-xmark text-4xl mb-4 block text-gray-300"></i>
                                                 <p className="text-base font-semibold">No forms found</p>
                                                 <p className="text-sm mt-1">Try adjusting your search or filter settings.</p>
@@ -283,34 +322,44 @@ export default function ManageForms({ forms, uniqueDepartments, filters, isSuper
                                                     {form.status === 'Draft' && <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-yellow-100 text-yellow-800">Draft</span>}
                                                     {form.status === 'Archived' && <span className="px-3 py-1 inline-flex text-xs font-bold rounded-full bg-gray-100 text-gray-800">Archived</span>}
                                                 </td>
-                                                {isSuperAdmin && (
-                                                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
-                                                        
-                                                        {form.status === 'Draft' && (
-                                                            <button onClick={() => handlePublish(form.form_id, form.title)} 
-                                                                className="w-8 h-8 bg-green-100 text-green-600 hover:bg-green-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Publish">
-                                                                <i className="fa-solid fa-upload"></i>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+                                                    
+                                                    {/* EVERYONE (SuperAdmin & Feedback Committee) gets the Preview Button */}
+                                                    <a href={`/superAdmin/forms/${form.form_id}/preview`} 
+                                                        target="_blank" 
+                                                        rel="noreferrer"
+                                                        className="w-8 h-8 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded inline-flex justify-center items-center transition" 
+                                                        title="Preview Live Form">
+                                                        <i className="fa-solid fa-up-right-from-square"></i>
+                                                    </a>
+                                                    
+                                                    {/* ONLY SuperAdmins get the modification buttons */}
+                                                    {isSuperAdmin && (
+                                                        <>
+                                                            {form.status === 'Draft' && (
+                                                                <button onClick={() => handlePublish(form.form_id, form.title)} 
+                                                                    className="w-8 h-8 bg-green-100 text-green-600 hover:bg-green-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Publish">
+                                                                    <i className="fa-solid fa-upload"></i>
+                                                                </button>
+                                                            )}
+                                                            
+                                                            <button onClick={() => handleArchive(form.form_id, form.title)} 
+                                                                className="w-8 h-8 bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white rounded inline-flex justify-center items-center transition" title="Archive">
+                                                                <i className="fa-solid fa-box-archive"></i>
                                                             </button>
-                                                        )}
-                                                        
-                                                        <button onClick={() => handleArchive(form.form_id, form.title)} 
-                                                            className="w-8 h-8 bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white rounded inline-flex justify-center items-center transition" title="Archive">
-                                                            <i className="fa-solid fa-box-archive"></i>
-                                                        </button>
-                                                        
-                                                        <button onClick={() => handleClone(form.form_id)} 
-                                                            className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Clone">
-                                                            <i className="fa-solid fa-copy"></i>
-                                                        </button>
-
-                                                        
-                                                                                                            
-                                                        <Link href={`/superAdmin/forms/${form.form_id}/edit`} 
-                                                            className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit">
-                                                            <i className="fa-solid fa-pen"></i>
-                                                        </Link>
-                                                    </td>
-                                                )}
+                                                            
+                                                            <button onClick={() => handleClone(form.form_id)} 
+                                                                className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Clone">
+                                                                <i className="fa-solid fa-copy"></i>
+                                                            </button>
+                                                                                                                
+                                                            <Link href={`/superAdmin/forms/${form.form_id}/edit`} 
+                                                                className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit">
+                                                                <i className="fa-solid fa-pen"></i>
+                                                            </Link>
+                                                        </>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))
                                     )}

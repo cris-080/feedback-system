@@ -10,7 +10,9 @@ use App\Services\FormService;
 use App\Http\Requests\StoreFormRequest;
 use App\Http\Requests\UpdateFormVersionRequest;
 use App\Http\Resources\FormResource;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Inertia\Inertia;
 
 class FormController extends Controller
@@ -22,27 +24,28 @@ class FormController extends Controller
         $this->formService = $formService;
     }
 
-    public function index(Request $request)
+   public function index(Request $request)
     {
-        $user = auth()->user();
-        $isSuperAdmin = $user->role === 'SuperAdmin';
+        $userRole = strtolower(trim(auth()->user()->role ?? ''));
+        $isSuperAdmin = $userRole === 'superadmin';
+        $isFeedbackCommittee = $userRole === 'feedback committee' || $userRole === 'feedbackcommittee';
         
         $filters = $request->only(['search', 'department']);
 
         // RBAC: If the user is a Focal Person, forcefully override the department filter
-        // so they can ONLY see forms belonging to their specific department.
-        if (!$isSuperAdmin) {
-            $departmentName = Department::where('department_id', $user->department_id)->value('department_name');
+        // We skip this restriction for SuperAdmins AND the Feedback Committee
+        if (!$isSuperAdmin && !$isFeedbackCommittee) {
+            $departmentName = Department::where('department_id', auth()->user()->department_id)->value('department_name');
             $filters['department'] = $departmentName; 
         }
 
         return Inertia::render('SuperAdmin/ManageForms', [
             'forms'             => FormResource::collection(Form::getPaginatedActiveForms($filters)),
             
-            // Only SuperAdmins need the full list of unique departments for the dropdown filter
-            'uniqueDepartments' => $isSuperAdmin ? Department::orderBy('department_name', 'asc')->pluck('department_name') : [],
+            // Both SuperAdmin and Feedback Committee need the full list of departments for the dropdown
+            'uniqueDepartments' => ($isSuperAdmin || $isFeedbackCommittee) ? Department::orderBy('department_name', 'asc')->pluck('department_name') : [],
             'filters'           => $filters,
-            'isSuperAdmin'      => $isSuperAdmin // Pass to React so you can hide the department filter dropdown
+            'isSuperAdmin'      => $isSuperAdmin // This strictly controls the action buttons in ManageForms.jsx
         ]);
     }
 
@@ -109,7 +112,7 @@ class FormController extends Controller
         try {
             $this->formService->deleteForm($form);
             return to_route('superadmin.forms.index')->with('success', 'Form permanently deleted.');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return back()->with('error', $e->getMessage());
         }
     }
@@ -176,7 +179,7 @@ class FormController extends Controller
         $deploymentData = null;
         
         if ($activeForm) {
-            $secureToken = \Illuminate\Support\Facades\Crypt::encryptString($activeForm->form_id);
+            $secureToken =  Crypt::encryptString($activeForm->form_id);
             $baseUrl = url('/feedback?token=' . $secureToken);
             
             $deploymentData = [

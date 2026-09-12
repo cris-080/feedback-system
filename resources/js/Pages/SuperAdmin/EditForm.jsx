@@ -106,19 +106,67 @@ export default function EditForm({ currentForm, existingFields, departments, dep
             options: ['Option 1']
         };
         setData('fields', [...data.fields, newField]);
+
+        Swal.fire({
+            title: 'Question Added',
+            text: `A new question was added to Step ${stepNumber}.`,
+            icon: 'success',
+            toast: true,
+            position: 'top-end',
+            timer: 2000,
+            showConfirmButton: false,
+            timerProgressBar: true
+        });
     };
 
     const removeQuestion = (fieldId) => {
         const fieldToDelete = data.fields.find(f => f.field_id === fieldId);
-        setData('fields', data.fields.filter(f => f.field_id !== fieldId));
-        setUndoQueue(fieldToDelete);
-        setTimeout(() => setUndoQueue(null), 6000);
+
+        Swal.fire({
+            title: 'Remove Question?',
+            text: fieldToDelete?.field_label 
+                ? `Are you sure you want to remove "${fieldToDelete.field_label}"?` 
+                : 'Are you sure you want to remove this question?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, Remove'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                setData('fields', data.fields.filter(f => f.field_id !== fieldId));
+                setUndoQueue(fieldToDelete);
+                setTimeout(() => setUndoQueue(null), 6000);
+
+                Swal.fire({
+                    title: 'Question Removed',
+                    text: 'You can undo this action within the next few seconds.',
+                    icon: 'info',
+                    toast: true,
+                    position: 'top-end',
+                    timer: 3000,
+                    showConfirmButton: false,
+                    timerProgressBar: true
+                });
+            }
+        });
     };
 
     const undoRemove = () => {
         if (undoQueue) {
             setData('fields', [...data.fields, undoQueue].sort((a, b) => a.display_order - b.display_order));
             setUndoQueue(null);
+
+            Swal.fire({
+                title: 'Restored',
+                text: 'The question has been restored.',
+                icon: 'success',
+                toast: true,
+                position: 'top-end',
+                timer: 2000,
+                showConfirmButton: false,
+                timerProgressBar: true
+            });
         }
     };
 
@@ -134,6 +182,17 @@ export default function EditForm({ currentForm, existingFields, departments, dep
 
     const removeOption = (fieldId, optionIndex) => {
         const field = data.fields.find(f => f.field_id === fieldId);
+        if (field?.options?.length <= 1) {
+            Swal.fire({
+                title: 'Action Denied',
+                text: 'A selectable question must contain at least one option.',
+                icon: 'warning',
+                confirmButtonColor: '#f59e0b',
+                confirmButtonText: 'Understood'
+            });
+            return;
+        }
+
         const newOptions = field.options.filter((_, idx) => idx !== optionIndex);
         updateField(fieldId, 'options', newOptions);
     };
@@ -145,10 +204,19 @@ export default function EditForm({ currentForm, existingFields, departments, dep
         updateField(fieldId, 'options', newOptions);
     };
 
-    // --- NEW: Toggle Lock Mechanism ---
+    // --- Toggle Lock Mechanism ---
     const toggleLock = (fieldId) => {
         if (unlockedFields.includes(fieldId)) {
             setUnlockedFields(unlockedFields.filter(id => id !== fieldId));
+            Swal.fire({
+                title: 'Field Locked',
+                text: 'Field configuration is locked and re-synced with defaults.',
+                icon: 'info',
+                toast: true,
+                position: 'top-end',
+                timer: 2000,
+                showConfirmButton: false
+            });
         } else {
             Swal.fire({
                 title: 'Unlock Auto-Sync?',
@@ -166,21 +234,66 @@ export default function EditForm({ currentForm, existingFields, departments, dep
         }
     };
 
-    const submitForm = (e) => {
+   const submitForm = (e) => {
         e.preventDefault();
         const formId = currentForm?.data?.form_id || currentForm?.form_id || currentForm?.id;
+        
         if (!formId) {
-            alert("Error: formId is undefined!");
+            Swal.fire({
+                title: 'Missing Identifier',
+                text: 'Form ID is undefined. Unable to process changes.',
+                icon: 'error',
+                confirmButtonColor: '#dc2626'
+            });
             return;
         }
-        post(route('superadmin.forms.update', formId));
+
+        post(route('superadmin.forms.update', formId), {
+            preserveScroll: true,
+            onSuccess: () => {
+                Swal.fire({
+                    title: 'Form Saved!',
+                    text: 'Form changes updated successfully.',
+                    icon: 'success',
+                    toast: true,
+                    position: 'top-end',
+                    timer: 3000,
+                    timerProgressBar: true,
+                    showConfirmButton: false
+                });
+            },
+            onError: (errs) => {
+                Swal.fire({
+                    title: 'Save Failed',
+                    text: Object.values(errs)[0] || 'Unable to update form. Please verify input fields.',
+                    icon: 'error',
+                    confirmButtonColor: '#dc2626'
+                });
+            }
+        });
     };
 
     const { flash } = usePage().props;
 
     useEffect(() => {
+        if (flash?.success) {
+            Swal.fire({
+                title: 'Success!',
+                text: flash.success,
+                icon: 'success',
+                toast: true,
+                position: 'top-end',
+                timer: 3000,
+                showConfirmButton: false
+            });
+        }
         if (flash?.error) {
-            Swal.fire({ title: 'Cannot Update Form', text: flash.error, icon: 'error', confirmButtonColor: '#dc2626' });
+            Swal.fire({
+                title: 'Cannot Update Form',
+                text: flash.error,
+                icon: 'error',
+                confirmButtonColor: '#dc2626'
+            });
         }
     }, [flash]);
 

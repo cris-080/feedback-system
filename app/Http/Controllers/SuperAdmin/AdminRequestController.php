@@ -18,16 +18,21 @@ class AdminRequestController extends Controller
     }
 
     public function updateStatus(Request $request, $id)
-    {
-        // 1. Validate incoming HTTP request
-        $request->validate([
-            'status' => 'required|in:Approved,Rejected,Completed'
-        ]);
+{
+    $request->validate([
+        'status'  => 'required|string|in:Approved,Rejected',
+        'remarks' => 'nullable|string'
+    ]);
 
-        // 2. Delegate the database update to the Model
-        AdminRequest::updateRequestStatus($id, $request->status);
+    $adminReq = \App\Models\AdminRequest::findOrFail($id);
+    $adminReq->status = $request->status;
 
-        // 3. Return HTTP response
-        return redirect()->back()->with('success', 'Request status updated successfully!');
+    if ($request->status === 'Rejected' && $request->filled('remarks')) {
+        $adminReq->remarks = $request->remarks;
     }
+
+    $adminReq->save();
+
+    return redirect()->back()->with('success', 'Request status updated successfully.');
+}
 }

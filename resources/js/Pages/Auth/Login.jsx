@@ -5,7 +5,7 @@ export default function Login({ status, canResetPassword }) {
     const [showPassword, setShowPassword] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
-        email: '',
+        login: '', // Changed from email to login
         password: '',
         remember: false,
     });
@@ -83,39 +83,29 @@ export default function Login({ status, canResetPassword }) {
                     )}
 
                     <form onSubmit={submit} className="space-y-5">
-                        {/* Email Input */}
-                        <div>
-                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                                Email Address <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative rounded-lg shadow-xs">
-                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                                    <i className="fa-solid fa-envelope text-sm"></i>
-                                </div>
-                                <input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    value={data.email}
-                                    autoComplete="username"
-                                    placeholder="examplen@gmail.com"
-                                    autoFocus
-                                    onChange={(e) => setData('email', e.target.value)}
-                                    className={`block w-full pl-10 pr-3.5 py-3 text-sm rounded-lg border bg-white transition ${
-                                        errors.email 
-                                            ? 'border-red-400 focus:ring-red-200 focus:border-red-500' 
-                                            : 'border-gray-300 focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]'
-                                    }`}
-                                    required
-                                />
-                            </div>
-                            {errors.email && (
-                                <p className="text-red-600 text-xs mt-1.5 font-semibold flex items-center gap-1">
-                                    <i className="fa-solid fa-circle-exclamation"></i>
-                                    {errors.email}
-                                </p>
-                            )}
-                        </div>
+                        {/* Email or Username Input */}
+                <div>
+                    <label htmlFor="login" className="block text-sm font-medium text-gray-700">
+                        Email or Username
+                    </label>
+
+                    <input
+                        id="login"
+                        type="text"
+                        name="login"
+                        value={data.login}
+                        placeholder="e.g., juan@clsu.edu.ph or juan123"
+                        className="mt-1 block w-full border-gray-300 focus:border-[#009639] focus:ring-[#009639] rounded-md shadow-sm placeholder-gray-400"
+                        autoComplete="username"
+                        autoFocus
+                        required
+                        onChange={(e) => setData('login', e.target.value)}
+                    />
+
+                    {errors.login && (
+                        <p className="text-red-500 text-xs mt-1">{errors.login}</p>
+                    )}
+                </div>
 
                         {/* Password Input */}
                         <div>
@@ -195,7 +185,7 @@ export default function Login({ status, canResetPassword }) {
                                     </>
                                 ) : (
                                     <>
-                                        <span>Log In to Workspace</span>
+                                        <span>Log In </span>
                                         <i className="fa-solid fa-arrow-right text-xs"></i>
                                     </>
                                 )}

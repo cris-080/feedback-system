@@ -30,7 +30,7 @@ class PublicFeedbackController extends Controller
             if (is_numeric($decrypted)) {
                 $formId = $decrypted;
             }
-        } catch (\Illuminate\Contracts\Encryption\DecryptException $e) {
+        } catch (DecryptException $e) {
             // Decryption failed. 
         }
 
@@ -45,7 +45,7 @@ class PublicFeedbackController extends Controller
 
             $qrId = $qrCode->qr_id;
 
-            $activeForm = \App\Models\Form::where('department_id', $qrCode->department_id)
+            $activeForm = Form::where('department_id', $qrCode->department_id)
                         ->where('status', 'Active')
                         ->first();
 
@@ -80,7 +80,7 @@ class PublicFeedbackController extends Controller
         });
 
         // FETCH DEPARTMENT AND EAGER LOAD SERVICE PROVIDERS
-        $department = \App\Models\Department::with('service_providers')
+        $department = Department::with('service_providers')
             ->where('department_id', $fullForm->department_id)
             ->first();
 
@@ -100,12 +100,13 @@ class PublicFeedbackController extends Controller
      */
     public function store(Request $request)
     {
-        // 1. Validate Request
+        // 1. Validate Request (Added transaction_date)
         $validated = $request->validate([
-            'form_id'       => 'required|integer|exists:forms,form_id',
-            'department_id' => 'required|integer|exists:department,department_id',
-            'email_address' => 'required|email|max:255',
-            'answers'       => 'required|array',
+            'form_id'          => 'required|integer|exists:forms,form_id',
+            'department_id'    => 'required|integer|exists:department,department_id',
+            'email_address'    => 'required|email|max:255',
+            'transaction_date' => 'required|date|before_or_equal:today', // Validates past/current date
+            'answers'          => 'required|array',
         ]);
 
         // 2. Extract qualitative text (suggestions / comments / harassment details)

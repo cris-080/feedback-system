@@ -15,8 +15,10 @@ class AdminRequest extends Model
 
     protected $fillable = [
         'admin_id', 
+        'request_type', // Added field
+        'details',      // Added field
         'status',
-        // Add any other columns your table has (e.g., 'request_type', 'description', etc.)
+        'remarks', 
     ];
 
     // Relationship to the Account model
@@ -31,7 +33,7 @@ class AdminRequest extends Model
      * Fetch all requests joined with the requester's account details.
      * Keeps pending requests at the top, ordered by newest first.
      */
-    public static function getRequestsWithAccountDetails()
+    public static function getRequestsWithAccountDetails($perPage = 10)
     {
         return self::join('account', 'admin_requests.admin_id', '=', 'account.user_id')
             ->select(
@@ -42,15 +44,16 @@ class AdminRequest extends Model
             )
             ->orderByRaw("FIELD(admin_requests.status, 'Pending') DESC") 
             ->orderBy('admin_requests.created_at', 'desc')
-            ->get();
+            ->paginate($perPage); // Swapped get() for paginate()
     }
 
     /**
-     * Update the status of a specific request.
+     * Fetch paginated requests for a specific Feedback Committee member.
      */
-    public static function updateRequestStatus($id, $status)
+    public static function getPersonalRequests($adminId, $perPage = 10)
     {
-        $adminRequest = self::findOrFail($id);
-        $adminRequest->update(['status' => $status]);
+        return self::where('admin_id', $adminId)
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage);
     }
 }

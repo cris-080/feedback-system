@@ -74,7 +74,7 @@ class FormService
                 ->where('form_type', $form->form_type) // Checks CC vs Non-CC independently
                 ->where('status', 'Active')
                 ->where('form_id', '!=', $form->form_id)
-                ->update(['status' => 'Archived_Version']);
+                ->update(['status' => 'Archived']);
                 
             // 2. Set the target form to Active and sync its department ID
             $form->update([

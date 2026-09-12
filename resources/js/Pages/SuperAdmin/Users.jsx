@@ -69,7 +69,7 @@ export default function Users({ accounts, departments, roles, filters }) {
     const [editUserId, setEditUserId] = useState(null);
 
     const openModal = (user = null) => {
-        if (user) {
+        if (user && user.user_id) {
             setIsEditing(true);
             setEditUserId(user.user_id);
             setData({
@@ -84,7 +84,17 @@ export default function Users({ accounts, departments, roles, filters }) {
         } else {
             setIsEditing(false);
             setEditUserId(null);
-            reset();
+            // Explicitly clear the fields instead of relying on reset()
+            setData({
+                firstname: '',
+                lastname: '',
+                username: '',
+                email: '',
+                password: '',
+                role: '',
+                department_id: '',
+            });
+            clearErrors();
         }
         setShowModal(true); 
         setTimeout(() => setAnimateModal(true), 10); 
@@ -94,7 +104,16 @@ export default function Users({ accounts, departments, roles, filters }) {
         setAnimateModal(false); 
         setTimeout(() => {
             setShowModal(false); 
-            reset();
+            // Explicitly clear the fields on close
+            setData({
+                firstname: '',
+                lastname: '',
+                username: '',
+                email: '',
+                password: '',
+                role: '',
+                department_id: '',
+            });
             clearErrors();
             setIsEditing(false);
             setEditUserId(null);
@@ -129,11 +148,17 @@ export default function Users({ accounts, departments, roles, filters }) {
         e.preventDefault();
         if (editingRole) {
             putRole(route('superadmin.roles.update', editingRole.role_id), {
-                onSuccess: () => setShowRoleModal(false),
+                onSuccess: () => {
+                    setShowRoleModal(false);
+                    Swal.fire({ title: 'Role Updated!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                }
             });
         } else {
             postRole(route('superadmin.roles.store'), {
-                onSuccess: () => setShowRoleModal(false),
+                onSuccess: () => {
+                    setShowRoleModal(false);
+                    Swal.fire({ title: 'Role Created!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                }
             });
         }
     };
@@ -149,26 +174,44 @@ export default function Users({ accounts, departments, roles, filters }) {
             confirmButtonText: 'Yes, Delete Role'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.roles.destroy', role.role_id));
+                router.delete(route('superadmin.roles.destroy', role.role_id), {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({ title: 'Role Deleted!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                    }
+                });
             }
         });
     };
 
-    // --- ACTION HANDLERS ---
+  // --- ACTION HANDLERS ---
     const submitForm = (e) => {
         e.preventDefault();
         if (isEditing) {
             put(route('superadmin.users.update', editUserId), {
-                onSuccess: () => closeModal(),
+                onSuccess: () => {
+                    closeModal();
+                    Swal.fire({ 
+                        title: 'Account Updated!', 
+                        text: 'The user account has been updated.', 
+                        icon: 'success', 
+                        toast: true, 
+                        position: 'top-end', 
+                        timer: 3000, 
+                        showConfirmButton: false });
+                },
             });
         } else {
             post(route('superadmin.users.store'), {
-                onSuccess: () => closeModal(),
+                onSuccess: () => {
+                    closeModal();
+                    Swal.fire({ title: 'Account Created!', text: 'The new user account has been created.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                },
             });
         }
-    };
+    };;
 
-    const handleDelete = (userId, userName) => {
+   const handleDelete = (userId, userName) => {
         Swal.fire({
             title: 'Delete Account?',
             text: `Are you sure you want to permanently delete ${userName}'s account?`,
@@ -179,7 +222,12 @@ export default function Users({ accounts, departments, roles, filters }) {
             confirmButtonText: '<i class="fa-solid fa-trash"></i> Yes, Delete!'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.users.destroy', userId), { preserveScroll: true });
+                router.delete(route('superadmin.users.destroy', userId), { 
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({ title: 'Deleted!', text: 'The user account has been permanently deleted.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                    }
+                });
             }
         });
     };
@@ -361,6 +409,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                     <thead className="bg-[#009639] text-white">
                                         <tr>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Name</th>
+                                            <th className="px-6 py-4 font-semibold uppercase tracking-wider">Username</th>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Email</th>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Role</th>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Department</th>
@@ -370,7 +419,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                     <tbody className="divide-y divide-gray-200">
                                         {accounts.data.length === 0 ? (
                                             <tr>
-                                                <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                                                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                                                     <i className="fa-solid fa-filter-circle-xmark text-4xl mb-4 block text-gray-300"></i>
                                                     <p className="text-base font-semibold">No users found</p>
                                                 </td>
@@ -383,7 +432,9 @@ export default function Users({ accounts, departments, roles, filters }) {
                                                 return (
                                                     <tr key={userId} className="hover:bg-gray-50 transition">
                                                         <td className="px-6 py-4 font-semibold text-gray-900 break-words">{acc.lastname}, {acc.firstname}</td>
+                                                        <td className="px-6 py-4 text-gray-600 break-words">{acc.username}</td>
                                                         <td className="px-6 py-4 text-gray-600 break-words">{acc.email}</td>
+                                                        
                                                         <td className="px-6 py-4">
                                                             <span className={`px-3 py-1 text-xs font-bold uppercase rounded-full whitespace-nowrap ${acc.role === 'SuperAdmin' ? 'bg-purple-100 text-purple-800' : acc.role === 'Feedback Committee' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                                                                 {acc.role}

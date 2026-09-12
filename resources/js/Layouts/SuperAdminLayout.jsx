@@ -1,22 +1,41 @@
 import { Link, usePage, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 
 export default function SuperAdminLayout({ children, headerTitle }) {
-    // 1. Grab auth from props FIRST
     const { auth, pendingRequestsCount } = usePage().props; 
     const { url } = usePage();
     
-    // 2. Safely determine the role and prefixes
-    const userRole = auth?.user?.role;
-    const isSuperAdmin = userRole === 'SuperAdmin';
-    const rolePrefix = isSuperAdmin ? 'superadmin' : 'focalperson';
-    const pathPrefix = isSuperAdmin ? '/superAdmin' : '/focalPerson';
+    const rawRole = auth?.user?.role || '';
+    const normalizedRole = rawRole.toLowerCase().trim();
+    
+    const isSuperAdmin = normalizedRole === 'superadmin';
+    const isFeedbackCommittee = normalizedRole.includes('feedback');
+    
+    const isSuperGroup = isSuperAdmin || isFeedbackCommittee;
+    
+    const rolePrefix = isSuperGroup ? 'superadmin' : 'focalperson';
+    const pathPrefix = isSuperGroup ? '/superAdmin' : '/focalPerson';
     
     const isActive = (path) => url.toLowerCase().startsWith(path.toLowerCase());
 
-    // --- SIDEBAR COLLAPSE STATE ---
+    // --- STATES ---
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [showDropdown, setShowDropdown] = useState(false);
+    
+    // --- REFS ---
+    const dropdownRef = useRef(null);
+
+    // --- CLICK OUTSIDE LISTENER (Closes dropdown when clicking away) ---
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     // --- SWEETALERT2 ACTION HANDLERS ---
     const handleLogout = () => {
@@ -90,7 +109,6 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                         </div>
                     )}
                     
-                    {/* Hamburger Button */}
                     <button
                         type="button"
                         onClick={() => setIsCollapsed(!isCollapsed)}
@@ -104,7 +122,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                 {/* Navigation Links */}
                 <nav className="flex-1 space-y-4 overflow-y-auto py-4 overflow-x-hidden">
                     
-                    {/* Section 1: Main Menu */}
+                    {/* Section 1: Main Menu (Shared) */}
                     <div className="space-y-1">
                         {!isCollapsed && (
                             <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
@@ -120,7 +138,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                         />
 
                         <NavLink 
-                            href="#" 
+                            href={route(`${rolePrefix}.reports.index`)} 
                             icon="fa-solid fa-chart-pie" 
                             text="Reports" 
                             activePath={`${pathPrefix}/reports`} 
@@ -132,10 +150,19 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                             text="Feedback Datastore" 
                             activePath={`${pathPrefix}/feedbacks`} 
                         />
+                        
+                        {isSuperGroup && (
+                            <NavLink 
+                                href={isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index')} 
+                                icon="fa-solid fa-bell" 
+                                text="Requests" 
+                                activePath={isSuperAdmin ? '/superAdmin/requests' : '/feedback-committee/requests'} 
+                            />
+                        )}
                     </div>
 
                     {/* Section 2: Focal Person Operations */}
-                    {!isSuperAdmin && (
+                    {!isSuperGroup && (
                         <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
                             {!isCollapsed && (
                                 <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
@@ -158,55 +185,58 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                         </div>
                     )}
 
-                    {/* Section 3: SuperAdmin Management */}
-                    {isSuperAdmin && (
-                        <>
-                            <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
-                                {!isCollapsed && (
-                                    <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
-                                        System Management
-                                    </div>
-                                )}
+                    {/* Section 3: System Management (SuperAdmin & Feedback Committee) */}
+                    {isSuperGroup && (
+                        <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
+                            {!isCollapsed && (
+                                <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
+                                    System Management
+                                </div>
+                            )}
 
-                                <NavLink 
-                                    href={route('superadmin.forms.index')} 
-                                    icon="fa-solid fa-file-signature" 
-                                    text="Forms" 
-                                    activePath="/superAdmin/forms" 
-                                />
+                            <NavLink 
+                                href={route('superadmin.departments.index')} 
+                                icon="fa-solid fa-building-flag" 
+                                text={"Departments"} 
+                                activePath="/superAdmin/departments" 
+                            />
+                            <NavLink 
+                                href={route('superadmin.forms.index')} 
+                                icon="fa-solid fa-file-signature" 
+                                text={"Forms"} 
+                                activePath="/superAdmin/forms" 
+                            />
+                            
+                            {isSuperAdmin && (
                                 <NavLink 
                                     href={route('superadmin.users.index')} 
                                     icon="fa-solid fa-users-gear" 
                                     text="Accounts" 
                                     activePath="/superAdmin/users" 
                                 />
-                                <NavLink 
-                                    href={route('superadmin.departments.index')} 
-                                    icon="fa-solid fa-building-flag" 
-                                    text="Departments" 
-                                    activePath="/superAdmin/departments" 
-                                />
-                            </div>
+                            )}
+                        </div>
+                    )}
 
-                            <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
-                                {!isCollapsed && (
-                                    <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
-                                        Administration
-                                    </div>
-                                )}
+                    {/* Section 4: Administration (SuperAdmin ONLY) */}
+                    {isSuperAdmin && (
+                        <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
+                            {!isCollapsed && (
+                                <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
+                                    Administration
+                                </div>
+                            )}
 
-                                <NavLink 
-                                    href={route('superadmin.archives.index')} 
-                                    icon="fa-solid fa-box-archive" 
-                                    text="System Archives" 
-                                    activePath="/superAdmin/archives" 
-                                />
-                            </div>
-                        </>
+                            <NavLink 
+                                href={route('superadmin.archives.index')} 
+                                icon="fa-solid fa-box-archive" 
+                                text="System Archives" 
+                                activePath="/superAdmin/archives" 
+                            />
+                        </div>
                     )}
                 </nav>
 
-                {/* Sidebar Footer */}
                 <div className="p-4 border-t border-white/10 text-xs font-semibold text-white/40 text-center truncate">
                     {isCollapsed ? 'v1.0' : 'FMS Version 1.0.0'}
                 </div>
@@ -222,56 +252,92 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                     </div>
                     
                     <div className="flex items-center space-x-6">
-                        <Link 
-                            href={route('superadmin.requests.index')}
-                            className="text-white/80 hover:text-[#FFD700] transition-colors relative flex items-center group"
-                            title="View Pending Requests"
-                        >
-                            <i className="fa-regular fa-bell text-xl group-hover:scale-110 transition-transform"></i>
-                            {pendingRequestsCount > 0 && (
-                                <span className="absolute -top-1.5 -right-2 flex h-4 w-4 items-center justify-center">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD700] opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-[#FFD700] border-2 border-[#009639] text-[9px] font-extrabold text-[#1E6031] items-center justify-center shadow-sm">
-                                        {pendingRequestsCount}
+                        
+                        {/* Only show pending requests bell to the SuperGroup */}
+                        {isSuperGroup && (
+                            <Link 
+                                href={isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index')}
+                                className="text-white/80 hover:text-[#FFD700] transition-colors relative flex items-center group"
+                                title="View Pending Requests"
+                            >
+                                <i className="fa-regular fa-bell text-xl group-hover:scale-110 transition-transform"></i>
+                                {pendingRequestsCount > 0 && (
+                                    <span className="absolute -top-1.5 -right-2 flex h-4 w-4 items-center justify-center">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD700] opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-4 w-4 bg-[#FFD700] border-2 border-[#009639] text-[9px] font-extrabold text-[#1E6031] items-center justify-center shadow-sm">
+                                            {pendingRequestsCount}
+                                        </span>
                                     </span>
-                                </span>
+                                )}
+                            </Link>
+                        )}
+
+                        {isSuperGroup && <div className="h-8 w-px bg-white/20"></div>}
+
+                        {/* Dropdown Gear Menu */}
+                        <div className="relative" ref={dropdownRef}>
+                            <button 
+                                onClick={() => setShowDropdown(!showDropdown)}
+                                className={`flex items-center justify-center h-10 w-10 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-[#FFD700] ${
+                                    showDropdown ? 'bg-white/20 text-[#FFD700] rotate-90' : 'bg-white/10 text-white hover:bg-white/20 hover:text-white'
+                                }`}
+                                title="Account Settings & Logout"
+                            >
+                                <i className="fa-solid fa-gear text-lg transition-transform duration-300"></i>
+                            </button>
+
+                            {/* Dropdown Content */}
+                            {showDropdown && (
+                                <div className="absolute right-0 mt-3 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden transform origin-top-right transition-all animate-fade-in-down">
+                                    
+                                    {/* User Identity Header */}
+                                    <div className="px-4 py-4 bg-gray-50 border-b border-gray-100 flex items-center space-x-3">
+                                        <div className="h-11 w-11 rounded-full bg-[#1E6031] text-[#FFD700] flex items-center justify-center font-bold text-lg shadow-sm uppercase shrink-0">
+                                            {auth?.user?.firstname?.charAt(0) || auth?.user?.first_name?.charAt(0) || rawRole?.charAt(0) || 'U'}
+                                        </div>
+                                        <div className="flex flex-col truncate">
+                                            <span className="text-sm font-bold text-gray-900 truncate">
+                                                {auth?.user?.firstname || auth?.user?.first_name || 'Authorized'} {auth?.user?.lastname || auth?.user?.last_name || 'Personnel'}
+                                            </span>
+                                            <span className="text-xs text-[#009639] uppercase font-bold tracking-wide mt-0.5 truncate">
+                                                {rawRole || 'Staff'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Menu Actions */}
+                                    <div className="py-2">
+                                        <Link 
+                                            href={route('profile.edit')}
+                                            onClick={() => setShowDropdown(false)}
+                                            className="flex items-center px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-[#1E6031] transition-colors"
+                                        >
+                                            <i className="fa-solid fa-user-pen w-5 text-center text-gray-400 mr-2"></i>
+                                            Edit Profile
+                                        </Link>
+                                        
+                                        <div className="border-t border-gray-100 my-1"></div>
+                                        
+                                        <button 
+                                            onClick={(e) => {
+                                                setShowDropdown(false);
+                                                handleLogout();
+                                            }}
+                                            className="w-full flex items-center px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left"
+                                        >
+                                            <i className="fa-solid fa-arrow-right-from-bracket w-5 text-center text-red-400 mr-2"></i>
+                                           Log Out
+                                        </button>
+                                    </div>
+                                </div>
                             )}
-                        </Link>
-
-                        <div className="h-8 w-px bg-white/20"></div>
-
-                        {/* Profile Identity */}
-                <div className="flex items-center space-x-3">
-                    <div className="flex flex-col text-right">
-                        <span className="text-sm font-bold text-white leading-none">
-                            {/* Checks for both camelCase and snake_case database column formats */}
-                            {auth?.user?.firstname || auth?.user?.first_name || 'Authorized'} {auth?.user?.lastname || auth?.user?.last_name || 'Personnel'}
-                        </span>
-                        <span className="text-xs text-[#FFD700] mt-1 capitalize font-bold">
-                            {/* Uses the parsed role variable from the top of the file */}
-                            {userRole || 'Staff'}
-                        </span>
-                    </div>
-    
-                            {/* Avatar Circle */}
-                            <div className="h-10 w-10 rounded-full bg-[#FFD700] text-[#1E6031] flex items-center justify-center font-bold text-lg shadow-inner uppercase">
-                                {auth?.user?.firstname?.charAt(0) || auth?.user?.first_name?.charAt(0) || userRole?.charAt(0) || 'U'}
-                            </div>
                         </div>
-                                                
-                        <button 
-                            onClick={handleLogout}
-                            className="bg-white/10 border border-white/20 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-600 hover:border-red-500 transition-all shadow-sm flex items-center group"
-                        >
-                            <i className="fa-solid fa-arrow-right-from-bracket mr-2 text-white/70 group-hover:text-white transition-colors"></i> 
-                            Log Out
-                        </button>
+                        
                     </div>
                 </header>
 
                 {/* Dynamic Content */}
                 <main className="flex-1 overflow-y-auto bg-gray-100 p-8">
-                
                     {children}
                 </main>
             </div>

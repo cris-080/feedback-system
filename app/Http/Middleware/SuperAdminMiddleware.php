@@ -13,20 +13,33 @@ class SuperAdminMiddleware
      * Handle an incoming request.
      */
   
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next)
     {
-        if (Auth::check()) {
-            $role = strtolower(trim(Auth::user()->role ?? ''));
+        $role = strtolower(trim(auth()->user()->role ?? ''));
 
-            // If they are a SuperAdmin, let them pass
-            if ($role === 'superadmin') {
+        // 1. SuperAdmin gets unrestricted access to everything
+        if ($role === 'superadmin') {
+            return $next($request);
+        }
+
+        // 2. Feedback Committee gets strictly limited access
+        if ($role === 'feedback committee' || $role === 'feedbackcommittee') {
+            
+            // Allow all GET (View) requests
+            if (in_array($request->method(), ['GET', 'HEAD'])) {
                 return $next($request);
             }
 
-            // If a Focal Person hits a SuperAdmin URL via the back button, bounce them back safely
-            return redirect()->route('focalperson.dashboard');
+            // Allow them to update Admin Requests (since that's their job)
+            if ($request->is('superAdmin/requests*')) {
+                return $next($request);
+            }
+
+            // Block everything else (Adding/Editing/Deleting Departments, Forms, Services, Positions)
+            abort(403, 'Feedback Committee has View-Only access. You cannot modify departments or forms.');
         }
 
-        return redirect()->route('login');
+        // 3. Kick out Focal Persons or unauthorized users
+        abort(403, 'Unauthorized Access.');
     }
 }

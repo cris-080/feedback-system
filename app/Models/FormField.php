@@ -227,7 +227,7 @@ class FormField extends Model
             [
                 'field_id' => 'temp_18',
                 'step_number' => 3,
-                'field_label' => 'SQD4:. I easily found information about my transaction from the office or its website.',
+                'field_label' => 'SQD4: I easily found information about my transaction from the office or its website.',
                 'input_type' => 'radio',
                 'is_required' => true,
                 'options' => ['1', '2', '3', '4', '5', 'N/A']
@@ -244,7 +244,7 @@ class FormField extends Model
             [
                 'field_id' => 'temp_20',
                 'step_number' => 3,
-                'field_label' => "SQD6: . I feel the office was fair to everyone, or “walang palakasan” during my transaction.",
+                'field_label' => "SQD6: I feel the office was fair to everyone, or “walang palakasan” during my transaction.",
                 'input_type' => 'radio',
                 'is_required' => true,
                 'options' => ['1', '2', '3', '4', '5', 'N/A']
