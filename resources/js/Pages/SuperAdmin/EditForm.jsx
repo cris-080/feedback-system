@@ -250,18 +250,8 @@ export default function EditForm({ currentForm, existingFields, departments, dep
 
         post(route('superadmin.forms.update', formId), {
             preserveScroll: true,
-            onSuccess: () => {
-                Swal.fire({
-                    title: 'Form Saved!',
-                    text: 'Form changes updated successfully.',
-                    icon: 'success',
-                    toast: true,
-                    position: 'top-end',
-                    timer: 3000,
-                    timerProgressBar: true,
-                    showConfirmButton: false
-                });
-            },
+            // We removed the fake 'onSuccess' popup here. 
+            // The global useEffect will now correctly handle real success/error alerts!
             onError: (errs) => {
                 Swal.fire({
                     title: 'Save Failed',
@@ -301,7 +291,7 @@ export default function EditForm({ currentForm, existingFields, departments, dep
         <SuperAdminLayout headerTitle="Edit Form Builder">
             <Head title={`Edit Form - ${data.title}`} />
             
-            <div className="max-w-7xl mx-auto space-y-8">
+           <div className="max-w-7xl mx-auto space-y-8 pb-24">
                 <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded text-amber-800 text-sm mb-4 shadow-sm">
                     <strong><i className="fa-solid fa-circle-info mr-2"></i> Invisible Versioning Active:</strong> Saving changes will automatically archive the current version and generate a new active version to protect historical analytics.
                 </div>
@@ -476,13 +466,26 @@ export default function EditForm({ currentForm, existingFields, departments, dep
                             );
                         })}
                         
-                        <hr className="my-8 border-gray-200" />
-                        <div className="flex justify-end space-x-4">
-                            <Link href={route('superadmin.forms.index')} className="px-6 py-3 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-sm font-bold transition">
-                                Cancel
+                    {/* --- REPLACE THE OLD BUTTONS WITH THIS --- */}
+                        <div className="py-6 text-center text-gray-400 font-medium text-sm">
+                            <i className="fa-solid fa-check-circle mr-1"></i> Form canvas complete. Use the floating action menu to save.
+                        </div>
+
+                        {/* Floating Action Menu (Always visible) */}
+                        <div className="fixed bottom-8 right-8 z-50 flex items-center space-x-4 bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] border border-gray-200 hover:shadow-[0_10px_40px_-10px_rgba(0,0,0,0.4)] transition-shadow">
+                            <div className="hidden sm:block pr-4 border-r border-gray-200">
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-right">Unsaved Changes</p>
+                                <p className="text-sm font-bold text-[#009639]">Ready to Save</p>
+                            </div>
+                            <Link href={route('superadmin.forms.index')} className="px-5 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition flex items-center border border-gray-200">
+                                <i className="fa-solid fa-xmark mr-2 text-red-500"></i> Cancel
                             </Link>
-                            <button type="submit" disabled={processing} className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold text-lg hover:bg-green-700 transition disabled:opacity-75">
-                                {processing ? 'Saving...' : 'Save New Version'}
+                            <button type="submit" disabled={processing} className="bg-[#009639] text-white px-8 py-2.5 rounded-xl font-bold hover:bg-[#1E6031] transition shadow-md disabled:opacity-75 flex items-center">
+                                {processing ? (
+                                    <><i className="fa-solid fa-spinner fa-spin mr-2"></i> Saving...</>
+                                ) : (
+                                    <><i className="fa-solid fa-floppy-disk mr-2"></i> Save Changes</>
+                                )}
                             </button>
                         </div>
                     </form>
@@ -490,9 +493,9 @@ export default function EditForm({ currentForm, existingFields, departments, dep
             </div>
 
             {undoQueue && (
-                <div className="fixed bottom-8 right-8 bg-gray-900 text-white px-6 py-4 rounded-lg shadow-xl flex items-center space-x-6 z-50">
-                    <span className="font-medium">Question removed.</span>
-                    <button type="button" onClick={undoRemove} className="text-emerald-400 font-bold hover:text-emerald-300">
+                <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-900/95 backdrop-blur-sm text-white px-6 py-4 rounded-full shadow-2xl flex items-center space-x-6 z-[60]">
+                    <span className="font-medium"><i className="fa-solid fa-trash-can mr-2 text-gray-400"></i> Question removed.</span>
+                    <button type="button" onClick={undoRemove} className="text-emerald-400 font-bold hover:text-emerald-300 bg-gray-800 px-3 py-1.5 rounded-full transition">
                         <i className="fa-solid fa-rotate-left mr-1"></i> Undo
                     </button>
                 </div>

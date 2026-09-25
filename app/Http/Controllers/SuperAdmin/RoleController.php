@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 class RoleController extends Controller
@@ -23,7 +24,7 @@ class RoleController extends Controller
             'description' => 'nullable|string|max:255',
         ]);
 
-        $validated['role_key'] = \Illuminate\Support\Str::slug($validated['role_name'], '_');
+        $validated['role_key'] = Str::slug($validated['role_name'], '_');
 
         Role::create($validated);
 
@@ -56,7 +57,7 @@ class RoleController extends Controller
             'description' => 'nullable|string|max:255',
         ]);
 
-        $validated['role_key'] = \Illuminate\Support\Str::slug($validated['role_name'], '_');
+        $validated['role_key'] = Str::slug($validated['role_name'], '_');
 
         $role->update($validated);
 

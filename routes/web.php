@@ -7,6 +7,7 @@ use App\Http\Controllers\SuperAdmin\UserController;
 use App\Http\Controllers\SuperAdmin\DashboardController;
 use App\Http\Controllers\SuperAdmin\DepartmentController;
 use App\Http\Controllers\SuperAdmin\AdminRequestController;
+use App\Http\Controllers\SuperAdmin\ReportController; // <-- Added ReportController import
 use App\Http\Middleware\SuperAdminMiddleware;
 use App\Http\Controllers\FeedbackCommittee\FeedbackCommitteeRequestController;
 use App\Http\Controllers\PublicFeedbackController;
@@ -113,16 +114,16 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     // Dashboards & Feedback
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
-    // NEW: Placeholder route for SuperAdmin Reports to prevent Ziggy crash
-    Route::get('/reports', function () {
-        return inertia('SuperAdmin/Reports');
-    })->name('reports.index');
+    // --- UPDATED REPORT ROUTES ---
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('/reports/generate', [ReportController::class, 'generate'])->name('reports.generate');
+    Route::get('/reports/{id}', [ReportController::class, 'show'])->name('reports.show');
 
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
-
     // Admin Requests Management
     Route::get('/requests', [AdminRequestController::class, 'index'])->name('requests.index');
     Route::patch('/requests/{id}/status', [AdminRequestController::class, 'updateStatus'])->name('requests.update');
+    Route::delete('/requests/{id}', [AdminRequestController::class, 'destroy'])->name('requests.destroy');
     
     // Role Management Routes
     Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
@@ -163,6 +164,10 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     Route::delete('/users/{id}', [UserController::class, 'destroy'])->middleware('throttle:admin-crud')->name('users.destroy');
     Route::put('/users/{id}', [UserController::class, 'update'])->middleware('throttle:admin-crud')->name('users.update');
 
+    // NEW: Action Routes
+    Route::patch('/users/{id}/suspend', [UserController::class, 'suspend'])->name('users.suspend');
+    Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+
     // Form Builder & Deletion
     Route::delete('/forms/{id}', [FormController::class, 'destroy'])->name('forms.destroy');
     Route::get('/forms/{id}/edit', [FormBuilderController::class, 'edit'])->name('forms.edit');
@@ -189,9 +194,11 @@ Route::middleware(['auth', SuperAdminMiddleware::class])->prefix('superAdmin')->
     Route::post('/departments/{department}/positions', [DepartmentController::class, 'storePosition'])->name('departments.positions.store');
     Route::delete('/positions/{position}', [DepartmentController::class, 'destroyPosition'])->name('departments.positions.destroy');
     Route::get('/api/departments/{department}/positions', [DepartmentController::class, 'getPositionsByDepartment'])->name('api.departments.positions');
+    Route::put('/users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
+    Route::delete('/users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
     
 
-});
+});     
 
 /*
 |--------------------------------------------------------------------------

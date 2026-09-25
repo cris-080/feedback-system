@@ -93,16 +93,32 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
     switch (field.input_type) {
         case 'radio':
             let radioOptions = [...field.options];
-            if (radioOptions.length === 2 && radioOptions.includes('Yes') && radioOptions.includes('No')) radioOptions = ['No', 'Yes'];
+            
+            // Check if this is a simple Yes/No question
+            const isYesNo = radioOptions.length === 2 && radioOptions.includes('Yes') && radioOptions.includes('No');
+            if (isYesNo) radioOptions = ['Yes', 'No'];
+
             return (
-                <div className="flex flex-wrap gap-6 mt-2">
+                // DYNAMIC CONTAINER: Horizontal row for Yes/No, Vertical column for everything else
+                <div className={`mt-3 ${isYesNo ? 'flex flex-row flex-wrap gap-4 sm:gap-8' : 'flex flex-col space-y-3 w-full'}`}>
                     {radioOptions.map((opt, idx) => {
                         const isNAOption = opt === 'N/A' || opt.includes('N/A') || opt.includes('Not Applicable');
                         const isDisabled = isCC2orCC3 && isCC1Option4 && !isNAOption;
+                        
                         return (
-                            <label key={idx} className={`flex items-center space-x-3 p-2 rounded-md transition-colors ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-green-50'}`}>
-                                <input type="radio" name={`field_${field.field_id}`} value={opt} checked={answerVal === opt} onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} disabled={isDisabled} className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-400 disabled:opacity-50 disabled:bg-gray-200 cursor-pointer" required={field.is_required && !isDisabled} />
-                                <span className="text-gray-800 font-medium text-base sm:text-lg">{opt}</span>
+                            // DYNAMIC LABEL: Fixed width for Yes/No, Full width for long CC1 answers
+                            <label key={idx} className={`flex items-start space-x-3 p-3 rounded-md transition-colors ${isYesNo ? 'min-w-[120px] pr-6 ' : 'w-full border border-transparent'} ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-green-50 hover:border-green-200'}`}>
+                                <input 
+                                    type="radio" 
+                                    name={`field_${field.field_id}`} 
+                                    value={opt} 
+                                    checked={answerVal === opt} 
+                                    onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} 
+                                    disabled={isDisabled} 
+                                    className="mt-0.5 shrink-0 w-5 h-5 text-green-600 focus:ring-green-500 border-gray-400 disabled:opacity-50 disabled:bg-gray-200 cursor-pointer" 
+                                    required={field.is_required && !isDisabled} 
+                                />
+                                <span className="text-gray-800 font-medium text-sm sm:text-base leading-snug">{opt}</span>
                             </label>
                         );
                     })}

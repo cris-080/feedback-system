@@ -80,15 +80,17 @@ class Form extends Model
     // ==========================================================
 public static function getPaginatedActiveForms($filters, $perPage = 10)
     {
-        // We load the department, AND the focalPerson attached to that department
         return self::with(['department', 'department.focalPerson'])
-            ->active()
+            ->where('status', '!=', 'Archived') // Hides archived forms from this view
             ->search($filters['search'] ?? null)
             ->filterDepartment($filters['department'] ?? null)
+            ->when(!empty($filters['status']), function ($query) use ($filters) {
+                // Dynamically apply Active or Draft
+                $query->where('status', $filters['status']);
+            })
             ->orderBy('form_id', 'desc')
             ->paginate($perPage);
     }
-
     public static function getPaginatedArchivedForms($filters, $perPage = 10)
     {
         return self::with('department:department_id,department_name')

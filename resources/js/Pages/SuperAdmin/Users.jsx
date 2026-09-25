@@ -2,15 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { Head, useForm, usePage, router, Link } from '@inertiajs/react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
+import SearchFilter from '@/Components/SearchFilter';
+import Pagination from '@/Components/Pagination';
 
 export default function Users({ accounts, departments, roles, filters }) {
-    const { flash } = usePage().props;
+    const { flash, auth } = usePage().props;
     
     // --- TAB STATE ('accounts' | 'roles') ---
     const [activeTab, setActiveTab] = useState('accounts');
 
-    // --- FILTER MENU TOGGLE STATE ---
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     // --- SERVER-SIDE SEARCH & FILTER STATE ---
     const [searchQuery, setSearchQuery] = useState(filters?.search || '');
@@ -211,47 +211,99 @@ export default function Users({ accounts, departments, roles, filters }) {
         }
     };;
 
-   const handleDelete = (userId, userName) => {
+   // 1. ARCHIVE ACCOUNT (Formerly Delete)
+    const handleArchive = (user) => {
+        // Prevent self-archiving (assuming auth.user.id is available via usePage().props)
+        if (user.user_id === auth?.user?.user_id) {
+            Swal.fire('Action Denied', 'You cannot archive your own active session.', 'error');
+            return;
+        }
+
+        const isFocalPerson = user.role === 'Focal Person';
+        const warningText = isFocalPerson 
+            ? `Archiving ${user.firstname} will leave the "${user.department_name}" department without a manager. Their account will be moved to the archives and they will lose system access.`
+            : `Are you sure you want to move ${user.firstname}'s account to the archives? They will lose system access, but their history will be preserved.`;
+
         Swal.fire({
-            title: 'Delete Account?',
-            text: `Are you sure you want to permanently delete ${userName}'s account?`,
+            title: isFocalPerson ? 'Archive Focal Person?' : 'Archive Account?',
+            text: warningText,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#dc2626',
+            confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#6b7280',
-            confirmButtonText: '<i class="fa-solid fa-trash"></i> Yes, Delete!'
+            confirmButtonText: '<i class="fa-solid fa-box-archive"></i> Yes, Archive it!'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.users.destroy', userId), { 
+                router.delete(route('superadmin.users.destroy', user.user_id), { 
                     preserveScroll: true,
                     onSuccess: () => {
-                        Swal.fire({ title: 'Deleted!', text: 'The user account has been permanently deleted.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                        Swal.fire({ title: 'Archived!', text: 'The user account has been moved to archives.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
                     }
                 });
             }
         });
     };
 
-    const handleSuspend = (userId, userName) => {
-        Swal.fire({
-            title: 'Suspend Access?',
-            text: `Revoke system access for ${userName}?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#f59e0b',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: '<i class="fa-solid fa-ban"></i> Yes, Suspend!'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                Swal.fire('Suspended!', 'User access revoked (Placeholder).', 'success');
-            }
-        });
+   // 2. SUSPEND / DISABLE ACCESS
+   const handleSuspend = (userId, userName, currentStatus) => {
+        const isSuspended = currentStatus === 'Suspended';
+        
+        if (isSuspended) {
+            // Flow for Restoring Access (No reason needed)
+            Swal.fire({
+                title: 'Restore Access?',
+                text: `Allow ${userName} to log in again?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#10b981', 
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: '<i class="fa-solid fa-check"></i> Yes, Restore!'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    router.patch(route('superadmin.users.suspend', userId), {}, {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            Swal.fire({ title: 'Success!', text: 'Account access restored.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                        }
+                    });
+                }
+            });
+        } else {
+            // Flow for Suspending Access (Prompt for reason)
+            Swal.fire({
+                title: 'Suspend Access?',
+                text: `Provide a reason for suspending ${userName}:`,
+                input: 'textarea',
+                inputPlaceholder: 'e.g., Policy violation, Pending investigation...',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: '<i class="fa-solid fa-ban"></i> Suspend',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'You need to provide a reason for the suspension!';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Pass the typed reason to the backend
+                    router.patch(route('superadmin.users.suspend', userId), { reason: result.value }, {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            Swal.fire({ title: 'Suspended!', text: 'Account access revoked.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                        }
+                    });
+                }
+            });
+        }
     };
 
+    // 3. RESET PASSWORD
     const handleResetPassword = (userId, userName) => {
         Swal.fire({
             title: 'Reset Password?',
-            text: `Generate a new temporary password for ${userName}?`,
+            text: `Generate a new default password for ${userName}?`,
             icon: 'info',
             showCancelButton: true,
             confirmButtonColor: '#3b82f6',
@@ -259,11 +311,17 @@ export default function Users({ accounts, departments, roles, filters }) {
             confirmButtonText: '<i class="fa-solid fa-key"></i> Yes, Reset!'
         }).then((result) => {
             if (result.isConfirmed) {
-                Swal.fire('Reset Complete', 'New password sent to user (Placeholder).', 'success');
+                // Point this to a new route in your web.php
+                router.post(route('superadmin.users.reset-password', userId), {}, {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        // The backend should ideally flash the new temporary password to the frontend so the admin can copy it!
+                        Swal.fire('Reset Complete', 'The password has been reset to the default system password.', 'success');
+                    }
+                });
             }
         });
     };
-
     const hasActiveFilters = Boolean(roleFilter || departmentFilter);
 
     return (
@@ -279,123 +337,75 @@ export default function Users({ accounts, departments, roles, filters }) {
                             {/* Toolbar Section */}
                             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
                                 
-                                <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
-                                    
-                                    {/* Search Bar */}
-                                    <div className="relative w-full sm:w-64 md:w-72">
-                                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                            <i className="fa-solid fa-magnifying-glass text-gray-400"></i>
-                                        </div>
-                                        <input 
-                                            type="text" 
-                                            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#009639] focus:border-[#009639] text-sm" 
-                                            placeholder="Search names or emails..." 
-                                            value={searchQuery} 
-                                            onChange={(e) => setSearchQuery(e.target.value)} 
-                                        />
-                                        {searchQuery && (
-                                            <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
-                                                <i className="fa-solid fa-xmark"></i>
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* Accounts / Roles Tab Switcher */}
-                                    <div className="bg-gray-100 rounded-lg p-1 flex space-x-1 w-full sm:w-auto border border-gray-200">
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveTab('accounts')}
-                                            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center ${
-                                                activeTab === 'accounts'
-                                                    ? 'bg-blue-600 text-white shadow-sm'
-                                                    : 'text-gray-600 hover:bg-gray-200'
-                                            }`}
+                               <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
+                                        
+                                        {/* Combined Search & Filter Component */}
+                                        <SearchFilter 
+                                            searchValue={searchQuery}
+                                            onSearchChange={setSearchQuery}
+                                            searchPlaceholder="Search names or emails..."
+                                            hasActiveFilters={hasActiveFilters}
+                                            onFilterReset={() => { setRoleFilter(''); setDepartmentFilter(''); }}
+                                            filterTitle="Filter Accounts"
                                         >
-                                            <i className="fa-solid fa-users-gear mr-1.5"></i> Accounts
-                                        </button>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveTab('roles')}
-                                            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center ${
-                                                activeTab === 'roles'
-                                                    ? 'bg-blue-600 text-white shadow-sm'
-                                                    : 'text-gray-600 hover:bg-gray-200'
-                                            }`}
-                                        >
-                                            <i className="fa-solid fa-user-shield mr-1.5"></i> Roles
-                                        </button>
-                                    </div>
-
-                                    {/* Filter Icon Button */}
-                                    <div className="relative">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                            className={`p-2.5 rounded-md border text-sm font-semibold transition flex items-center justify-center relative ${
-                                                hasActiveFilters 
-                                                    ? 'bg-emerald-50 border-[#009639] text-[#1E6031]' 
-                                                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                            }`}
-                                            title="Filter Accounts"
-                                        >
-                                            <i className="fa-solid fa-filter text-base"></i>
-                                            {hasActiveFilters && (
-                                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#009639] opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-[#009639]"></span>
-                                                </span>
-                                            )}
-                                        </button>
-
-                                        {/* Dropdown Menu for Filters */}
-                                        {isFilterOpen && (
-                                            <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-30 p-4 space-y-3">
-                                                <div className="flex justify-between items-center border-b pb-2">
-                                                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Filter Accounts</span>
-                                                    {hasActiveFilters && (
-                                                        <button 
-                                                            onClick={() => { setRoleFilter(''); setDepartmentFilter(''); }}
-                                                            className="text-xs text-red-600 hover:underline font-semibold"
-                                                        >
-                                                            Reset All
-                                                        </button>
-                                                    )}
-                                                </div>
-
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">By System Role</label>
-                                                    <select 
-                                                        className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white" 
-                                                        value={roleFilter} 
-                                                        onChange={(e) => setRoleFilter(e.target.value)}
-                                                    >
-                                                        <option value="">All Roles</option>
-                                                        <option value="SuperAdmin">SuperAdmin</option>
-                                                        <option value="Feedback Committee">Feedback Committee</option>
-                                                        <option value="Focal Person">Focal Person</option>
-                                                    </select>
-                                                </div>
-
-                                                <div>
-                                                    <label className="block text-xs font-semibold text-gray-600 mb-1">By Department</label>
-                                                    <select 
-                                                        className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white" 
-                                                        value={departmentFilter} 
-                                                        onChange={(e) => setDepartmentFilter(e.target.value)}
-                                                    >
-                                                        <option value="">All Departments</option>
-                                                        <option value="unassigned">System Wide Access</option>
-                                                        {departments.map(dept => (
-                                                            <option key={dept.department_id} value={dept.department_name}>{dept.department_name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">By System Role</label>
+                                                <select 
+                                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white" 
+                                                    value={roleFilter} 
+                                                    onChange={(e) => setRoleFilter(e.target.value)}
+                                                >
+                                                    <option value="">All Roles</option>
+                                                    <option value="SuperAdmin">SuperAdmin</option>
+                                                    <option value="Feedback Committee">Feedback Committee</option>
+                                                    <option value="Focal Person">Focal Person</option>
+                                                </select>
                                             </div>
-                                        )}
-                                    </div>
 
-                                </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-gray-600 mb-1">By Department</label>
+                                                <select 
+                                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white" 
+                                                    value={departmentFilter} 
+                                                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                                                >
+                                                    <option value="">All Departments</option>
+                                                    <option value="unassigned">System Wide Access</option>
+                                                    {departments.map(dept => (
+                                                        <option key={dept.department_id} value={dept.department_name}>{dept.department_name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </SearchFilter>
+
+                                        {/* Accounts / Roles Tab Switcher */}
+                                        <div className="bg-gray-100 rounded-lg p-1 flex space-x-1 w-full sm:w-auto border border-gray-200">
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab('accounts')}
+                                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center ${
+                                                    activeTab === 'accounts'
+                                                        ? 'bg-blue-600 text-white shadow-sm'
+                                                        : 'text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                <i className="fa-solid fa-users-gear mr-1.5"></i> Accounts
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveTab('roles')}
+                                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center justify-center ${
+                                                    activeTab === 'roles'
+                                                        ? 'bg-blue-600 text-white shadow-sm'
+                                                        : 'text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                <i className="fa-solid fa-user-shield mr-1.5"></i> Roles
+                                            </button>
+                                        </div>
+
+                                    </div>
 
                                 {/* Add Account Button */}
                                 <button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md font-semibold text-sm transition shadow-sm whitespace-nowrap w-full xl:w-auto flex items-center justify-center">
@@ -404,8 +414,9 @@ export default function Users({ accounts, departments, roles, filters }) {
                             </div>
 
                             {/* Active Accounts Table */}
+                 
                             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden w-full">
-                                <table className="min-w-full text-left text-sm divide-y divide-gray-200">
+                                 <table className="min-w-full text-left text-sm divide-y divide-gray-200 table-fixed">
                                     <thead className="bg-[#009639] text-white">
                                         <tr>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Name</th>
@@ -413,13 +424,14 @@ export default function Users({ accounts, departments, roles, filters }) {
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Email</th>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Role</th>
                                             <th className="px-6 py-4 font-semibold uppercase tracking-wider">Department</th>
+                                            <th className="px-6 py-4 font-semibold uppercase tracking-wider">Status</th>
                                             <th className="px-6 py-4 font-semibold text-center uppercase tracking-wider whitespace-nowrap">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
-                                        {accounts.data.length === 0 ? (
+                                       {accounts.data.length === 0 ? (
                                             <tr>
-                                                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                                                <td colSpan="7" className="px-6 py-12 text-center text-gray-500"> {/* Changed 6 to 7 */}
                                                     <i className="fa-solid fa-filter-circle-xmark text-4xl mb-4 block text-gray-300"></i>
                                                     <p className="text-base font-semibold">No users found</p>
                                                 </td>
@@ -431,30 +443,54 @@ export default function Users({ accounts, departments, roles, filters }) {
 
                                                 return (
                                                     <tr key={userId} className="hover:bg-gray-50 transition">
-                                                        <td className="px-6 py-4 font-semibold text-gray-900 break-words">{acc.lastname}, {acc.firstname}</td>
-                                                        <td className="px-6 py-4 text-gray-600 break-words">{acc.username}</td>
-                                                        <td className="px-6 py-4 text-gray-600 break-words">{acc.email}</td>
+                                                        <td className="px-4 py-4 font-semibold text-gray-900 break-words">
+                                                            {acc.lastname}, {acc.firstname}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-gray-600 break-words">
+                                                            {acc.username}
+                                                        </td>
+                                                        <td className="px-4 py-4 text-gray-600 break-all">
+                                                            {acc.email}
+                                                        </td>
                                                         
-                                                        <td className="px-6 py-4">
+                                                        <td className="px-4 py-4">
                                                             <span className={`px-3 py-1 text-xs font-bold uppercase rounded-full whitespace-nowrap ${acc.role === 'SuperAdmin' ? 'bg-purple-100 text-purple-800' : acc.role === 'Feedback Committee' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                                                                 {acc.role}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4 text-gray-600 break-words">{acc.department_name || (acc.role !== 'Focal Person' ? 'System Wide Access' : 'Unassigned')}</td>
-                                                        <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
-                                                            <button onClick={() => openModal(acc)} className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition tooltip" title="Edit User">
-                                                                <i className="fa-solid fa-pen"></i>
-                                                            </button>
-                                                            
-                                                            <button onClick={() => handleResetPassword(userId, fullName)} className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition tooltip" title="Reset Password">
-                                                                <i className="fa-solid fa-key"></i>
-                                                            </button>
-                                                            <button onClick={() => handleSuspend(userId, fullName)} className="w-8 h-8 bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white rounded inline-flex justify-center items-center transition tooltip" title="Suspend Access">
-                                                                <i className="fa-solid fa-ban"></i>
-                                                            </button>
-                                                            <button onClick={() => handleDelete(userId, fullName)} className="w-8 h-8 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white rounded inline-flex justify-center items-center transition tooltip" title="Delete User">
-                                                                <i className="fa-solid fa-trash"></i>
-                                                            </button>
+                                                        <td className="px-4 py-4 text-gray-600 break-words">
+                                                            {acc.department_name || (acc.role !== 'Focal Person' ? 'System Wide' : 'Unassigned')}
+                                                        </td>
+                                                        
+                                                        <td className="px-4 py-4">
+                                                            <span className={`px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider rounded-full whitespace-nowrap ${
+                                                                acc.status === 'Suspended' 
+                                                                    ? 'bg-red-100 text-red-700 border border-red-200' 
+                                                                    : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                            }`}>
+                                                                {acc.status === 'Suspended' ? 'Suspended' : 'Active'}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* UPDATED ACTIONS COLUMN (Allows stacking) */}
+                                                        <td className="px-4 py-4 whitespace-nowrap">
+                                                            <div className="flex flex-nowrap justify-center items-center gap-1.5">
+                                                                <button onClick={() => openModal(acc)} className="w-8 h-8 flex-shrink-0 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded flex justify-center items-center transition tooltip" title="Edit User">
+                                                                    <i className="fa-solid fa-pen"></i>
+                                                                </button>
+                                                                
+                                                                <button onClick={() => handleResetPassword(userId, fullName)} className="w-8 h-8 flex-shrink-0 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded flex justify-center items-center transition tooltip" title="Reset Password to Default">
+                                                                    <i className="fa-solid fa-key"></i>
+                                                                </button>
+
+                                                                <button onClick={() => handleSuspend(userId, fullName, acc.status)} className={`w-8 h-8 flex-shrink-0 rounded flex justify-center items-center transition tooltip ${acc.status === 'Suspended' ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white' : 'bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white'}`} title={acc.status === 'Suspended' ? "Restore Access" : "Suspend Access"}>
+                                                                    <i className={`fa-solid ${acc.status === 'Suspended' ? 'fa-unlock' : 'fa-ban'}`}></i>
+                                                                </button>
+
+                                                              <button onClick={() => handleArchive(acc)} className="w-8 h-8 flex-shrink-0 bg-gray-100 text-gray-600 hover:bg-orange-500 hover:text-white rounded flex justify-center items-center transition tooltip" title="Archive User">
+                                                                    <i className="fa-solid fa-box-archive"></i>
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 )
@@ -464,51 +500,7 @@ export default function Users({ accounts, departments, roles, filters }) {
                                 </table>
 
                                 {/* Server-Side Pagination */}
-                                {accounts.links && (
-                                    <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                                        <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between w-full">
-                                            <div>
-                                                <p className="text-sm text-gray-700">
-                                                    Showing <span className="font-bold">{accounts.from || 0}</span> to <span className="font-bold">{accounts.to || 0}</span> of <span className="font-bold">{accounts.total}</span> results
-                                                </p>
-                                            </div>
-                                            <div>
-                                                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                                                    {accounts.links.map((link, index) => {
-                                                        let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
-                                                        if (link.active) {
-                                                            className += "z-10 bg-blue-600 border-[#009639] text-white";
-                                                        } else if (!link.url) {
-                                                            className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
-                                                        } else {
-                                                            className += "bg-white border-gray-300 text-gray-600 hover:bg-gray-100";
-                                                        }
-                                                        
-                                                        if (index === 0) className += " rounded-l-md";
-                                                        if (index === accounts.links.length - 1) className += " rounded-r-md";
-
-                                                        return link.url ? (
-                                                            <Link
-                                                                key={index}
-                                                                href={link.url}
-                                                                preserveScroll
-                                                                preserveState
-                                                                className={className}
-                                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                                            />
-                                                        ) : (
-                                                            <span
-                                                                key={index}
-                                                                className={className}
-                                                                dangerouslySetInnerHTML={{ __html: link.label }}
-                                                            />
-                                                        );
-                                                    })}
-                                                </nav>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                <Pagination dataObject={accounts} />
                             </div>
                         </>
                     )}

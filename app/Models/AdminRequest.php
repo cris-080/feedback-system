@@ -44,16 +44,37 @@ class AdminRequest extends Model
             )
             ->orderByRaw("FIELD(admin_requests.status, 'Pending') DESC") 
             ->orderBy('admin_requests.created_at', 'desc')
+            ->where('is_cleared_by_superadmin', false)
             ->paginate($perPage); // Swapped get() for paginate()
     }
 
     /**
-     * Fetch paginated requests for a specific Feedback Committee member.
+     * Fetch paginated personal requests for a specific user.
+     * Hides requests that the user has cleared.
      */
-    public static function getPersonalRequests($adminId, $perPage = 10)
+    public static function getPersonalRequests($userId, $perPage = 10)
     {
-        return self::where('admin_id', $adminId)
+        return self::where('admin_id', $userId)
+            ->where('is_cleared_by_committee', false) // <-- ADD THIS LINE
             ->orderBy('created_at', 'desc')
             ->paginate($perPage);
+    }
+
+
+    /**
+     * Mass clear all notifications based on the user's role.
+     */
+    public static function clearAllNotifications($role, $userId)
+    {
+        if ($role === 'superadmin') {
+            self::where('status', 'Pending')
+                ->where('is_notified_superadmin', false)
+                ->update(['is_notified_superadmin' => true]);
+        } else {
+            self::whereIn('status', ['Approved', 'Rejected'])
+                ->where('admin_id', $userId)
+                ->where('is_notified_committee', false)
+                ->update(['is_notified_committee' => true]);
+        }
     }
 }

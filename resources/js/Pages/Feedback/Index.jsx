@@ -6,7 +6,7 @@ import { StepOne, StepTwo, StepThree, StepFour } from './Partials/FormSteps';
 
 export default function FeedbackIndex({ form, departmentName, serviceProviders, isCC, steps, qr_id, ph_regions }) {
     const [status, setStatus] = useState('active'); 
-    const [timeLeft, setTimeLeft] = useState(600); 
+    const [timeLeft, setTimeLeft] = useState(3600); 
     const [currentStep, setCurrentStep] = useState(1);
     const [hasStarted, setHasStarted] = useState(false);
 
@@ -78,12 +78,22 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
             dbStep = currentStep + 1; 
         }
 
-        // --- Validate Transaction Date on Step 1 ---
+        // --- Validate Transaction Date AND Email on Step 1 ---
         if (currentStep === 1) {
             if (!data.transaction_date) {
                 Swal.fire({
                     title: 'Required Field Missing',
                     text: 'Please provide the Date of Transaction.',
+                    icon: 'warning',
+                    confirmButtonColor: '#1E6031',
+                    confirmButtonText: 'Okay'
+                });
+                return false;
+            }
+            if (!data.email_address || data.email_address.trim() === '') {
+                Swal.fire({
+                    title: 'Required Field Missing',
+                    text: 'Please provide a valid Email Address.',
                     icon: 'warning',
                     confirmButtonColor: '#1E6031',
                     confirmButtonText: 'Okay'
@@ -115,19 +125,6 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
             }
         }
 
-        // --- Validate Email on Final Step ---
-        if (currentStep === totalSteps) {
-            if (!data.email_address || data.email_address.trim() === '') {
-                Swal.fire({
-                    title: 'Required Field Missing',
-                    text: 'Please provide a valid Email Address before submitting.',
-                    icon: 'warning',
-                    confirmButtonColor: '#1E6031',
-                    confirmButtonText: 'Okay'
-                });
-                return false;
-            }
-        }
         return true; 
     };
 
@@ -231,14 +228,18 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
                             });
                         }
                     },
-                    onError: (errors) => {
+                   onError: (errors) => {
                         console.error("Submission Errors:", errors);
+                        
+                        // Extract the specific spam message if it exists, otherwise use fallback
+                        const errorMessage = errors.email_address || errors.spam || 'There was an issue saving your response. Please review required fields.';
+                        
                         Swal.fire({
                             title: 'Submission Failed',
-                            text: 'There was an issue saving your response. Please review required fields.',
+                            text: errorMessage,
                             icon: 'error',
                             confirmButtonColor: '#dc2626',
-                            confirmButtonText: 'Check Form',
+                            confirmButtonText: 'Okay',
                         });
                     }
                 });
@@ -294,15 +295,18 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
 
                 {/* 3. MAIN FORM BODY */}
                 <form onSubmit={submitFeedback} className="flex-1 flex flex-col justify-between overflow-hidden min-h-0">
-                    <div className="flex-1 overflow-y-auto min-h-0 p-6 sm:p-8">
-                        <div className="max-w-6xl mx-auto space-y-6">
+                    
+                    {/* NEW: Conditionally disable outer scroll on Step 3 to let the table fill the space perfectly */}
+                    <div className={`flex-1 min-h-0 p-4 sm:p-6 lg:p-8 ${currentStep === getDisplayStep(3) ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'}`}>
+                        <div className={`max-w-6xl mx-auto w-full ${currentStep === getDisplayStep(3) ? 'flex-1 flex flex-col min-h-0' : 'space-y-6'}`}>
+                            
                             {currentStep === getDisplayStep(1) && <StepOne stepFields={steps[1] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />}
                             {isCC && currentStep === getDisplayStep(2) && <StepTwo stepFields={steps[2] || []} form={form} data={data} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />}
                             {currentStep === getDisplayStep(3) && <StepThree stepFields={steps[3] || []} data={data} handleAnswerChange={handleAnswerChange} />}
                             {currentStep === getDisplayStep(4) && <StepFour stepFields={steps[4] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />}
                         </div>
                     </div>
-
+                    
                     {/* 4. BOTTOM ACTION BAR */}
                     <div className="h-16 px-6 sm:px-8 border-t border-gray-200 bg-white flex justify-between items-center shrink-0 z-20 shadow-xs">
                         {currentStep > 1 ? (

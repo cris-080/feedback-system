@@ -8,9 +8,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Notifications\Notifiable;
 use App\Models\Department;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Account extends Authenticatable
 {
+
+    use SoftDeletes;
+
     use HasFactory, Notifiable;
     protected $table = 'account';
     protected $primaryKey = 'user_id';
@@ -152,9 +156,8 @@ class Account extends Authenticatable
     public function deleteUser(): ?bool
     {
         if ($this->role === 'SuperAdmin' || $this->is_root) {
-            return false;
+            return false; // <-- It blocks the deletion!
         }
-
         return $this->delete();
     }
 

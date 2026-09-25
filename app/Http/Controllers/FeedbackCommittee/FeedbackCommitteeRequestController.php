@@ -5,7 +5,9 @@ namespace App\Http\Controllers\FeedbackCommittee;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\AdminRequest;
+use \App\Models\Feedback;
 use Inertia\Inertia;
 
 class FeedbackCommitteeRequestController extends Controller
@@ -41,17 +43,48 @@ class FeedbackCommitteeRequestController extends Controller
     }
 
     /**
-     * Cancel and remove a pending request.
+     * Cancel, hide, or clear requests based on where the action originated.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        // Find the request by its ID and ensure it is still Pending
-        $request = AdminRequest::where('request_id', $id)
-            ->where('status', 'Pending')
-            ->firstOrFail();
-            
-        $request->delete();
+        $role = strtolower(trim(auth()->user()->role ?? ''));
 
-        return redirect()->back()->with('success', 'Your pending request has been cancelled.');
+        // 1. Bulk "Mark all as done" (Clears BOTH tables)
+        if ($id == 0 || $request->input('clear_all')) {
+            AdminRequest::clearAllNotifications($role, auth()->user()->user_id);
+            Feedback::clearAllHarassmentNotifications($role);
+            return redirect()->back();
+        }
+
+        // 2. NEW: Catch Harassment Alerts
+        if (str_starts_with($id, 'harassment_')) {
+            $responseId = str_replace('harassment_', '', $id);
+            if ($role === 'superadmin') {
+                DB::table('feedback')->where('response_id', $responseId)->update(['is_notified_superadmin' => true]);
+            } else {
+                DB::table('feedback')->where('response_id', $responseId)->update(['is_notified_committee' => true]);
+            }
+            return redirect()->back();
+        }
+
+        // 3. Normal Admin Request Clearing
+        $adminReq = AdminRequest::findOrFail($id);
+
+        if ($request->input('from_notification')) {
+            if ($role === 'superadmin') {
+                $adminReq->is_notified_superadmin = true;
+            } else {
+                $adminReq->is_notified_committee = true;
+            }
+        } else {
+            if ($role === 'superadmin') {
+                $adminReq->is_cleared_by_superadmin = true;
+            } else {
+                $adminReq->is_cleared_by_committee = true;
+            }
+        }
+        
+        $adminReq->save();
+        return redirect()->back();
     }
 }

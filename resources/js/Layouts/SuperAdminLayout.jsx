@@ -3,7 +3,9 @@ import { useState, useEffect, useRef } from 'react';
 import Swal from 'sweetalert2';
 
 export default function SuperAdminLayout({ children, headerTitle }) {
-    const { auth, pendingRequestsCount } = usePage().props; 
+    // 1. ADDED: Extracted 'flash' from usePage().props
+    // ADDED recentNotifications
+    const { auth, pendingRequestsCount, recentNotifications, flash } = usePage().props;
     const { url } = usePage();
     
     const rawRole = auth?.user?.role || '';
@@ -22,20 +24,81 @@ export default function SuperAdminLayout({ children, headerTitle }) {
     // --- STATES ---
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
     
     // --- REFS ---
     const dropdownRef = useRef(null);
+    const notifRef = useRef(null); // NEW REF
 
-    // --- CLICK OUTSIDE LISTENER (Closes dropdown when clicking away) ---
+    // --- CLICK OUTSIDE LISTENER ---
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setShowDropdown(false);
             }
+            // NEW: Close notifications if clicking outside
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
+                setShowNotifications(false);
+            }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    // --- 2. ADDED: GLOBAL FLASH MESSAGE HANDLER ---
+    useEffect(() => {
+        if (flash?.success) {
+            Swal.fire({
+                title: 'Success!',
+                text: flash.success,
+                icon: 'success',
+                confirmButtonColor: '#1E6031',
+                confirmButtonText: 'Okay'
+            });
+            // Destroy the flash message so the Back button doesn't replay it
+            flash.success = null; 
+        }
+
+        if (flash?.error) {
+            Swal.fire({
+                title: 'Error',
+                text: flash.error,
+                icon: 'error',
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'Okay'
+            });
+            // Destroy the flash error message
+            flash.error = null;
+        }
+    }, [flash]);
+
+   // --- BLAZING FAST NOTIFICATION CLEARING (Partial Reload) ---
+    const handleClearNotification = (e, targetId) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const isClearAll = targetId === 'all';
+        
+        // TROJAN HORSE: If 'all' is clicked, borrow the ID of the first notification 
+        // to bypass Laravel's strict Route Model Binding 404 error!
+        const routeId = isClearAll && recentNotifications?.length > 0 
+            ? recentNotifications[0].request_id 
+            : targetId;
+
+        const destroyRoute = isSuperAdmin 
+            ? route('superadmin.requests.destroy', routeId) 
+            : route('feedback_committee.requests.destroy', routeId);
+
+        router.delete(destroyRoute, {
+            data: { 
+                clear_all: isClearAll,
+                from_notification: true // NEW: Tells the controller this came from the bell!
+            }, 
+            preserveScroll: true,
+            preserveState: true,
+            only: ['pendingRequestsCount', 'recentNotifications']
+        });
+    };
 
     // --- SWEETALERT2 ACTION HANDLERS ---
     const handleLogout = () => {
@@ -253,24 +316,127 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                     
                     <div className="flex items-center space-x-6">
                         
-                        {/* Only show pending requests bell to the SuperGroup */}
-                        {isSuperGroup && (
-                            <Link 
-                                href={isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index')}
-                                className="text-white/80 hover:text-[#FFD700] transition-colors relative flex items-center group"
-                                title="View Pending Requests"
+                        {/* Notification Bell Dropdown */}
+                        <div className="relative" ref={notifRef}>
+                            <button 
+                                onClick={() => setShowNotifications(!showNotifications)}
+                                className="text-white/80 hover:text-[#FFD700] transition-colors relative flex items-center group h-10 w-10 justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+                                title="Notifications"
                             >
                                 <i className="fa-regular fa-bell text-xl group-hover:scale-110 transition-transform"></i>
+                                
+                                {/* Notification Badge */}
                                 {pendingRequestsCount > 0 && (
-                                    <span className="absolute -top-1.5 -right-2 flex h-4 w-4 items-center justify-center">
+                                    <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FFD700] opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-4 w-4 bg-[#FFD700] border-2 border-[#009639] text-[9px] font-extrabold text-[#1E6031] items-center justify-center shadow-sm">
                                             {pendingRequestsCount}
                                         </span>
                                     </span>
                                 )}
-                            </Link>
-                        )}
+                            </button>
+
+                            {/* Notifications Dropdown Content */}
+                            {showNotifications && (
+                                <div className="absolute right-0 mt-3 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden transform origin-top-right transition-all animate-fade-in-down">
+                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                        <span className="text-sm font-bold text-gray-800">Notifications</span>
+                                        <div className="flex items-center gap-3">
+                                            {recentNotifications?.length > 0 && (
+                                                <button 
+                                                    onClick={(e) => handleClearNotification(e, 'all')}
+                                                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-bold transition"
+                                                >
+                                                    Mark all as done
+                                                </button>
+                                            )}
+                                            {pendingRequestsCount > 0 && (
+                                                <span className="text-[10px] bg-[#1E6031] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{pendingRequestsCount} New</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="max-h-80 overflow-y-auto">
+                                        {recentNotifications && recentNotifications.length > 0 ? (
+                                            recentNotifications.map((notif) => (
+                                                <div key={notif.request_id} className="group relative flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition">
+                                                    
+                                                    {/* Clickable Area (Goes to Requests Page) */}
+                                                    <Link 
+                                                        href={notif.is_harassment 
+                                                            ? (isSuperAdmin 
+                                                                ? route('superadmin.feedbacks.index') 
+                                                                : (auth.user.role.toLowerCase().includes('focal') 
+                                                                    ? route('focalperson.feedbacks.index') 
+                                                                    : route('feedback_committee.requests.index'))
+                                                              ) 
+                                                            : (isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index'))
+                                                        }
+                                                        className="flex items-start flex-1"
+                                                        onClick={() => setShowNotifications(false)}
+                                                    >
+                                                        {/* 1. DYNAMIC ICON */}
+                                                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                                                            notif.status === 'Pending' ? 'bg-blue-100 text-blue-600' : 
+                                                            notif.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' : 
+                                                            notif.status === 'Urgent' ? 'bg-red-100 text-red-600' : 'bg-red-100 text-red-600'
+                                                        }`}>
+                                                            <i className={`fa-solid ${
+                                                                notif.status === 'Pending' ? 'fa-file-signature' : 
+                                                                notif.status === 'Approved' ? 'fa-check-double' : 
+                                                                notif.status === 'Urgent' ? 'fa-triangle-exclamation' : 'fa-circle-xmark'
+                                                            } text-sm`}></i>
+                                                        </div>
+
+                                                        {/* 2. DYNAMIC TEXT */}
+                                                        <div className="ml-3 pr-8 flex-1">
+                                                            {/* DYNAMIC TITLE */}
+                                                            <p className="text-sm font-semibold text-gray-800 leading-tight">
+                                                                {notif.is_harassment 
+                                                                    ? 'Urgent: Harassment Alert' 
+                                                                    : (isSuperAdmin ? 'New Approval Request' : `Request ${notif.status}`)
+                                                                }
+                                                            </p>
+                                                            
+                                                            {/* DYNAMIC DESCRIPTION */}
+                                                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                                                {notif.is_harassment
+                                                                    ? notif.remarks
+                                                                    : (isSuperAdmin 
+                                                                        ? `A new request (${notif.request_type || 'Form Publication'}) is pending your review.`
+                                                                        : `Your request was ${notif.status.toLowerCase()}. ${notif.remarks ? `Remarks: ${notif.remarks}` : ''}`
+                                                                    )
+                                                                }
+                                                            </p>
+                                                            
+                                                            <p className="text-[10px] text-gray-400 mt-1.5 font-medium">
+                                                                {new Date(notif.created_at).toLocaleDateString()}
+                                                            </p>
+                                                        </div>
+                                                    </Link>
+
+                                                    {/* Fast Mark as Done / Clear Button */}
+                                                    <button
+                                                        onClick={(e) => handleClearNotification(e, notif.request_id)}
+                                                        className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-gray-200 text-gray-500 hover:bg-emerald-100 hover:text-emerald-700 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 shadow-sm"
+                                                        title="Mark as done & clear"
+                                                    >
+                                                        <i className="fa-solid fa-check text-sm"></i>
+                                                    </button>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="px-4 py-8 text-center">
+                                                <i className="fa-regular fa-bell-slash text-gray-300 text-3xl mb-3"></i>
+                                                <p className="text-sm text-gray-500 font-medium">You're all caught up!</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="h-8 w-px bg-white/20"></div>
 
                         {isSuperGroup && <div className="h-8 w-px bg-white/20"></div>}
 

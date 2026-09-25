@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 class PreventBackHistory
@@ -16,7 +17,7 @@ class PreventBackHistory
         $response = $next($request);
 
         // Force the browser to never cache the page
-        if ($response instanceof \Illuminate\Http\Response || $response instanceof \Illuminate\Http\JsonResponse || $response instanceof \Symfony\Component\HttpFoundation\Response) {
+        if ($response instanceof Response || $response instanceof JsonResponse || $response instanceof Response) {
             $response->headers->set('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate');
             $response->headers->set('Pragma', 'no-cache');
             $response->headers->set('Expires', 'Sat, 01 Jan 2000 00:00:00 GMT');

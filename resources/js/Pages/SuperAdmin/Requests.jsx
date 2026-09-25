@@ -1,26 +1,40 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Head, usePage, router, Link } from '@inertiajs/react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
+import Pagination from '@/Components/Pagination';
+import SearchFilter from '@/Components/SearchFilter';
 
 export default function Requests({ requests }) {
     const { flash } = usePage().props;
 
-    useEffect(() => {
-        if (flash?.success) {
-            Swal.fire({
-                title: 'Success!',
-                text: flash.success,
-                icon: 'success',
-                toast: true,
-                position: 'top-end',
-                timer: 3000,
-                timerProgressBar: true,
-                showConfirmButton: false,
-            });
-        }
-    }, [flash]);
+    // --- SEARCH & FILTER STATE ---
+    const queryParams = new URLSearchParams(window.location.search);
+    const [searchQuery, setSearchQuery] = useState(queryParams.get('search') || '');
+    const [statusFilter, setStatusFilter] = useState(queryParams.get('status') || '');
+    const isInitialRender = useRef(true);
+    const hasActiveFilters = Boolean(statusFilter);
 
+    useEffect(() => {
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
+            return;
+        }
+
+        const timeout = setTimeout(() => {
+            const params = {};
+            if (searchQuery) params.search = searchQuery;
+            if (statusFilter) params.status = statusFilter;
+
+            router.get(
+                route('superadmin.requests.index'), // Make sure this matches your route name!
+                params,
+                { preserveState: true, preserveScroll: true, replace: true }
+            );
+        }, 300);
+
+        return () => clearTimeout(timeout);
+    }, [searchQuery, statusFilter]);
     const handleStatusUpdate = (requestId, newStatus, actionText) => {
         const isApprove = newStatus === 'Approved';
         
@@ -88,17 +102,32 @@ export default function Requests({ requests }) {
     return (
         <SuperAdminLayout headerTitle="Admin Requests">
             <Head title="Admin Requests" />
-            
+            <div className="p-8 bg-gray-50 min-h-screen">
             <div className="space-y-6">
                 
-                {/* Header Section */}
-                <div className="flex justify-between items-center bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                    <div>
-                        <h2 className="text-xl font-bold text-[#1E6031]">Pending Actions</h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Review and manage system requests submitted by the Feedback Committee and Admins.
-                        </p>
-                    </div>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
+                    <SearchFilter 
+                        searchValue={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        searchPlaceholder="Search by name, detail, or type..."
+                        hasActiveFilters={hasActiveFilters}
+                        onFilterReset={() => setStatusFilter('')}
+                        filterTitle="Filter Requests"
+                    >
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Status</label>
+                            <select 
+                                className="block w-full py-2 px-3 border border-gray-300 rounded-md text-sm focus:ring-[#009639] focus:border-[#009639] bg-gray-50 hover:bg-white transition-colors cursor-pointer"
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                            >
+                                <option value="">All Statuses</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Rejected">Rejected</option>
+                            </select>
+                        </div>
+                    </SearchFilter>
                 </div>
 
                 {/* Requests Table */}
@@ -201,55 +230,13 @@ export default function Requests({ requests }) {
                     </div>
 
                    {/* Server-Side Pagination */}
-                    {requests.links && (
-                        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between rounded-b-lg">
-                            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between w-full">
-                                <div>
-                                    <p className="text-sm text-gray-700">
-                                        Showing <span className="font-bold">{requests.from || 0}</span> to <span className="font-bold">{requests.to || 0}</span> of <span className="font-bold">{requests.total}</span> results
-                                    </p>
-                                </div>
-                                <div>
-                                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                                        {requests.links.map((link, index) => {
-                                            let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
-                                            
-                                            if (link.active) {
-                                                // Using your green theme for the active state
-                                                className += "z-10 bg-[#009639] border-[#009639] text-white";
-                                            } else if (!link.url) {
-                                                className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
-                                            } else {
-                                                className += "bg-white border-gray-300 text-gray-600 hover:bg-gray-100";
-                                            }
-                                            
-                                            if (index === 0) className += " rounded-l-md";
-                                            if (index === requests.links.length - 1) className += " rounded-r-md";
-
-                                            return link.url ? (
-                                                <Link
-                                                    key={index}
-                                                    href={link.url}
-                                                    preserveScroll
-                                                    preserveState
-                                                    className={className}
-                                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                                />
-                                            ) : (
-                                                <span
-                                                    key={index}
-                                                    className={className}
-                                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                                />
-                                            );
-                                        })}
-                                    </nav>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    <Pagination
+                    dataObject={requests}
+                    />
                 </div>
             </div>
+            </div>
         </SuperAdminLayout>
+        
     );
 }

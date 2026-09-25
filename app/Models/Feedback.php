@@ -26,6 +26,7 @@ class Feedback extends Model
 
     /**
      * Process and store the submitted feedback, answers, and AI sentiment.
+     * Note: This method is now called repeatedly by the controller if multiple services are selected.
      */
     public static function processSubmission(array $validated)
     {
@@ -36,20 +37,19 @@ class Feedback extends Model
                 ->first();
             $qrId = $qrRecord ? $qrRecord->qr_id : 1;
 
+            // Generate a unique control number for EVERY cloned submission
             $controlNumber = 'CTRL-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -5));
 
-            // Insert into the feedback table, including the new transaction_date
             $responseId = DB::table('feedback')->insertGetId([
                 'control_number'   => $controlNumber,
                 'email_address'    => $validated['email_address'],
-                'transaction_date' => $validated['transaction_date'], // Inserted here
+                'transaction_date' => $validated['transaction_date'], 
                 'submitted_at'     => now(),
                 'qr_id'            => $qrId,
                 'form_id'          => $validated['form_id'],
                 'status'           => 'Valid',
             ]);
 
-            // Insert strictly into available schema columns
             DB::table('sentiment_analysis')->insert([
                 'response_id'      => $responseId,
                 'sentiment'        => $validated['sentiment'] ?? 'Uncategorized',
@@ -59,6 +59,7 @@ class Feedback extends Model
 
             $answersToInsert = [];
             foreach ($validated['answers'] as $fieldId => $answerValue) {
+                // If it is STILL an array (e.g. a different multi-select question), flatten it to a string.
                 if (is_array($answerValue)) {
                     $answerValue = implode(', ', $answerValue);
                 }
@@ -463,7 +464,8 @@ class Feedback extends Model
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
-            ->select('feedback_answers.answer_text as name', DB::raw('COUNT(*) as value'));
+            // Using COUNT(DISTINCT) is an extra safety measure to prevent row duplication
+            ->select('feedback_answers.answer_text as name', DB::raw('COUNT(DISTINCT feedback.response_id) as value'));
 
         $keyword = strtolower(trim($searchKeyword));
 
@@ -474,10 +476,9 @@ class Feedback extends Model
             $query->where('form_fields.field_label', 'Sex')
                   ->whereIn('feedback_answers.answer_text', ['Male', 'Female']);
         } elseif ($keyword === 'client') {
-            $query->where(function ($q) {
-                $q->where('form_fields.field_label', 'Client Type')
-                  ->orWhere('form_fields.field_label', 'Client Classification');
-            });
+            // FIX: Restrict strictly to 'Client Classification' to prevent double-counting
+            // answers if the form also contains a separate 'Client Type' question.
+            $query->where('form_fields.field_label', 'LIKE', '%Client Classification%');
         } elseif ($keyword === 'region') {
             $query->where(function ($q) {
                 $q->where('form_fields.field_label', 'like', '%region of residence%')
@@ -505,7 +506,7 @@ class Feedback extends Model
         return $results->get()->map(function ($item) {
             return [
                 'name'  => trim($item->name),
-                'value' => (int) $item->value, // Cast to integer for Recharts
+                'value' => (int) $item->value,
             ];
         });
     }
@@ -569,7 +570,7 @@ class Feedback extends Model
         ];
     }
 
-    /**
+   /**
      * Get top recurring complaint terms strictly from negative/mixed sentiment comments.
      */
     public static function getTopRecurringWords($range, $departmentId)
@@ -579,15 +580,18 @@ class Feedback extends Model
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->join('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
-            ->whereIn('form_fields.input_type', ['textarea', 'text'])
-            ->where('form_fields.field_label', 'NOT LIKE', '%Sex%')
-            ->where('form_fields.field_label', 'NOT LIKE', '%Client%')
-            ->where('form_fields.field_label', 'NOT LIKE', '%Transaction%')
-            ->where('form_fields.field_label', 'NOT LIKE', '%CC%')
-            ->where('form_fields.field_label', 'NOT LIKE', '%SQD%')
-            ->where('form_fields.field_label', 'NOT LIKE', '%Age%')
-            ->where('form_fields.field_label', 'NOT LIKE', '%Region%')
-            ->whereIn('sentiment_analysis.sentiment', ['Negative', 'Mixed']);
+            ->whereIn('sentiment_analysis.sentiment', ['Negative', 'Mixed']) // Only analyze Negative or Mixed feedback
+            ->where(function ($q) {
+                // STRICT INCLUSION: Only look at actual text boxes meant for remarks/complaints
+                $q->where('form_fields.field_label', 'LIKE', '%Suggestions%')
+                  ->orWhere('form_fields.field_label', 'LIKE', '%Comments%')
+                  ->orWhere('form_fields.field_label', 'LIKE', '%Remarks%')
+                  ->orWhere('form_fields.field_label', 'LIKE', '%detail the harassment%');
+            })
+            ->whereNotNull('feedback_answers.answer_text')
+            ->where('feedback_answers.answer_text', '!=', '')
+            ->where('feedback_answers.answer_text', 'NOT LIKE', '%N/A%')
+            ->where('feedback_answers.answer_text', 'NOT LIKE', '%none%');
 
         if ($departmentId !== 'overall') {
             $query->where('forms.department_id', $departmentId);
@@ -629,5 +633,24 @@ class Feedback extends Model
         }
 
         return $result;
+    }
+
+    /**
+     * Mass clear all harassment notifications based on the user's role.
+     */
+    public static function clearAllHarassmentNotifications($role)
+    {
+        $ids = DB::table('feedback')
+            ->join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
+            ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+            ->where('form_fields.field_label', 'LIKE', '%harassment%')
+            ->where('feedback_answers.answer_text', 'Yes')
+            ->pluck('feedback.response_id');
+
+        if ($role === 'superadmin') {
+            DB::table('feedback')->whereIn('response_id', $ids)->update(['is_notified_superadmin' => true]);
+        } else {
+            DB::table('feedback')->whereIn('response_id', $ids)->update(['is_notified_committee' => true]);
+        }
     }
 }

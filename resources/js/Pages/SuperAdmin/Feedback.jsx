@@ -1,12 +1,40 @@
-import React, { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
+import SearchFilter from '@/Components/SearchFilter';
+import Pagination from '@/Components/Pagination';
 
 export default function Feedback({ feedbacks, isSuperAdmin }) {
     // --- MODAL STATE ---
-    const [selectedFeedback, setSelectedFeedback] = useState(null);
+   const [selectedFeedback, setSelectedFeedback] = useState(null);
     const [currentStep, setCurrentStep] = useState(1);
     const [animateModal, setAnimateModal] = useState(false);
+
+
+    // --- SEARCH & FILTER STATE ---
+    const queryParams = new URLSearchParams(window.location.search);
+    const [searchQuery, setSearchQuery] = useState(queryParams.get('search') || '');
+    const [sentimentFilter, setSentimentFilter] = useState(queryParams.get('sentiment') || '');
+    const isInitialRender = useRef(true);
+    const hasActiveFilters = !!sentimentFilter;
+
+    useEffect(() => {
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
+            return;
+        }
+        const timeout = setTimeout(() => {
+            const params = {};
+            if (searchQuery) params.search = searchQuery;
+            if (sentimentFilter) params.sentiment = sentimentFilter;
+
+            router.get(window.location.pathname, params, { 
+                preserveState: true, preserveScroll: true, replace: true 
+            });
+        }, 300);
+        return () => clearTimeout(timeout);
+    }, [searchQuery, sentimentFilter]);
+
 
     const openModal = (feedback) => {
         setSelectedFeedback(feedback);
@@ -30,8 +58,13 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
     // --- HELPER FUNCTIONS ---
     const formatDateTime = (dateString) => {
         if (!dateString) return 'N/A';
+        
+        // Laravel sends raw strings like "2026-09-17 06:51:00". 
+        // Appending ' UTC' forces the browser to convert it to the user's local timezone (+8 PHT).
+        const safeDate = dateString.includes('T') ? dateString : `${dateString} UTC`;
+        
         const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-        return new Date(dateString).toLocaleDateString('en-US', options);
+        return new Date(safeDate).toLocaleDateString('en-US', options);
     };
 
     // New helper for the Date of Transaction (removes the timestamp)
@@ -92,6 +125,7 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
     };
 
     // --- MODAL SUB-COMPONENTS ---
+    
     const DataField = ({ label, value }) => (
         <div className="bg-gray-50 border border-gray-100 p-3 rounded-lg">
             <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">{label}</span>
@@ -114,19 +148,37 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
         <SuperAdminLayout headerTitle="Feedback Datastore">
             <Head title={isSuperAdmin ? "Feedback Datastore" : "Department Feedback Datastore"} />
             
+               <div className="p-8 bg-gray-50 min-h-screen">
             <div className="max-w-7xl mx-auto space-y-6 pb-10">
                 
-                {/* Header Section */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                            <i className="fa-solid fa-database text-blue-600"></i>
-                            Centralized Feedback Repository
-                        </h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            A read-only log of all raw feedback submissions collected across the university.
-                        </p>
-                    </div>
+
+               {/* --- NEW TOOLBAR WITH SEARCH & FILTER --- */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 gap-4">
+                    
+                    <SearchFilter 
+                        searchValue={searchQuery}
+                        onSearchChange={setSearchQuery}
+                        searchPlaceholder="Search feedback keywords..."
+                        hasActiveFilters={hasActiveFilters}
+                        onFilterReset={() => setSentimentFilter('')}
+                        filterTitle="Filter Feedback"
+                    >
+                        <div>
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Sentiment</label>
+                            <select 
+                                className="block w-full py-2 px-3 border border-gray-300 rounded-md text-sm focus:ring-[#009639] focus:border-[#009639] bg-gray-50 hover:bg-white transition-colors cursor-pointer"
+                                value={sentimentFilter}
+                                onChange={(e) => setSentimentFilter(e.target.value)}
+                            >
+                                <option value="">All Sentiments</option>
+                                <option value="Positive">Positive</option>
+                                <option value="Neutral">Neutral</option>
+                                <option value="Mixed">Mixed</option>
+                                <option value="Negative">Negative</option>
+                            </select>
+                        </div>
+                    </SearchFilter>
+
                 </div>
 
                 {/* Data Table Section */}
@@ -188,48 +240,7 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                     </div>
 
                    {/* Server-Side Pagination */}
-                    {feedbacks?.links && (
-                        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between w-full">
-                                
-                                {/* 1. This ALWAYS shows as long as pagination data exists */}
-                                <div>
-                                    <p className="text-sm text-gray-700">
-                                        Showing <span className="font-bold">{feedbacks.from || 0}</span> to <span className="font-bold">{feedbacks.to || 0}</span> of <span className="font-bold">{feedbacks.total || 0}</span> results
-                                    </p>
-                                </div>
-                                
-                                {/* 2. This ONLY shows the buttons if there is more than 1 page (> 3 links) */}
-                                <div>
-                                    {feedbacks.links.length > 3 && (
-                                        <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                                            {feedbacks.links.map((link, index) => {
-                                                let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
-                                                
-                                                if (link.active) {
-                                                    className += "z-10 bg-[#009639] border-[#009639] text-white";
-                                                } else if (!link.url) {
-                                                    className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
-                                                } else {
-                                                    className += "bg-white border-gray-300 text-gray-600 hover:bg-gray-100";
-                                                }
-                                                
-                                                if (index === 0) className += " rounded-l-md";
-                                                if (index === feedbacks.links.length - 1) className += " rounded-r-md";
-
-                                                return link.url ? (
-                                                    <Link key={index} href={link.url} preserveScroll preserveState className={className} dangerouslySetInnerHTML={{ __html: link.label }} />
-                                                ) : (
-                                                    <span key={index} className={className} dangerouslySetInnerHTML={{ __html: link.label }} />
-                                                );
-                                            })}
-                                        </nav>
-                                    )}
-                                </div>
-                                
-                            </div>
-                        </div>
-                    )}
+                    <Pagination dataObject={feedbacks} />
                 </div>
             </div>
 
@@ -322,7 +333,7 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                             <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Client Rating</span>
                                         </div>
                                         <div className="divide-y divide-gray-100">
-                                            {Object.entries(selectedFeedback.answers)
+                                           {Object.entries(selectedFeedback?.answers || {})
                                                 .filter(([key]) => key.toUpperCase().includes('SQD'))
                                                 .map(([key, val], idx) => {
                                                     const formatSqdBadge = (answer) => {
@@ -356,8 +367,7 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                     </div>
                                 </div>
                             )}
-
-                            {/* STEP 4: Remarks & AI Sentiment */}
+{/* STEP 4: Remarks & AI Sentiment */}
                             {currentStep === 4 && (
                                 <div className="space-y-6 animate-fade-in">
                                     <div className="mb-2">
@@ -378,6 +388,14 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                         <div>
                                             {renderSentimentBadge(selectedFeedback.sentiment, selectedFeedback.sentiment_score)}
                                         </div>
+                                    </div>
+
+                                    {/* Added Respondent Email */}
+                                    <div>
+                                        <DataField 
+                                            label="Respondent Email Address" 
+                                            value={selectedFeedback.email_address || getFieldValue(['email', 'email address'])} 
+                                        />
                                     </div>
                                 </div>
                             )}
@@ -424,8 +442,10 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                             )}
                         </div>
                     </div>
+                   
                 </div>
             )}
+            </div>
         </SuperAdminLayout>
     );
 }

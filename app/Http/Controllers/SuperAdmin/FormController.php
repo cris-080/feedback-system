@@ -24,13 +24,14 @@ class FormController extends Controller
         $this->formService = $formService;
     }
 
-   public function index(Request $request)
+  public function index(Request $request)
     {
         $userRole = strtolower(trim(auth()->user()->role ?? ''));
         $isSuperAdmin = $userRole === 'superadmin';
         $isFeedbackCommittee = $userRole === 'feedback committee' || $userRole === 'feedbackcommittee';
         
-        $filters = $request->only(['search', 'department']);
+        // FIX: Added 'status' so Laravel actually listens to the React dropdown!
+        $filters = $request->only(['search', 'status', 'department']);
 
         // RBAC: If the user is a Focal Person, forcefully override the department filter
         // We skip this restriction for SuperAdmins AND the Feedback Committee
@@ -91,7 +92,7 @@ class FormController extends Controller
 
         return Inertia::render('SuperAdmin/EditForm', [
             'currentForm'        => new FormResource($currentForm),
-            'departments'        => Department::getDropdownList(), // From previous refactor
+            'departments'        => Department::getDropdownList(), 
             'departmentServices' => DepartmentService::getGroupedServices(),
             'existingFields'     => $currentForm->getFormattedFields(),
         ]);

@@ -9,6 +9,7 @@ use App\Models\Department;
 use App\Models\Form;
 use App\Models\Feedback;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -59,10 +60,61 @@ class DashboardController extends Controller
             }
         }
 
-        // 4. Assemble Metrics
+      // 4. Fetch Dynamic Top 10 Performance Data
+        $serviceQuery = DB::table('feedback_answers as fa')
+            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+            ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')
+            ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
+            ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
+            ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id') // Added join
+            ->where('ff.field_label', 'LIKE', '%Service Availed%')
+            ->whereNotNull('fa.answer_text')
+            ->where('fa.answer_text', '!=', '');
+
+        if ($selectedDepartment !== 'overall') {
+            $serviceQuery->where('frm.department_id', $selectedDepartment);
+        }
+
+        $servicePerformance = $serviceQuery->select(
+                'fa.answer_text as name',
+                DB::raw('COALESCE(d.department_name, "General") as department_name'), // Get Department Name
+                DB::raw('COUNT(fa.response_id) as total'),
+                DB::raw('COALESCE(ROUND(AVG(sa.confidence_score), 0), 0) as score')
+            )
+            ->groupBy('fa.answer_text', 'd.department_name') // Group by both
+            ->orderByDesc('total')
+            ->limit(10)
+            ->get();
+
+        $providerQuery = DB::table('feedback_answers as fa')
+            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+            ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')
+            ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
+            ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
+            ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id') // Added join
+            ->where('ff.field_label', 'LIKE', '%Name of Service Provider%')
+            ->whereNotNull('fa.answer_text')
+            ->where('fa.answer_text', '!=', '');
+
+        if ($selectedDepartment !== 'overall') {
+            $providerQuery->where('frm.department_id', $selectedDepartment);
+        }
+
+        $providerPerformance = $providerQuery->select(
+                'fa.answer_text as name',
+                DB::raw('COALESCE(d.department_name, "General") as department_name'), // Get Department Name
+                DB::raw('COUNT(fa.response_id) as total'),
+                DB::raw('COALESCE(ROUND(AVG(sa.confidence_score), 0), 0) as score')
+            )
+            ->groupBy('fa.answer_text', 'd.department_name') // Group by both
+            ->orderByDesc('total')
+            ->limit(10)
+            ->get();
+            
+        // 5. Assemble Metrics
         $metrics = [
             // SuperAdmins see global stats; Focal Persons see limited general stats
-           'total_users'         => $isSuperAdmin ? Account::getTotalCount() : 0,
+            'total_users'         => $isSuperAdmin ? Account::getTotalCount() : 0,
             'total_departments'   => $isSuperGroup ? $departments->count() : 1,
             'active_forms'        => $isSuperGroup ? Form::getActiveCount() : ($activeForm ? 1 : 0),
             
@@ -79,18 +131,23 @@ class DashboardController extends Controller
             'specific_date'       => $request->get('specific_date'),
             'specific_month'      => $request->get('specific_month'),
 
-           'trendData'           => Feedback::getTrendData(in_array($range, ['month', 'all']) ? '90_days' : $range, $selectedDepartment),
+            'trendData'           => Feedback::getTrendData(in_array($range, ['month', 'all']) ? '90_days' : $range, $selectedDepartment),
             'department_scores'   => Feedback::getDepartmentScores($range),
             'sqd_data'            => Feedback::getSqdData($range, $selectedDepartment),
+            
             'client_types'        => Feedback::getDemographics($range, $selectedDepartment, 'Client'),
             'sex_demographics'    => Feedback::getDemographics($range, $selectedDepartment, 'Sex'),
             'transaction_types'   => Feedback::getDemographics($range, $selectedDepartment, 'Transaction'),
             'region_demographics' => Feedback::getDemographics($range, $selectedDepartment, 'Region'),
             'cc_metrics'          => Feedback::getCcMetrics($range, $selectedDepartment),
             'top_words'           => Feedback::getTopRecurringWords($range, $selectedDepartment),
+            
+            // Replaced the mock arrays with the dynamic SQL variable queries
+            'service_performance' => $servicePerformance,
+            'provider_performance'=> $providerPerformance
         ];
 
-        // 5. Return View
+        // 6. Return View
         return Inertia::render('SuperAdmin/Dashboard', [
             'metrics'        => $metrics,
             'recentAccounts' => $isSuperAdmin ? Account::getRecentAccounts(5) : [],

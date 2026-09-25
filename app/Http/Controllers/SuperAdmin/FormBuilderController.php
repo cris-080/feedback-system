@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use App\Models\Department;
 use App\Models\DepartmentService;
-use App\Models\ServiceProvider; // <-- NEW: Import ServiceProvider
+use App\Models\ServiceProvider; 
 use App\Models\FormField;
 use App\Models\Form;
 use Inertia\Inertia;
@@ -55,8 +55,6 @@ class FormBuilderController extends Controller
             'form_type'          => 'required|string|in:CC,Non-CC',
             'description'        => 'nullable|string',
             'fields'             => 'required|array',
-            
-            // Text overrides
             'header_1'           => 'nullable|string|max:255',
             'header_2'           => 'nullable|string|max:255',
             'header_3'           => 'nullable|string|max:255',
@@ -65,15 +63,15 @@ class FormBuilderController extends Controller
             'step_2_instruction' => 'nullable|string',
         ]);
 
-        // ENFORCE: One Form Type Per Department (Active/Draft only)
+        // FIX 1: Only check for 'Active' forms. Having a Draft shouldn't block you!
         $departmentId = $validated['department_id'] ?? null;
         $conflictExists = Form::where('department_id', $departmentId)
             ->where('form_type', $validated['form_type'])
-            ->whereIn('status', ['Active', 'Draft'])
+            ->where('status', 'Active') // Removed 'Draft' from this check
             ->exists();
 
         if ($conflictExists) {
-            return back()->with('error', "Action Denied: This department already has an Active or Draft {$validated['form_type']} form. You must archive it before creating a new one.");
+            return back()->with('error', "Action Denied: This department already has an Active {$validated['form_type']} form. You must archive it before publishing a new one.");
         }
 
         // Delegate Database Transaction to the Model
@@ -81,6 +79,8 @@ class FormBuilderController extends Controller
 
         return to_route('superadmin.forms.index')->with('success', 'Form blueprint created successfully!');
     }
+
+
     /**
      * Display the edit form builder for an existing form.
      */
@@ -110,8 +110,6 @@ class FormBuilderController extends Controller
             'form_type'          => 'required|string|in:CC,Non-CC',
             'description'        => 'nullable|string',
             'fields'             => 'required|array',
-            
-            // Text overrides
             'header_1'           => 'nullable|string|max:255',
             'header_2'           => 'nullable|string|max:255',
             'header_3'           => 'nullable|string|max:255',
@@ -123,15 +121,15 @@ class FormBuilderController extends Controller
         $oldForm = Form::findOrFail($id);
         $departmentId = $validated['department_id'] ?? null;
 
-        // ENFORCE: Prevent changing an existing form into a conflicting type/department
+        // FIX 2: Only block if a DIFFERENT group has an Active form.
         $conflictExists = Form::where('department_id', $departmentId)
             ->where('form_type', $validated['form_type'])
-            ->whereIn('status', ['Active', 'Draft'])
+            ->where('status', 'Active') // Removed 'Draft' from this check
             ->where('form_group_id', '!=', $oldForm->form_group_id) // Ignore its own history group
             ->exists();
 
         if ($conflictExists) {
-            return back()->with('error', "Action Denied: This department already has an Active or Draft {$validated['form_type']} form. You must archive it first.");
+            return back()->with('error', "Action Denied: This department already has an Active {$validated['form_type']} form. You must archive the old one before publishing this draft.");
         }
 
         // Delegate Versioning Logic to the Model

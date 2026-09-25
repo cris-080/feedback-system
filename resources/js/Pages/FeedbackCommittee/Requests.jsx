@@ -8,6 +8,37 @@ export default function Requests({ requests }) {
         details: ''
     });
 
+
+    const handleDelete = (requestId) => {
+        Swal.fire({
+            title: 'Clear Record?',
+            text: 'This will permanently remove this resolved request from your history log.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fa-solid fa-trash-can mr-1"></i> Yes, clear it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.delete(route('feedback_committee.requests.destroy', requestId), {
+                    preserveScroll: true,
+                    // ADDED: This is what triggers the success popup!
+                    onSuccess: (page) => {
+                        Swal.fire({
+                            title: 'Cleared!',
+                            text: page.props.flash?.success || 'Resolved request cleared from your history log.',
+                            icon: 'success',
+                            toast: true,
+                            position: 'top-end',
+                            timer: 3000,
+                            showConfirmButton: false
+                        });
+                    }
+                });
+            }
+        });
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -214,9 +245,22 @@ export default function Requests({ requests }) {
                                                     >
                                                         <i className="fa-solid fa-trash-can"></i>
                                                     </button>
+
+                                                    
                                                 ) : (
-                                                    <span className="text-xs text-gray-400 italic">N/A</span>
+                                                    <>
+                                                    <button 
+                                                        onClick={() => handleDelete(req.request_id)} 
+                                                        className="w-8 h-8 bg-gray-100 text-gray-500 hover:bg-red-600 hover:text-white rounded inline-flex justify-center items-center transition tooltip" 
+                                                        title="Clear Resolved Record"
+                                                    >
+                                                        <i className="fa-solid fa-trash-can"></i>
+                                                    </button>
+                                                   
+                                                    </>
                                                 )}
+
+
                                             </td>
                                         </tr>
                                     ))

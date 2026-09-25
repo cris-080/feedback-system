@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
@@ -42,12 +43,28 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+       // --- ACCOUNT SUSPENSION CHECK ---
+        if ($request->user()->status === 'Suspended') {
+            $reason = $request->user()->suspension_reason ?? 'Please contact the SuperAdmin.';
+            
+            Auth::guard('web')->logout();
+            
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'email' => "This account has been suspended. Reason: {$reason}",
+            ]);
+        }
+        // --------------------------------
+        // --------------------------------
+
         $request->session()->regenerate();
 
         $role = strtolower(trim($request->user()->role ?? ''));
 
         // Route SuperAdmins and Feedback Committee to the unified RBAC command center.
-       $fallbackUrl = match ($role) {
+        $fallbackUrl = match ($role) {
             'superadmin'         => '/superAdmin/dashboard',
             'feedback committee' => '/superAdmin/dashboard',
             'feedbackcommittee'  => '/superAdmin/dashboard',

@@ -9,18 +9,17 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
+   public function up()
     {
-        Schema::create('report', function (Blueprint $table) {
-            $table->integer('report_id', true);
-            $table->string('month', 20);
+        Schema::create('reports', function (Blueprint $table) {
+            $table->id('report_id');
+            $table->unsignedBigInteger('department_id')->nullable(); // Null means Global/All Departments
+            $table->string('report_type'); // 'cc' or 'non-cc'
+            $table->integer('month');
             $table->integer('year');
-            $table->text('summary')->nullable();
-            $table->string('status', 50)->nullable();
-            $table->dateTime('generated_at')->nullable()->useCurrent();
-            $table->integer('department_id')->nullable()->index('department_id');
-            $table->integer('user_id')->nullable()->index('user_id');
-            $table->dateTime('updated_at')->useCurrentOnUpdate()->nullable()->useCurrent();
+            $table->json('report_data'); // This will store the exact math snapshot!
+            $table->unsignedBigInteger('generated_by'); // Who generated it
+            $table->timestamps();
         });
     }
 

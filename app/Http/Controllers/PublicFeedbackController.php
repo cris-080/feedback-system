@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Contracts\Encryption\DecryptException;
 use App\Models\Form;
 use App\Models\Department;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\HarassmentAlertMail;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Log;
 use App\Models\Feedback;
 use App\Services\GeminiSentimentService;
 use Inertia\Inertia;
@@ -56,7 +60,7 @@ class PublicFeedbackController extends Controller
             $formId = $activeForm->form_id;
         }
 
-        $fullForm = \App\Models\Form::getActiveForm($formId);
+        $fullForm = Form::getActiveForm($formId);
 
         if (!$fullForm) {
             abort(404, 'No active feedback form is currently available for this link.');
@@ -95,27 +99,86 @@ class PublicFeedbackController extends Controller
         ]);
     }
 
-  /**
-     * Handles the feedback submission.
+ /**
+     * Handles the feedback submission with Multi-Select Payload Splitting and Email Alerts.
      */
-    public function store(Request $request)
+   public function store(Request $request)
     {
-        // 1. Validate Request (Added transaction_date)
+        // 1. Validate Request
         $validated = $request->validate([
             'form_id'          => 'required|integer|exists:forms,form_id',
             'department_id'    => 'required|integer|exists:department,department_id',
             'email_address'    => 'required|email|max:255',
-            'transaction_date' => 'required|date|before_or_equal:today', // Validates past/current date
+            'transaction_date' => 'required|date|before_or_equal:today',
             'answers'          => 'required|array',
         ]);
 
-        // 2. Extract qualitative text (suggestions / comments / harassment details)
+        // --- SPAM PREVENTION 1: IP Rate Limiting ---
+        // Prevent an IP from submitting more than 5 forms per hour to stop bots or fake email spam
+        if (RateLimiter::tooManyAttempts('feedback-submission:' . $request->ip(), 5)) {
+            return back()->withErrors(['spam' => 'Too many submissions from this device. Please try again later.']);
+        }
+        RateLimiter::hit('feedback-submission:' . $request->ip(), 3600); // Lockout for 1 hour after 5 hits
+
+        // --- SPAM PREVENTION 2: Email & Department Daily Limit ---
+        // Prevent the exact same email from evaluating the exact same department multiple times in one day
+        $alreadySubmittedToday = Feedback::where('email_address', $validated['email_address'])
+            ->where('department_id', $validated['department_id'])
+            ->whereDate('created_at', \Carbon\Carbon::today())
+            ->exists();
+
+        if ($alreadySubmittedToday) {
+            return back()->withErrors(['email_address' => 'You have already submitted an evaluation for this department today.']);
+        }
+
+        // 2. Identify selected services for Payload Splitting
+        $servicesAvailed = [];
+        // ... rest of your existing code
+        $serviceFieldId = null;
+        
+        $fullForm = \App\Models\Form::getActiveForm($validated['form_id']);
+        
+        if ($fullForm) {
+            foreach ($fullForm->getFormattedSteps() as $step => $fields) {
+                foreach ($fields as $field) {
+                    $fieldId = is_object($field) ? $field->field_id : $field['field_id'];
+                    $fieldLabel = strtolower(is_object($field) ? $field->field_label : $field['field_label']);
+                    
+                    if (str_contains($fieldLabel, 'service availed')) {
+                        $serviceFieldId = $fieldId;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        if ($serviceFieldId && isset($validated['answers'][$serviceFieldId])) {
+            $rawServices = $validated['answers'][$serviceFieldId];
+            if (is_array($rawServices)) {
+                $servicesAvailed = $rawServices;
+            } elseif (is_string($rawServices)) {
+                $decoded = json_decode($rawServices, true);
+                if (is_array($decoded)) {
+                    $servicesAvailed = $decoded;
+                } elseif (str_contains($rawServices, ',')) {
+                    $servicesAvailed = array_map('trim', explode(',', $rawServices));
+                } else {
+                    $servicesAvailed = [$rawServices];
+                }
+            }
+        }
+
+        if (empty($servicesAvailed)) {
+            $servicesAvailed = ['General Transaction'];
+        }
+
+        // 3. Extract qualitative text & Check for Harassment
         $textAnswers = [];
         $placeholders = ['n/a', 'na', 'none', 'wala', 'no', 'none so far', 'ok', 'okay', 'n / a', 'none po', 'nothing'];
-
-        // Retrieve form fields to explicitly pinpoint open-ended qualitative questions
-        $fullForm = \App\Models\Form::getActiveForm($validated['form_id']);
         $qualitativeFieldIds = [];
+        
+        $hasHarassment = false;
+        $harassmentDetails = 'No detailed narrative provided.';
 
         if ($fullForm) {
             foreach ($fullForm->getFormattedSteps() as $step => $fields) {
@@ -124,51 +187,97 @@ class PublicFeedbackController extends Controller
                     $inputType = is_object($field) ? $field->input_type : $field['input_type'];
                     $fieldLabel = strtolower(is_object($field) ? $field->field_label : $field['field_label']);
                     
-                    // Identify fields meant for actual comments/details
-                    $isHarassmentDetails = str_contains($fieldLabel, 'if yes') || str_contains($fieldLabel, 'detail');
+                    $isHarassmentQuestion = str_contains($fieldLabel, 'harassment') && !str_contains($fieldLabel, 'detail');
+                    $isHarassmentDetailsField = str_contains($fieldLabel, 'if yes') || str_contains($fieldLabel, 'detail');
                     $isSuggestion = str_contains($fieldLabel, 'suggestion') || str_contains($fieldLabel, 'comment') || str_contains($fieldLabel, 'remark');
 
-                    if ($inputType === 'text' && ($isSuggestion || $isHarassmentDetails)) {
+                    if ($inputType === 'text' && ($isSuggestion || $isHarassmentDetailsField)) {
                         $qualitativeFieldIds[] = $fieldId;
+                    }
+
+                    // TRIGGER: Check if the user selected "Yes" for Harassment
+                    if ($isHarassmentQuestion && isset($validated['answers'][$fieldId])) {
+                        if (strtolower(trim($validated['answers'][$fieldId])) === 'yes') {
+                            $hasHarassment = true;
+                        }
+                    }
+
+                    // CAPTURE: Extract the harassment explanation for the email body
+                    if ($isHarassmentDetailsField && isset($validated['answers'][$fieldId])) {
+                        $detailsText = trim($validated['answers'][$fieldId]);
+                        if (!empty($detailsText) && !in_array(strtolower($detailsText), $placeholders)) {
+                            $harassmentDetails = $detailsText;
+                        }
                     }
                 }
             }
         }
 
         foreach ($validated['answers'] as $fieldId => $answer) {
-            // ONLY process answers that belong to the targeted qualitative text fields
             if (in_array($fieldId, $qualitativeFieldIds) && is_string($answer)) {
                 $clean = trim(strtolower($answer));
-                
-                // If it's not a numeric scale score (1-5) and not a placeholder, keep it for NLP analysis
                 if (!empty($clean) && !is_numeric($clean) && !in_array($clean, $placeholders) && strlen($clean) > 3) {
                     $textAnswers[] = $answer;
                 }
             }
         }
 
-        // 3. Perform AI Analysis or apply Neutral default
+        // 4. Perform AI Analysis
         if (!empty($textAnswers)) {
-            // Concatenate meaningful text comments for Gemini
             $feedbackText = implode(" | ", $textAnswers);
             $aiAnalysis = GeminiSentimentService::analyze($feedbackText);
 
             $validated['sentiment']       = $aiAnalysis['sentiment_category'] ?? 'Neutral';
             $validated['ai_confidence']   = (int) ($aiAnalysis['confidence_score'] ?? 80);
-            $validated['theme']           = $aiAnalysis['key_theme'] ?? 'General Feedback';
-            $validated['english_summary'] = $aiAnalysis['translated_summary'] ?? 'Standard feedback submitted.';
         } else {
-            // User left text blank or entered a placeholder -> Fallback to Neutral
             $validated['sentiment']       = 'Neutral';
             $validated['ai_confidence']   = 100;
-            $validated['theme']           = 'No Comments Provided';
-            $validated['english_summary'] = 'The respondent completed the transaction without providing qualitative comments.';
         }
 
-        // 4. Delegate Database Transaction to the Model
-        Feedback::processSubmission($validated);
+        // 5. SPLIT AND SAVE: Loop through each selected service and clone the submission
+        foreach ($servicesAvailed as $serviceName) {
+            $clonedPayload = $validated;
+            if ($serviceFieldId) {
+                $clonedPayload['answers'][$serviceFieldId] = $serviceName;
+            }
+            Feedback::processSubmission($clonedPayload);
+        }
 
-        // 5. Return HTTP Response
+        // 6. URGENT ALERT: Send Harassment Email
+        if ($hasHarassment) {
+            $dept = Department::find($validated['department_id']);
+            $deptName = $dept ? $dept->department_name : 'General Office';
+            
+            // Get all Feedback Committee emails
+            $recipients = \App\Models\Account::where('role', 'LIKE', '%Feedback%Committee%')->pluck('email')->toArray();
+            
+            // Get Focal Person email
+            if ($dept && $dept->focal_person_id) {
+                $focalPerson = \App\Models\Account::where('user_id', $dept->focal_person_id)->first();
+                if ($focalPerson && !empty($focalPerson->email)) {
+                    $recipients[] = $focalPerson->email;
+                }
+            }
+
+            $recipients = array_unique(array_filter($recipients));
+
+            if (!empty($recipients)) {
+                $emailData = [
+                    'department_name'    => $deptName,
+                    'transaction_date'   => $validated['transaction_date'],
+                    'harassment_details' => $harassmentDetails,
+                ];
+                
+                try {
+                    Mail::to($recipients)->send(new HarassmentAlertMail($emailData));
+                } catch (\Exception $e) {
+                    // Log error but don't crash the form submission for the user!
+                    Log::error('Harassment Alert Email Failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        // 7. Return HTTP Response
         return back()->with('success', 'Your feedback has been successfully submitted!');
     }
 }

@@ -3,7 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Head, Link, router, usePage, useForm } from '@inertiajs/react';
 import SuperAdminLayout from '../../Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
-
+import SearchFilter from '@/Components/SearchFilter';
+import Pagination from '@/Components/Pagination';
 
 export default function ManageForms({forms, uniqueDepartments, filters, isSuperAdmin }) {
     const { flash, auth } = usePage().props; // <-- auth is defined here
@@ -11,8 +12,6 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
     // Safely fallback to an empty array if uniqueDepartments is undefined
     const safeDepartments = uniqueDepartments || [];
 
-    // --- FILTER MENU TOGGLE STATE ---
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     // --- SERVER-SIDE SEARCH & FILTER STATE ---
     const [searchQuery, setSearchQuery] = useState(filters?.search || '');
@@ -182,100 +181,53 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                     {isSuperAdmin && (
                         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
                             
-                            <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
+                           <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
                                 
-                                {/* Search Bar UI */}
-                                <div className="relative w-full sm:w-64 md:w-72">
-                                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                        <i className="fa-solid fa-magnifying-glass text-gray-400"></i>
+                                {/* Combined Search & Filter Component */}
+                                <SearchFilter 
+                                    searchValue={searchQuery}
+                                    onSearchChange={setSearchQuery}
+                                    searchPlaceholder="Search form title, ID..."
+                                    hasActiveFilters={hasActiveFilters}
+                                    onFilterReset={() => { setStatusFilter(''); setDepartmentFilter(''); }}
+                                    filterTitle="Filter Forms"
+                                >
+                                    {/* Status Filter */}
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">By Status</label>
+                                        <select 
+                                            className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white cursor-pointer"
+                                            value={statusFilter}
+                                            onChange={(e) => setStatusFilter(e.target.value)}
+                                        >
+                                            <option value="">All Statuses</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Draft">Draft</option>
+                                            {/* Removed the Archived option! */}
+                                        </select>
                                     </div>
-                                    <input 
-                                        type="text" 
-                                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-gray-50 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#009639] focus:border-[#009639] text-sm transition duration-150 ease-in-out" 
-                                        placeholder="Search form title, ID..." 
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                    />
-                                    {searchQuery && (
-                                        <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600">
-                                            <i className="fa-solid fa-xmark"></i>
-                                        </button>
-                                    )}
-                                </div>
 
-                                {/* --- COLLAPSIBLE FILTER MENU BUTTON & DROPDOWN --- */}
-                                <div className="relative w-full sm:w-auto">
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                        className={`w-full sm:w-auto p-2.5 rounded-md border text-sm font-semibold transition flex items-center justify-center relative ${
-                                            hasActiveFilters 
-                                                ? 'bg-emerald-50 border-[#009639] text-[#1E6031]' 
-                                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                        title="Filter Forms"
-                                    >
-                                        <i className="fa-solid fa-filter text-base"></i>
-                                      
-                                        {hasActiveFilters && (
-                                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#009639] opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#009639]"></span>
-                                            </span>
-                                        )}
-                                    </button>
-
-                                    {/* Dropdown Menu */}
-                                    {isFilterOpen && (
-                                        <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-30 p-4 space-y-3">
-                                            <div className="flex justify-between items-center border-b pb-2">
-                                                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Filter Forms</span>
-                                                {hasActiveFilters && (
-                                                    <button 
-                                                        onClick={() => { setStatusFilter(''); setDepartmentFilter(''); }}
-                                                        className="text-xs text-red-600 hover:underline font-semibold"
-                                                    >
-                                                        Reset All
-                                                    </button>
-                                                )}
-                                            </div>
-
-                                            {/* Status Filter */}
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-600 mb-1">By Status</label>
-                                                <select 
-                                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
-                                                    value={statusFilter}
-                                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                                >
-                                                    <option value="">All Statuses</option>
-                                                    <option value="Active">Active</option>
-                                                    <option value="Draft">Draft</option>
-                                                    <option value="Archived">Archived</option>
-                                                </select>
-                                            </div>
-
-                                            {/* Department Filter */}
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-600 mb-1">By Department</label>
-                                                <select 
-                                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
-                                                    value={departmentFilter}
-                                                    onChange={(e) => setDepartmentFilter(e.target.value)}
-                                                >
-                                                    <option value="">All Departments</option>
-                                                    {safeDepartments.map(dept => (
-                                                        <option key={dept} value={dept}>
-                                                            {dept}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                    {/* Department Filter */}
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">By Department</label>
+                                        <select 
+                                            className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white cursor-pointer"
+                                            value={departmentFilter}
+                                            onChange={(e) => setDepartmentFilter(e.target.value)}
+                                        >
+                                            <option value="">All Departments</option>
+                                            {safeDepartments.map(dept => (
+                                                <option key={dept} value={dept}>
+                                                    {dept}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </SearchFilter>
 
                             </div>
+
+                          
 
                             {/* Action Buttons */}
                             <div className="flex w-full xl:w-auto gap-3 flex-col sm:flex-row">
@@ -367,52 +319,8 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                             </table>
                         </div>
 
-                        {/* --- SERVER-SIDE PAGINATION CONTROLS --- */}
-                        {forms.meta?.links && (
-                            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between w-full">
-                                    <div>
-                                        <p className="text-sm text-gray-700">
-                                            Showing <span className="font-bold">{forms.meta?.from || 0}</span> to <span className="font-bold">{forms.meta?.to || 0}</span> of <span className="font-bold">{forms.meta?.total || 0}</span> results
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                                            {forms.meta.links.map((link, index) => {
-                                                let className = "relative inline-flex items-center px-4 py-2 border text-sm font-medium transition-colors ";
-                                                if (link.active) {
-                                                    className += "z-10 bg-blue-600 border-[#009639] text-white";
-                                                } else if (!link.url) {
-                                                    className += "bg-gray-100 border-gray-300 text-gray-400 cursor-not-allowed";
-                                                } else {
-                                                    className += "bg-white border-gray-300 text-gray-600 hover:bg-gray-100";
-                                                }
-                                                
-                                                if (index === 0) className += " rounded-l-md";
-                                                if (index === forms.meta.links.length - 1) className += " rounded-r-md";
-
-                                                return link.url ? (
-                                                    <Link
-                                                        key={index}
-                                                        href={link.url}
-                                                        preserveScroll
-                                                        preserveState
-                                                        className={className}
-                                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                                    />
-                                                ) : (
-                                                    <span
-                                                        key={index}
-                                                        className={className}
-                                                        dangerouslySetInnerHTML={{ __html: link.label }}
-                                                    />
-                                                );
-                                            })}
-                                        </nav>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                            {/* Server-Side Pagination */}
+                                            <Pagination dataObject={forms} />
                     </div>
                 </div>
 

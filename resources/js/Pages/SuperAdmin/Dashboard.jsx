@@ -54,6 +54,8 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
             ? metrics.department_scores 
             : [];
         const harassmentCount = metrics?.harassment_reports || 0;
+        const serviceData = metrics?.service_performance || [];
+        const providerData = metrics?.provider_performance || [];
 
         const handleRefresh = () => {
             setIsRefreshing(true);
@@ -913,7 +915,130 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                 )}
                             </div>
                         </div>
+                            {/* --- NEW: SERVICES & PROVIDERS PERFORMANCE --- */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            
+                            {/* Service Performance Benchmark */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 transition duration-200 hover:shadow-md">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+                                    <div className="flex items-center gap-2">
+                                        <i className="fa-solid fa-layer-group text-blue-600 text-base"></i>
+                                        <div>
+                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Top 10 Most Availed Services</h2>
+                                            <p className="text-xs text-gray-500 mt-0.5">Highest volume services with average sentiment scores</p>
+                                        </div>
+                                    </div>
+                                </div>
 
+                                {serviceData.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                        <i className="fa-solid fa-chart-bar text-4xl mb-3 text-gray-300"></i>
+                                        <p className="text-sm font-medium text-gray-600">No service data available</p>
+                                        <p className="text-xs mt-1">Sufficient feedback is required to generate this metric.</p>
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-72">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={serviceData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }} barSize={24}>
+                                                <CartesianGrid strokeDasharray="4 4" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} unit="%" />
+                                                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#334155', fontWeight: 500 }} axisLine={false} tickLine={false} width={130} />
+                                                <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const data = payload[0].payload;
+                                                        return (
+                                                            <div className="bg-white/95 backdrop-blur-sm border border-gray-200 shadow-lg rounded-xl p-3 text-xs min-w-[200px]">
+                                                                <p className="font-bold text-gray-900 leading-tight">{data.name}</p>
+                                                                {/* NEW: Department Name Tag */}
+                                                                <p className="text-[10px] text-blue-600 font-semibold mb-2 pb-2 border-b border-gray-100">
+                                                                    <i className="fa-regular fa-building mr-1"></i>{data.department_name}
+                                                                </p>
+                                                                
+                                                                <div className="flex justify-between items-center mb-1">
+                                                                    <span className="text-gray-500 font-medium">Satisfaction:</span>
+                                                                    <span className={`font-bold ${data.score >= 80 ? 'text-emerald-600' : data.score >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>{data.score}%</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center text-gray-500">
+                                                                    <span>Responses recorded:</span>
+                                                                    <span className="font-semibold text-gray-800">{data.total}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }} />
+                                                <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                                                    {serviceData.map((entry, index) => (
+                                                        <Cell key={`service-cell-${index}`} fill={entry.score >= 80 ? '#10b981' : entry.score >= 60 ? '#f59e0b' : '#f43f5e'} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Provider Performance Benchmark */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 transition duration-200 hover:shadow-md">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+                                    <div className="flex items-center gap-2">
+                                        <i className="fa-solid fa-user-tie text-purple-600 text-base"></i>
+                                        <div>
+                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Top 10 Service Providers</h2>
+                                            <p className="text-xs text-gray-500 mt-0.5">Most active personnel based on client feedback volume</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {providerData.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                        <i className="fa-solid fa-users text-4xl mb-3 text-gray-300"></i>
+                                        <p className="text-sm font-medium text-gray-600">No provider data available</p>
+                                        <p className="text-xs mt-1">Sufficient feedback is required to generate this metric.</p>
+                                    </div>
+                                ) : (
+                                    <div className="w-full h-72">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={providerData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }} barSize={24}>
+                                                <CartesianGrid strokeDasharray="4 4" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                                                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} unit="%" />
+                                                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#334155', fontWeight: 500 }} axisLine={false} tickLine={false} width={130} />
+                                               <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const data = payload[0].payload;
+                                                        return (
+                                                            <div className="bg-white/95 backdrop-blur-sm border border-gray-200 shadow-lg rounded-xl p-3 text-xs min-w-[200px]">
+                                                                <p className="font-bold text-gray-900 leading-tight">{data.name}</p>
+                                                                {/* NEW: Department Name Tag */}
+                                                                <p className="text-[10px] text-purple-600 font-semibold mb-2 pb-2 border-b border-gray-100">
+                                                                    <i className="fa-regular fa-building mr-1"></i>{data.department_name}
+                                                                </p>
+
+                                                                <div className="flex justify-between items-center mb-1">
+                                                                    <span className="text-gray-500 font-medium">Satisfaction:</span>
+                                                                    <span className={`font-bold ${data.score >= 80 ? 'text-emerald-600' : data.score >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>{data.score}%</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center text-gray-500">
+                                                                    <span>Responses recorded:</span>
+                                                                    <span className="font-semibold text-gray-800">{data.total}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }} />
+                                                <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                                                    {providerData.map((entry, index) => (
+                                                        <Cell key={`provider-cell-${index}`} fill={entry.score >= 80 ? '#10b981' : entry.score >= 60 ? '#f59e0b' : '#f43f5e'} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
                         {/* --- Citizen's Charter Compliance & Qualitative Keyword Trends --- */}
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             
@@ -993,18 +1118,24 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                         </div>
                                     ) : (
                                         <div className="flex flex-wrap gap-2 pt-1">
-                                            {topWords.map((item, idx) => (
-                                                <span 
-                                                    key={idx} 
-                                                    className="inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg border shadow-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 transition"
-                                                >
-                                                    <i className="fa-regular fa-circle-dot mr-1.5 text-[8px] text-rose-500"></i>
-                                                    {item.word}
-                                                    <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-white text-rose-800 rounded-md font-bold shadow-xs border border-rose-100">
-                                                        {item.count}
-                                                    </span>
-                                                </span>
-                                            ))}
+                                            {topWords.map((item, idx) => {
+    // Determine correct datastore route based on role
+   const feedbackRoute = isSuperGroup ? 'superadmin.feedbacks.index' : 'focalperson.feedbacks.index';
+    return (
+        <Link 
+            key={idx} 
+            href={route(feedbackRoute, { search: item.word })}
+            className="inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg border shadow-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:scale-105 active:scale-95 transition cursor-pointer"
+            title={`View feedback containing "${item.word}"`}
+        >
+            <i className="fa-regular fa-circle-dot mr-1.5 text-[8px] text-rose-500"></i>
+            {item.word}
+            <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-white text-rose-800 rounded-md font-bold shadow-xs border border-rose-100">
+                {item.count}
+            </span>
+        </Link>
+    );
+})}
                                         </div>
                                     )}
                                 </div>

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
+import { useEffect } from 'react';
+import Swal from 'sweetalert2';
 
 export default function Login({ status, canResetPassword }) {
     const [showPassword, setShowPassword] = useState(false);
@@ -10,12 +12,25 @@ export default function Login({ status, canResetPassword }) {
         remember: false,
     });
 
+    
+
     const submit = (e) => {
         e.preventDefault();
 
         post(route('login'), {
-            replace: true, // Overwrites /login in browser history stack
             onFinish: () => reset('password'),
+            onError: (err) => {
+                // Instantly catch the error every single time the form fails
+                if (err.email && err.email.includes('suspended')) {
+                    Swal.fire({
+                        title: 'Access Denied',
+                        text: err.email,
+                        icon: 'error',
+                        confirmButtonColor: '#dc2626',
+                        confirmButtonText: 'Understood'
+                    });
+                }
+            }
         });
     };
 

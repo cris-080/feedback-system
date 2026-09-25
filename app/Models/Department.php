@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\DepartmentPosition;
 use App\Models\DepartmentService;
 use App\Models\ServiceProvider;
+use \Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Department extends Model
@@ -76,27 +77,77 @@ class Department extends Model
 
     /**
      * Retrieve paginated departments with all necessary relationships eager loaded.
+     * ADDED: $status filter for Assigned/Unassigned Focal Persons.
      */
-    public static function getPaginatedWithRelations(?string $search = null, int $perPage = 10)
+    public static function getPaginatedWithRelations(?string $search = null, string $status = 'all', int $perPage = 10)
     {
-        return self::with(['services', 'positions', 'service_providers', 'focal_person'])
-            ->search($search)
-            ->latest('department_id')
+        $query = self::with(['services', 'positions', 'service_providers', 'focal_person'])
+            ->search($search);
+
+        // Apply Focal Person Assignment Filter
+        if ($status === 'assigned') {
+            $query->has('focal_person');
+        } elseif ($status === 'unassigned') {
+            $query->doesntHave('focal_person');
+        }
+
+        return $query->latest('department_id')
             ->paginate($perPage)
             ->withQueryString();
     }
 
+
+    /**
+     * FAT MODEL: Handles the creation of the Department AND all its initial child configurations.
+     */
     public static function createDepartment(array $data)
     {
+        // 1. Create the parent Department
         $department = self::create([
-            'department_name' => $data['department_name'],
-            'description'     => $data['description'] ?? '',
+            'department_name' => trim($data['name'] ?? $data['department_name']),
+            'description'     => trim($data['description'] ?? ''),
             'focal_person_id' => $data['focal_person_id'] ?? null,
         ]);
 
         if ($department->focal_person_id) {
             Account::where('user_id', $department->focal_person_id)
                    ->update(['department_id' => $department->department_id]);
+        }
+
+        // 2. Quick Add Services
+        if (!empty($data['initial_services'])) {
+            $services = array_filter(array_map('trim', explode(',', $data['initial_services'])));
+            $serviceData = [];
+            foreach ($services as $service) {
+                $serviceData[] = ['department_id' => $department->department_id, 'service_name' => $service];
+            }
+            if (!empty($serviceData)) {
+                DB::table('department_services')->insert($serviceData);
+            }
+        }
+
+        // 3. Quick Add Positions
+        if (!empty($data['initial_positions'])) {
+            $positions = array_filter(array_map('trim', explode(',', $data['initial_positions'])));
+            $positionData = [];
+            foreach ($positions as $position) {
+                $positionData[] = ['department_id' => $department->department_id, 'position_name' => $position];
+            }
+            if (!empty($positionData)) {
+                DB::table('department_positions')->insert($positionData);
+            }
+        }
+
+        // 4. Quick Add Providers
+        if (!empty($data['initial_providers'])) {
+            $providers = array_filter(array_map('trim', explode(',', $data['initial_providers'])));
+            $providerData = [];
+            foreach ($providers as $provider) {
+                $providerData[] = ['department_id' => $department->department_id, 'name' => $provider, 'position' => null];
+            }
+            if (!empty($providerData)) {
+                DB::table('service_providers')->insert($providerData);
+            }
         }
 
         return $department;

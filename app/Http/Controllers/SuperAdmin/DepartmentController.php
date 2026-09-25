@@ -10,9 +10,9 @@ use App\Models\ServiceProvider;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use App\Models\DepartmentPosition;
-
 use App\Models\Account;
 use App\Models\Form;
+use Illuminate\Support\Facades\DB; 
 use Inertia\Inertia;
 
 class DepartmentController extends Controller
@@ -30,26 +30,28 @@ class DepartmentController extends Controller
         }
 
         return inertia('SuperAdmin/Departments', [
-            'departments'  => Department::getPaginatedWithRelations($request->input('search')),
-            'filters'      => $request->only(['search']),
-            'isSuperAdmin' => $isSuperAdmin, // Pass this flag to React
+            'departments'  => Department::getPaginatedWithRelations($request->input('search'),$request->input('status', 'all')),
+            'filters'      => $request->only(['search','status']),
+            'isSuperAdmin' => $isSuperAdmin,
         ]);
     }
 
     /**
      * Store a newly created department.
+     * THIN CONTROLLER: Validates the request, delegates to the Model.
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:department,department_name',
-            'description' => 'nullable|string',
+            'name'              => 'required|string|max:255|unique:department,department_name',
+            'description'       => 'nullable|string',
+            'initial_services'  => 'nullable|string',
+            'initial_positions' => 'nullable|string',
+            'initial_providers' => 'nullable|string',
         ]);
 
-        Department::create([
-            'department_name' => trim($validated['name']),
-            'description'     => trim($validated['description'] ?? ''),
-        ]);
+        // Delegate entirely to the Fat Model
+        Department::createDepartment($validated);
 
         return back()->with('success', 'Department successfully created.');
     }
@@ -111,7 +113,7 @@ class DepartmentController extends Controller
         return back()->with('success', 'Department permanently deleted.');
     }
 
-  public function addService(Request $request, $departmentId)
+    public function addService(Request $request, $departmentId)
     {
         $request->validate([
             'service_name' => [
@@ -128,7 +130,6 @@ class DepartmentController extends Controller
 
         return back()->with('success', 'Service added to department.');
     }
-
 
     public function removeService($id) 
     {
