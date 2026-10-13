@@ -5,9 +5,20 @@ import Swal from 'sweetalert2';
 
 export default function FormBuilder({ departments, departmentServices, departmentProviders, initialFields }) {
     
-    const validInitialFields = (initialFields || []).filter(
-        field => field.field_label && field.field_label.trim() !== ''
-    );
+    const validInitialFields = (initialFields || [])
+        .filter(field => field.field_label && field.field_label.trim() !== '')
+        .map(field => {
+            let mappedOptions = field.options || [];
+            
+            if (field.field_label.toUpperCase().includes('SQD')) {
+                mappedOptions = mappedOptions.filter(opt => opt !== 'N/A' && opt !== 'n/a');
+            }
+            
+            return {
+                ...field,
+                options: mappedOptions
+            };
+        });
 
     const { data, setData, post, processing } = useForm({
         header_1: 'Republic of the Philippines',
@@ -311,7 +322,7 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                                             <option value="text">Short Text</option>
                                                             <option value="number">Number</option>
                                                             <option value="dropdown">Dropdown Menu</option>
-                                                            <option value="radio">Radio Buttons</option>
+                                                            <option value="radio">Radio Buttons / Rating Chips</option>
                                                             <option value="multiselect">Multi-Select</option>
                                                         </select>
                                                     </div>

@@ -83,19 +83,28 @@ class PublicFeedbackController extends Controller
             return [];
         });
 
-        // FETCH DEPARTMENT AND EAGER LOAD SERVICE PROVIDERS
+      // FETCH DEPARTMENT AND EAGER LOAD SERVICE PROVIDERS
         $department = Department::with('service_providers')
             ->where('department_id', $fullForm->department_id)
             ->first();
 
+      // GENERATE DYNAMIC QR CODE (Only show if accessed via the Kiosk link)
+        $isKiosk = $request->boolean('kiosk');
+        $baseUrl = url('/feedback?token=' . $token);
+        $qrImageUrl = 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2';
+
         return Inertia::render('Feedback/Index', [
             'form'             => $fullForm,
             'departmentName'   => $department ? $department->department_name : 'General',
-            'serviceProviders' => $department ? $department->service_providers : [], // PASS TO FRONTEND
+            'serviceProviders' => $department ? $department->service_providers : [],
             'isCC'             => $fullForm->form_type !== 'Non-CC',
             'steps'            => $fullForm->getFormattedSteps(),
             'qr_id'            => $qrId,
-            'ph_regions'       => $phRegions // PASS CACHED REGIONS TO FRONTEND
+            'ph_regions'       => $phRegions,
+            'qr_data'          => $isKiosk ? [
+                'base64' => $qrImageUrl,
+                'pin'    => $department->daily_pin ?? '1234'
+            ] : null
         ]);
     }
 

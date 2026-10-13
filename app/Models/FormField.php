@@ -197,7 +197,7 @@ class FormField extends Model
                 'field_label' => 'SQD0: I am satisfied with the service that I availed.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
             [
                 'field_id' => 'temp_15',
@@ -205,7 +205,7 @@ class FormField extends Model
                 'field_label' => 'SQD1: I spent a reasonable amount of time for my transaction.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
 
             [
@@ -214,7 +214,7 @@ class FormField extends Model
                 'field_label' => 'SQD2: The office followed the transaction’s requirement from the office or its website.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],  
             [
                 'field_id' => 'temp_17',
@@ -222,7 +222,7 @@ class FormField extends Model
                 'field_label' => 'SQD3: The steps (including payment) I needed to do for my transaction were easy and simple.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
            [
                 'field_id' => 'temp_18',
@@ -230,7 +230,7 @@ class FormField extends Model
                 'field_label' => 'SQD4: I easily found information about my transaction from the office or its website.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
             [
                 'field_id' => 'temp_19',
@@ -238,7 +238,7 @@ class FormField extends Model
                 'field_label' => 'SQD5: I paid a reasonable amount of fees for my transaction.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
             [
                 'field_id' => 'temp_20',
@@ -246,7 +246,7 @@ class FormField extends Model
                 'field_label' => 'SQD6: I feel the office was fair to everyone, or “walang palakasan” during my transaction.',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
             [
                 'field_id' => 'temp_21',
@@ -254,7 +254,7 @@ class FormField extends Model
                 'field_label' => "SQD7: I was treated courteously by the staff, and (I asked for help) the staff was helpful.",
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
             [
                 'field_id' => 'temp_22',
@@ -262,7 +262,7 @@ class FormField extends Model
                 'field_label' => "SQD8: I got what I needed from the government office, or (if denied) denial of request was sufficiently explained to me. ",
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
 
             [

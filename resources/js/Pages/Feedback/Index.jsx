@@ -4,7 +4,7 @@ import Swal from 'sweetalert2';
 import LandingPage from './Partials/LandingPage';
 import { StepOne, StepTwo, StepThree, StepFour } from './Partials/FormSteps';
 
-export default function FeedbackIndex({ form, departmentName, serviceProviders, isCC, steps, qr_id, ph_regions }) {
+export default function FeedbackIndex({ form, departmentName, serviceProviders, isCC, steps, qr_id, ph_regions, qr_data }) {
     const [status, setStatus] = useState('active'); 
     const [timeLeft, setTimeLeft] = useState(3600); 
     const [hasStarted, setHasStarted] = useState(false);
@@ -211,8 +211,8 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
         });
     };
 
-    if (!hasStarted && status === 'active') {
-        return <LandingPage form={form} departmentName={departmentName} onStart={() => setHasStarted(true)} />;
+   if (!hasStarted && status === 'active') {
+        return <LandingPage form={form} departmentName={departmentName} onStart={() => setHasStarted(true)} qrData={qr_data} />;
     }
 
     return (

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Head } from '@inertiajs/react';
 
-export default function LandingPage({ form, departmentName, onStart }) {
+export default function LandingPage({ form, departmentName, onStart, qrData }) {
     const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
     const [agreedPrivacy, setAgreedPrivacy] = useState(false);
     const [agreedTerms, setAgreedTerms] = useState(false);
@@ -36,6 +36,25 @@ export default function LandingPage({ form, departmentName, onStart }) {
                     <p className="text-xs sm:text-sm lg:text-base text-white/70 leading-relaxed font-normal">
                         Your objective feedback drives continuous modernization across university facilities, personnel workflows, and public administrative service delivery.
                     </p>
+                    
+                    {/* DYNAMIC QR CODE DISPLAY (Now on the Left Side) */}
+                    {qrData && (
+                        <div className="pt-6 mt-6 border-t border-white/20 flex flex-col sm:flex-row items-center sm:items-start gap-5">
+                            <div className="p-2.5 bg-white rounded-2xl shadow-xl shrink-0">
+                                <img src={qrData.base64} alt="Scan QR Code" className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-xl" />
+                            </div>
+                            <div className="flex flex-col justify-center text-center sm:text-left space-y-2.5">
+                                <p className="text-[11px] sm:text-xs font-bold text-[#FFD700] uppercase tracking-widest">Or scan to use your phone</p>
+                                <div className="bg-black/30 px-4 py-2.5 rounded-xl border border-white/10 inline-flex items-center gap-3 w-fit mx-auto sm:mx-0">
+                                    <i className="fa-solid fa-lock text-emerald-400 text-lg"></i>
+                                    <div>
+                                        <p className="text-[10px] uppercase font-bold text-emerald-200/70 tracking-wider leading-none mb-1">Office PIN</p>
+                                        <p className="text-xl font-black text-white font-mono leading-none tracking-widest">{qrData.pin}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="relative z-10 pt-4 sm:pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] sm:text-xs text-white/60">
@@ -44,7 +63,7 @@ export default function LandingPage({ form, departmentName, onStart }) {
                 </div>
             </div>
 
-            {/* Right Action Stage */}
+            {/* Right Action Stage (Cleaned of QR Code) */}
             <div className="w-full lg:w-5/12 xl:w-1/3 bg-white p-6 sm:p-10 lg:p-12 flex flex-col justify-between items-center text-center relative z-10 flex-1">
                 <div className="w-full hidden lg:flex justify-end">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Official Feedback Portal</span>
@@ -56,7 +75,7 @@ export default function LandingPage({ form, departmentName, onStart }) {
                     </div>
                     <div className="space-y-1.5 sm:space-y-2">
                         <h3 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">Ready to Begin?</h3>
-                        <p className="text-xs sm:text-sm text-gray-500 leading-relaxed px-2">All information provided is held under strict institutional confidentiality.</p>
+                        <p className="text-xs sm:text-sm text-gray-500 leading-relaxed px-2">Tap below to fill out the form on this device.</p>
                     </div>
                     <div className="space-y-3 pt-1">
                         <button type="button" onClick={() => setShowPrivacyPolicy(true)} className="w-full py-3.5 sm:py-4 px-6 bg-[#1E6031] hover:bg-[#144823] active:scale-[0.98] text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base uppercase tracking-wider shadow-lg shadow-[#1E6031]/20 transition-all flex items-center justify-center gap-2.5 group cursor-pointer">
@@ -65,6 +84,7 @@ export default function LandingPage({ form, departmentName, onStart }) {
                         </button>
                     </div>
                 </div>
+                
                 <div className="text-[10px] sm:text-[11px] text-gray-400 font-medium tracking-wide mt-4 lg:mt-0 pb-safe">
                     &copy; {new Date().getFullYear()} Central Luzon State University
                 </div>

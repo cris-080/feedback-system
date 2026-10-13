@@ -7,14 +7,22 @@ export default function EditForm({ currentForm, existingFields, departments, dep
     
     const formDetails = currentForm?.data || currentForm || {};
 
-    const formattedFields = (existingFields || []).map(f => ({
-        field_id: f.field_id,
-        step_number: f.step_number || 4,
-        field_label: f.field_label,
-        input_type: f.input_type,
-        is_required: f.is_required === 1,
-        options: f.options?.map(option => typeof option === 'object' ? option?.option_label : option).filter(Boolean) || []
-    }));
+   const formattedFields = (existingFields || []).map(f => {
+        let mappedOptions = f.options?.map(option => typeof option === 'object' ? option?.option_label : option).filter(Boolean) || [];
+        
+        if (f.field_label.toUpperCase().includes('SQD')) {
+            mappedOptions = mappedOptions.filter(opt => opt !== 'N/A' && opt !== 'n/a');
+        }
+
+        return {
+            field_id: f.field_id,
+            step_number: f.step_number || 4,
+            field_label: f.field_label,
+            input_type: f.input_type,
+            is_required: f.is_required === 1,
+            options: mappedOptions
+        };
+    });
 
     const { data, setData, post, processing } = useForm({
         header_1: formDetails?.header_1 || 'Republic of the Philippines',
@@ -405,13 +413,13 @@ export default function EditForm({ currentForm, existingFields, departments, dep
                                                     
                                                     <div className="md:col-span-5">
                                                         <label className="block text-sm font-semibold text-gray-700 mb-2">Input Type</label>
-                                                        <select className={`w-full border-gray-300 rounded-md shadow-sm ${isLocked ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`}
+                                                       <select className={`w-full border-gray-300 rounded-md shadow-sm ${isLocked ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : ''}`}
                                                             value={field.input_type} onChange={e => updateField(field.field_id, 'input_type', e.target.value)} 
                                                             disabled={isLocked}>
                                                             <option value="text">Short Text</option>
                                                             <option value="number">Number</option>
                                                             <option value="dropdown">Dropdown Menu</option>
-                                                            <option value="radio">Radio Buttons</option>
+                                                            <option value="radio">Radio Buttons / Rating Chips</option>
                                                             <option value="multiselect">Multi-Select</option>
                                                         </select>
                                                     </div>
