@@ -12,11 +12,11 @@ class ArchiveController extends Controller
 {
     public function index(Request $request)
     {
-        // Capture incoming filters
         $search = $request->query('search');
         $departmentFilter = $request->query('department');
+        $activeTab = $request->query('tab', 'forms');
 
-        // 1. Fetch forms that are soft-deleted OR have the 'Archived' status
+        // 1. Fetch Archived Forms
         $formsQuery = Form::withTrashed()
             ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
             ->select('forms.*', 'department.department_name')
@@ -25,15 +25,19 @@ class ArchiveController extends Controller
                       ->orWhereNotNull('forms.deleted_at');
             });
 
-        // Apply Search Filter for Forms
         if (!empty($search)) {
-            $formsQuery->where(function ($q) use ($search) {
-                $q->where('forms.title', 'LIKE', '%' . $search . '%')
-                  ->orWhere('forms.form_id', 'LIKE', '%' . $search . '%');
+            $like = '%' . trim($search) . '%';
+            $formsQuery->where(function ($q) use ($like) {
+                $q->where('forms.title', 'LIKE', $like)
+                  ->orWhere('forms.form_id', 'LIKE', $like)
+                  ->orWhere('department.department_name', 'LIKE', $like)
+                  // Search Date Archived
+                  ->orWhere('forms.deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(forms.deleted_at, '%b %e, %Y') LIKE ?", [$like])
+                  ->orWhereRaw("DATE_FORMAT(forms.created_at, '%b %e, %Y') LIKE ?", [$like]);
             });
         }
 
-        // Apply Department Filter for Forms
         if (!empty($departmentFilter)) {
             if (strtolower($departmentFilter) === 'general') {
                 $formsQuery->whereNull('forms.department_id');
@@ -42,50 +46,40 @@ class ArchiveController extends Controller
             }
         }
 
-        $archivedForms = $formsQuery
-            ->orderBy('forms.deleted_at', 'desc')
-            ->orderBy('forms.updated_at', 'desc')
-            ->paginate(10)
-            ->withQueryString(); // Ensures pagination links keep the search parameters
-
-        // 2. Fetch soft-deleted departments
+        // 2. Fetch Archived Departments
         $departmentsQuery = Department::onlyTrashed();
 
-        // Apply Search Filter for Departments
         if (!empty($search)) {
-            $departmentsQuery->where('department_name', 'LIKE', '%' . $search . '%');
-        }
-
-        $archivedDepartments = $departmentsQuery
-            ->orderBy('deleted_at', 'desc')
-            ->paginate(10)
-            ->withQueryString();
-
-       // 3. Fetch soft-deleted accounts
-        $accountsQuery = Account::onlyTrashed();
-
-        if (!empty($search)) {
-            $accountsQuery->where(function ($q) use ($search) {
-                $q->where('firstname', 'LIKE', '%' . $search . '%')
-                  ->orWhere('lastname', 'LIKE', '%' . $search . '%')
-                  ->orWhere('email', 'LIKE', '%' . $search . '%');
+            $like = '%' . trim($search) . '%';
+            $departmentsQuery->where(function ($q) use ($like) {
+                $q->where('department_name', 'LIKE', $like)
+                  ->orWhere('department_id', 'LIKE', $like)
+                  ->orWhere('deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(deleted_at, '%b %e, %Y') LIKE ?", [$like]);
             });
         }
 
-        $archivedAccounts = $accountsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString();
+        // 3. Fetch Archived Accounts
+        $accountsQuery = Account::onlyTrashed();
 
-        // 4. Get all department names (including deleted ones) for the dropdown
-        $uniqueDepartments = Department::withTrashed()
-            ->orderBy('department_name', 'asc')
-            ->pluck('department_name');
-
-            
+        if (!empty($search)) {
+            $like = '%' . trim($search) . '%';
+            $accountsQuery->where(function ($q) use ($like) {
+                $q->where('firstname', 'LIKE', $like)
+                  ->orWhere('lastname', 'LIKE', $like)
+                  ->orWhereRaw("CONCAT(firstname, ' ', lastname) LIKE ?", [$like])
+                  ->orWhere('email', 'LIKE', $like)
+                  ->orWhere('role', 'LIKE', $like)
+                  ->orWhere('deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(deleted_at, '%b %e, %Y') LIKE ?", [$like]);
+            });
+        }
 
         return inertia('SuperAdmin/Archives', [
-            'archivedForms'       => $archivedForms,
-            'archivedDepartments' => $archivedDepartments,
-            'archivedAccounts'    => $archivedAccounts, // <-- Added archived accounts variable
-            'uniqueDepartments'   => $uniqueDepartments, // Populates the dropdown menu
+            'archivedForms'       => $activeTab === 'forms' ? $formsQuery->orderBy('forms.deleted_at', 'desc')->paginate(10)->withQueryString() : [],
+            'archivedDepartments' => $activeTab === 'departments' ? $departmentsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString() : [],
+            'archivedAccounts'    => $activeTab === 'accounts' ? $accountsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString() : [],
+            'uniqueDepartments'   => Department::withTrashed()->orderBy('department_name', 'asc')->pluck('department_name'),
             'filters'             => $request->only(['search', 'department', 'tab'])
         ]);
     }

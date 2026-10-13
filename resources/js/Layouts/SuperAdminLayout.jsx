@@ -17,34 +17,44 @@ export default function SuperAdminLayout({ children, headerTitle }) {
     const isSuperGroup = isSuperAdmin || isFeedbackCommittee;
     
     const rolePrefix = isSuperGroup ? 'superadmin' : 'focalperson';
-    const pathPrefix = isSuperGroup ? '/superAdmin' : '/focalPerson';
-    
-    const isActive = (path) => url.toLowerCase().startsWith(path.toLowerCase());
 
-    // --- STATES ---
-    const [isCollapsed, setIsCollapsed] = useState(false);
+   const [isCollapsed, setIsCollapsed] = useState(false);
+    const [mobileOpen, setMobileOpen] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     
-    // --- REFS ---
     const dropdownRef = useRef(null);
-    const notifRef = useRef(null); // NEW REF
+    const notifRef = useRef(null);
 
-    // --- CLICK OUTSIDE LISTENER ---
+    useEffect(() => {
+        setMobileOpen(false);
+    }, [url]);
+
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
                 setShowDropdown(false);
             }
-            // NEW: Close notifications if clicking outside
             if (notifRef.current && !notifRef.current.contains(event.target)) {
                 setShowNotifications(false);
             }
         };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
 
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setShowDropdown(false);
+                setShowNotifications(false);
+                setMobileOpen(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, []);
     // --- 2. ADDED: GLOBAL FLASH MESSAGE HANDLER ---
     useEffect(() => {
         if (flash?.success) {
@@ -85,14 +95,20 @@ export default function SuperAdminLayout({ children, headerTitle }) {
             ? recentNotifications[0].request_id 
             : targetId;
 
-        const destroyRoute = isSuperAdmin 
-            ? route('superadmin.requests.destroy', routeId) 
-            : route('feedback_committee.requests.destroy', routeId);
+        // Route dynamically based on exact role
+        let destroyRoute;
+        if (isSuperAdmin) {
+            destroyRoute = route('superadmin.requests.destroy', routeId);
+        } else if (isFeedbackCommittee) {
+            destroyRoute = route('feedback_committee.requests.destroy', routeId);
+        } else {
+            destroyRoute = route('focalperson.requests.destroy', routeId);
+        }
 
         router.delete(destroyRoute, {
             data: { 
                 clear_all: isClearAll,
-                from_notification: true // NEW: Tells the controller this came from the bell!
+                from_notification: true // Tells the controller this came from the bell!
             }, 
             preserveScroll: true,
             preserveState: true,
@@ -117,9 +133,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
         });
     };
 
-    // Reusable Navigation Link
-    const NavLink = ({ href, icon, text, activePath }) => {
-        const active = isActive(activePath);
+    const NavLink = ({ href, icon, text, active }) => {
         return (
             <Link
                 href={href}
@@ -146,46 +160,56 @@ export default function SuperAdminLayout({ children, headerTitle }) {
         );
     };
 
-    return (
-        <div className="min-h-screen bg-gray-50 flex font-sans">
-            
-            {/* --- 1. The Retractable Sidebar --- */}
+return (
+        <div className="min-h-screen bg-gray-50 flex font-sans relative overflow-x-hidden">
+            {mobileOpen && (
+                <div 
+                    onClick={() => setMobileOpen(false)}
+                    className="fixed inset-0 bg-black/50 backdrop-blur-xs z-30 md:hidden transition-opacity duration-200"
+                />
+            )}
+
             <aside 
-                className={`${
-                    isCollapsed ? 'w-20' : 'w-72'
-                } bg-[#1E6031] flex flex-col shadow-xl z-20 transition-all duration-300 ease-in-out select-none`}
+                className={`fixed inset-y-0 left-0 z-40 md:static md:z-20 flex flex-col bg-[#1E6031] shadow-xl transition-all duration-300 ease-in-out select-none ${
+                    mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+                } ${
+                    isCollapsed ? 'md:w-20 w-72' : 'w-72'
+                }`}
             >
-                {/* Brand Header & Toggle */}
                 <div className={`h-20 flex items-center border-b border-white/10 transition-all duration-300 ${
-                    isCollapsed ? 'justify-center px-0' : 'justify-between px-6'
+                    isCollapsed ? 'md:justify-center md:px-0 justify-between px-6' : 'justify-between px-6'
                 }`}>
-                    {!isCollapsed && (
-                        <div className="flex items-center">
-                            <img 
-                                src="/images/clsu-logo-white.png" 
-                                alt="CLSU Logo" 
-                                className="h-10 w-10 object-contain mr-3 drop-shadow-md"
-                            />
-                            <h2 className="text-xl font-bold tracking-tight text-white whitespace-nowrap">
-                                CLSU <span className="text-[#FFD700]">FMS</span>
-                            </h2>
-                        </div>
-                    )}
+                    <div className={`flex items-center ${isCollapsed ? 'md:hidden' : 'flex'}`}>
+                        <img 
+                            src="/images/clsu-logo-white.png" 
+                            alt="CLSU Logo" 
+                            className="h-10 w-10 object-contain mr-3 drop-shadow-md"
+                        />
+                        <h2 className="text-xl font-bold tracking-tight text-white whitespace-nowrap">
+                            CLSU <span className="text-[#FFD700]">FMS</span>
+                        </h2>
+                    </div>
                     
+                    <button
+                        type="button"
+                        onClick={() => setMobileOpen(false)}
+                        className="w-10 h-10 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center focus:outline-none md:hidden"
+                    >
+                        <i className="fa-solid fa-xmark text-lg"></i>
+                    </button>
+
                     <button
                         type="button"
                         onClick={() => setIsCollapsed(!isCollapsed)}
                         title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-                        className="w-10 h-10 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center focus:outline-none"
+                        className="w-10 h-10 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition hidden md:flex items-center justify-center focus:outline-none"
                     >
                         <i className="fa-solid fa-bars text-lg"></i>
                     </button>
                 </div>
                 
-                {/* Navigation Links */}
                 <nav className="flex-1 space-y-4 overflow-y-auto py-4 overflow-x-hidden">
                     
-                    {/* Section 1: Main Menu (Shared) */}
                     <div className="space-y-1">
                         {!isCollapsed && (
                             <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
@@ -197,21 +221,21 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                             href={route(`${rolePrefix}.dashboard`)} 
                             icon="fa-solid fa-gauge-high" 
                             text="Dashboard" 
-                            activePath={`${pathPrefix}/dashboard`} 
+                            active={route().current(`${rolePrefix}.dashboard`)} 
                         />
 
                         <NavLink 
-                            href={route(`${rolePrefix}.reports.index`)} 
+                            href={isFeedbackCommittee ? route('feedback_committee.reports.index') : route(`${rolePrefix}.reports.index`)} 
                             icon="fa-solid fa-chart-pie" 
                             text="Reports" 
-                            activePath={`${pathPrefix}/reports`} 
+                            active={route().current('*.reports.*')} 
                         />
 
                         <NavLink 
                             href={route(`${rolePrefix}.feedbacks.index`)} 
                             icon="fa-solid fa-database" 
                             text="Feedback Datastore" 
-                            activePath={`${pathPrefix}/feedbacks`} 
+                            active={route().current(`${rolePrefix}.feedbacks.*`)} 
                         />
                         
                         {isSuperGroup && (
@@ -219,12 +243,11 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                 href={isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index')} 
                                 icon="fa-solid fa-bell" 
                                 text="Requests" 
-                                activePath={isSuperAdmin ? '/superAdmin/requests' : '/feedback-committee/requests'} 
+                                active={route().current('superadmin.requests.*') || route().current('feedback_committee.requests.*')} 
                             />
                         )}
                     </div>
 
-                    {/* Section 2: Focal Person Operations */}
                     {!isSuperGroup && (
                         <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
                             {!isCollapsed && (
@@ -237,18 +260,23 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                 href={route('focalperson.forms.index')} 
                                 icon="fa-solid fa-file-signature" 
                                 text="Forms" 
-                                activePath="/focalPerson/forms" 
+                                active={route().current('focalperson.forms.*')} 
                             />
                             <NavLink 
                                 href={route('focalperson.department.index')} 
                                 icon="fa-solid fa-building" 
                                 text="My Department" 
-                                activePath="/focalPerson/department" 
+                                active={route().current('focalperson.department.*')} 
+                            />
+                            <NavLink 
+                                href={route('focalperson.requests.index')} 
+                                icon="fa-solid fa-paper-plane" 
+                                text="Support & Requests" 
+                                active={route().current('focalperson.requests.*')} 
                             />
                         </div>
                     )}
 
-                    {/* Section 3: System Management (SuperAdmin & Feedback Committee) */}
                     {isSuperGroup && (
                         <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
                             {!isCollapsed && (
@@ -261,13 +289,13 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                 href={route('superadmin.departments.index')} 
                                 icon="fa-solid fa-building-flag" 
                                 text={"Departments"} 
-                                activePath="/superAdmin/departments" 
+                                active={route().current('superadmin.departments.*')} 
                             />
                             <NavLink 
                                 href={route('superadmin.forms.index')} 
                                 icon="fa-solid fa-file-signature" 
                                 text={"Forms"} 
-                                activePath="/superAdmin/forms" 
+                                active={route().current('superadmin.forms.*')} 
                             />
                             
                             {isSuperAdmin && (
@@ -275,13 +303,12 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                     href={route('superadmin.users.index')} 
                                     icon="fa-solid fa-users-gear" 
                                     text="Accounts" 
-                                    activePath="/superAdmin/users" 
+                                    active={route().current('superadmin.users.*')} 
                                 />
                             )}
                         </div>
                     )}
 
-                    {/* Section 4: Administration (SuperAdmin ONLY) */}
                     {isSuperAdmin && (
                         <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
                             {!isCollapsed && (
@@ -294,7 +321,13 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                 href={route('superadmin.archives.index')} 
                                 icon="fa-solid fa-box-archive" 
                                 text="System Archives" 
-                                activePath="/superAdmin/archives" 
+                                active={route().current('superadmin.archives.*')} 
+                            />
+                            <NavLink 
+                                href={route('superadmin.audit-logs.index')} 
+                                icon="fa-solid fa-clipboard-list" 
+                                text="Audit Logs" 
+                                active={route().current('superadmin.audit-logs.*')} 
                             />
                         </div>
                     )}
@@ -308,10 +341,17 @@ export default function SuperAdminLayout({ children, headerTitle }) {
             {/* --- 2. The Main Content Area --- */}
             <div className="flex-1 flex flex-col h-screen overflow-hidden">
                 
-                {/* Navbar */}
-                <header className="h-16 bg-[#009639] shadow-md flex justify-between items-center px-8 z-10">
-                    <div className="flex items-center">
-                        <h1 className="font-bold text-xl text-white tracking-tight">{headerTitle}</h1>
+               {/* Navbar */}
+                <header className="h-16 bg-[#009639] shadow-md flex justify-between items-center px-4 md:px-8 z-10">
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setMobileOpen(true)}
+                            className="md:hidden text-white/90 hover:text-white p-2 rounded-lg hover:bg-white/10 focus:outline-none transition"
+                        >
+                            <i className="fa-solid fa-bars text-lg"></i>
+                        </button>
+                        <h1 className="font-bold text-lg md:text-xl text-white tracking-tight truncate">{headerTitle}</h1>
                     </div>
                     
                     <div className="flex items-center space-x-6">
@@ -361,7 +401,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                             recentNotifications.map((notif) => (
                                                 <div key={notif.request_id} className="group relative flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition">
                                                     
-                                                    {/* Clickable Area (Goes to Requests Page) */}
+                                                   {/* Clickable Area (Goes to Requests Page) */}
                                                     <Link 
                                                         href={notif.is_harassment 
                                                             ? (isSuperAdmin 
@@ -370,7 +410,12 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                                                                     ? route('focalperson.feedbacks.index') 
                                                                     : route('feedback_committee.requests.index'))
                                                               ) 
-                                                            : (isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index'))
+                                                            : (isSuperAdmin 
+                                                                ? route('superadmin.requests.index') 
+                                                                : (isFeedbackCommittee 
+                                                                    ? route('feedback_committee.requests.index') 
+                                                                    : route('focalperson.requests.index'))
+                                                              )
                                                         }
                                                         className="flex items-start flex-1"
                                                         onClick={() => setShowNotifications(false)}
@@ -436,9 +481,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                             )}
                         </div>
 
-                        <div className="h-8 w-px bg-white/20"></div>
-
-                        {isSuperGroup && <div className="h-8 w-px bg-white/20"></div>}
+                     <div className="h-8 w-px bg-white/20"></div>
 
                         {/* Dropdown Gear Menu */}
                         <div className="relative" ref={dropdownRef}>

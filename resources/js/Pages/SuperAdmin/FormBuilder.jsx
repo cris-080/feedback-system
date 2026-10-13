@@ -38,9 +38,12 @@ export default function FormBuilder({ departments, departmentServices, departmen
 
     const selectedDepartmentName = departments?.find(d => String(d.department_id) === String(data.department_id))?.department_name || '(Select a Department)';
 
-    // --- UPDATED: Dynamic Sync now skips unlocked fields ---
+   // --- UPDATED: Dynamic Sync now skips unlocked fields AND syncs the CC/Non-CC type ---
     useEffect(() => {
         if (data.department_id) {
+            const selectedDept = departments.find(d => String(d.department_id) === String(data.department_id));
+            const classification = selectedDept?.classification || 'CC';
+            
             const services = departmentServices[data.department_id] || [];
             const providers = departmentProviders ? (departmentProviders[data.department_id] || []) : [];
             
@@ -74,10 +77,18 @@ export default function FormBuilder({ departments, departmentServices, departmen
                     
                     return field;
                 });
-                return { ...currentData, fields: updatedFields };
+                
+                return { 
+                    ...currentData, 
+                    fields: updatedFields,
+                    // Auto-sync the form title and type based on the department classification!
+                    form_type: classification,
+                    title: classification === 'CC' ? "CITIZEN'S CHARTER FEEDBACK FORM" : "FEEDBACK FORM"
+                };
             });
         }
     }, [data.department_id, departmentServices, departmentProviders, departments, selectedDepartmentName, unlockedFields]);
+
 
     const getStepTitle = (step) => {
         const isCC = data.form_type === 'CC';

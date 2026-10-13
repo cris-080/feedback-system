@@ -7,7 +7,6 @@ import { StepOne, StepTwo, StepThree, StepFour } from './Partials/FormSteps';
 export default function FeedbackIndex({ form, departmentName, serviceProviders, isCC, steps, qr_id, ph_regions }) {
     const [status, setStatus] = useState('active'); 
     const [timeLeft, setTimeLeft] = useState(3600); 
-    const [currentStep, setCurrentStep] = useState(1);
     const [hasStarted, setHasStarted] = useState(false);
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -20,7 +19,9 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
         qr_id: qr_id,
         answers: {},
         email_address: '',
-        transaction_date: '' // ADDED: New transaction date state initialized
+        transaction_date: '',
+        is_kiosk: isKiosk, 
+        office_pin: ''     
     });
 
     const totalSteps = isCC ? 4 : 3;
@@ -67,78 +68,41 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
         return `${m}:${s}`;
     };
 
-    const getDisplayStep = (dbStep) => {
-        if (!isCC && dbStep > 2) return dbStep - 1;
-        return dbStep;
-    };
-
-    const validateStep = () => {
-        let dbStep = currentStep;
-        if (!isCC && currentStep > 1) {
-            dbStep = currentStep + 1; 
+    // Global Validation for the entire form at once
+    const validateForm = () => {
+        if (!data.transaction_date) {
+            Swal.fire({ title: 'Required Field Missing', text: 'Please provide the Date of Transaction.', icon: 'warning', confirmButtonColor: '#1E6031' });
+            return false;
+        }
+        if (!data.email_address || data.email_address.trim() === '') {
+            Swal.fire({ title: 'Required Field Missing', text: 'Please provide a valid Email Address.', icon: 'warning', confirmButtonColor: '#1E6031' });
+            return false;
+        }
+        if (!isKiosk && (!data.office_pin || data.office_pin.trim().length < 4)) {
+            Swal.fire({ title: 'Missing Office PIN', text: 'Please enter the 4-digit Office PIN displayed at the counter to submit.', icon: 'warning', confirmButtonColor: '#dc2626' });
+            return false;
         }
 
-        // --- Validate Transaction Date AND Email on Step 1 ---
-        if (currentStep === 1) {
-            if (!data.transaction_date) {
-                Swal.fire({
-                    title: 'Required Field Missing',
-                    text: 'Please provide the Date of Transaction.',
-                    icon: 'warning',
-                    confirmButtonColor: '#1E6031',
-                    confirmButtonText: 'Okay'
-                });
-                return false;
-            }
-            if (!data.email_address || data.email_address.trim() === '') {
-                Swal.fire({
-                    title: 'Required Field Missing',
-                    text: 'Please provide a valid Email Address.',
-                    icon: 'warning',
-                    confirmButtonColor: '#1E6031',
-                    confirmButtonText: 'Okay'
-                });
-                return false;
-            }
-        }
+        for (const stepKey in steps) {
+            // If it's a non-CC form, skip checking CC questions (step 2)
+            if (!isCC && parseInt(stepKey) === 2) continue;
 
-        const fieldsToValidate = steps[dbStep] || [];
+            for (const field of steps[stepKey]) {
+                if (field.field_label === 'Name of Office/Department') continue;
 
-        for (const field of fieldsToValidate) {
-            const isDeptField = field.field_label === 'Name of Office/Department';
-            if (isDeptField) continue;
-
-            if (field.is_required) {
-                const answer = data.answers[field.field_id];
-                const isEmptyArray = Array.isArray(answer) && answer.length === 0;
-                
-                if (answer === undefined || answer === null || (typeof answer === 'string' && answer.trim() === '') || isEmptyArray) {
-                    Swal.fire({
-                        title: 'Required Field Missing',
-                        text: `Please complete the required field: "${field.field_label}"`,
-                        icon: 'warning',
-                        confirmButtonColor: '#1E6031',
-                        confirmButtonText: 'Okay'
-                    });
-                    return false; 
+                if (field.is_required) {
+                    const answer = data.answers[field.field_id];
+                    const isEmptyArray = Array.isArray(answer) && answer.length === 0;
+                    
+                    if (answer === undefined || answer === null || (typeof answer === 'string' && answer.trim() === '') || isEmptyArray) {
+                        Swal.fire({ title: 'Required Field Missing', text: `Please complete the required field: "${field.field_label}"`, icon: 'warning', confirmButtonColor: '#1E6031' });
+                        return false; 
+                    }
                 }
             }
         }
-
         return true; 
     };
-
-    const handleNext = () => {
-        if (!validateStep()) return; 
-        if (currentStep < totalSteps) setCurrentStep(currentStep + 1);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const handlePrev = () => {
-        if (currentStep > 1) setCurrentStep(currentStep - 1);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
     const handleAnswerChange = (fieldId, value) => {
         let newAnswers = { ...data.answers, [fieldId]: value };
 
@@ -197,7 +161,7 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
 
     const submitFeedback = (e) => {
         e.preventDefault();
-        if (!validateStep()) return; 
+        if (!validateForm()) return; 
 
         Swal.fire({
             title: 'Submit Evaluation?',
@@ -232,7 +196,7 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
                         console.error("Submission Errors:", errors);
                         
                         // Extract the specific spam message if it exists, otherwise use fallback
-                        const errorMessage = errors.email_address || errors.spam || 'There was an issue saving your response. Please review required fields.';
+                       const errorMessage = errors.office_pin || errors.email_address || errors.spam || 'There was an issue saving your response. Please review required fields.';
                         
                         Swal.fire({
                             title: 'Submission Failed',
@@ -280,50 +244,49 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
                     </div>
                 </div>
 
-                {/* 2. SUB-HEADER */}
-                <div className="h-14 px-6 sm:px-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/70 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold uppercase tracking-wider text-gray-500">Current Phase:</span>
-                        <span className="text-base font-extrabold text-[#1E6031]">Step {currentStep} of {totalSteps}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {[...Array(totalSteps)].map((_, i) => (
-                            <div key={i} className={`h-2.5 rounded-full transition-all duration-300 ${currentStep === i + 1 ? 'w-10 bg-[#1E6031]' : currentStep > i + 1 ? 'w-5 bg-emerald-500' : 'w-4 bg-gray-200'}`}></div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* 3. MAIN FORM BODY */}
-                <form onSubmit={submitFeedback} className="flex-1 flex flex-col justify-between overflow-hidden min-h-0">
-                    
-                    {/* NEW: Conditionally disable outer scroll on Step 3 to let the table fill the space perfectly */}
-                    <div className={`flex-1 min-h-0 p-4 sm:p-6 lg:p-8 ${currentStep === getDisplayStep(3) ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'}`}>
-                        <div className={`max-w-6xl mx-auto w-full ${currentStep === getDisplayStep(3) ? 'flex-1 flex flex-col min-h-0' : 'space-y-6'}`}>
-                            
-                            {currentStep === getDisplayStep(1) && <StepOne stepFields={steps[1] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />}
-                            {isCC && currentStep === getDisplayStep(2) && <StepTwo stepFields={steps[2] || []} form={form} data={data} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />}
-                            {currentStep === getDisplayStep(3) && <StepThree stepFields={steps[3] || []} data={data} handleAnswerChange={handleAnswerChange} />}
-                            {currentStep === getDisplayStep(4) && <StepFour stepFields={steps[4] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />}
-                        </div>
-                    </div>
-                    
-                    {/* 4. BOTTOM ACTION BAR */}
-                    <div className="h-16 px-6 sm:px-8 border-t border-gray-200 bg-white flex justify-between items-center shrink-0 z-20 shadow-xs">
-                        {currentStep > 1 ? (
-                            <button type="button" onClick={handlePrev} className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs uppercase tracking-wider transition flex items-center gap-2">
-                                <i className="fa-solid fa-arrow-left"></i><span>Previous</span>
-                            </button>
-                        ) : <div></div>}
-
-                        {currentStep < totalSteps ? (
-                            <button type="button" onClick={handleNext} className="px-6 py-2.5 bg-[#1E6031] hover:bg-[#144823] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg active:scale-98 transition flex items-center gap-2">
-                                <span>Next Step</span><i className="fa-solid fa-arrow-right text-[#FFD700]"></i>
-                            </button>
-                        ) : (
-                            <button type="submit" disabled={processing} className="px-7 py-2.5 bg-[#FFD700] hover:bg-[#e6c200] text-[#1E6031] rounded-xl font-black text-xs uppercase tracking-wider shadow-md hover:shadow-lg active:scale-98 transition flex items-center gap-2 disabled:opacity-50">
-                                <i className="fa-solid fa-paper-plane"></i><span>Submit Feedback</span>
-                            </button>
+               {/* 2. MAIN SCROLLING FORM BODY */}
+                <form onSubmit={submitFeedback} className="flex-1 flex flex-col justify-between overflow-y-auto">
+                    <div className="p-4 sm:p-6 lg:p-8 space-y-10 max-w-5xl mx-auto w-full">
+                        
+                        <StepOne stepFields={steps[1] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />
+                        
+                        {isCC && (
+                            <>
+                                <hr className="border-gray-200 border-2 rounded" />
+                                <StepTwo stepFields={steps[2] || []} form={form} data={data} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />
+                            </>
                         )}
+                        
+                        <hr className="border-gray-200 border-2 rounded" />
+                        <StepThree stepFields={steps[3] || []} data={data} handleAnswerChange={handleAnswerChange} />
+                        
+                        <hr className="border-gray-200 border-2 rounded" />
+                        <StepFour stepFields={steps[4] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />
+
+                        {/* --- SECURE PIN INPUT FOR QR SCANS --- */}
+                        {!isKiosk && (
+                            <div className="mt-8 p-6 bg-red-50 border border-red-200 rounded-xl shadow-sm max-w-xl mx-auto text-center shrink-0">
+                                <i className="fa-solid fa-lock text-3xl text-red-500 mb-3"></i>
+                                <h3 className="text-lg font-black text-red-800 mb-1 tracking-wide">OFFICE PIN REQUIRED</h3>
+                                <p className="text-sm text-red-600 mb-5 font-medium">To prevent spam, please enter the 4-digit PIN displayed at the {departmentName} counter.</p>
+                                
+                                <input
+                                    type="text"
+                                    maxLength="4"
+                                    placeholder="• • • •"
+                                    value={data.office_pin}
+                                    onChange={(e) => setData('office_pin', e.target.value.replace(/\D/g, ''))} 
+                                    className="w-48 px-4 py-3 text-3xl font-mono font-black tracking-widest text-center border-2 border-red-300 rounded-lg focus:ring-red-500 focus:border-red-500 shadow-inner bg-white text-gray-800"
+                                />
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* 3. BOTTOM ACTION BAR */}
+                    <div className="py-5 px-6 sm:px-8 border-t border-gray-200 bg-white flex justify-center sm:justify-end items-center shrink-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <button type="submit" disabled={processing} className="w-full sm:w-auto px-10 py-3.5 bg-[#009639] hover:bg-[#1E6031] text-white rounded-xl font-black text-sm uppercase tracking-wider shadow-md hover:shadow-lg active:scale-98 transition flex items-center justify-center gap-2 disabled:opacity-50">
+                            <i className="fa-solid fa-paper-plane text-[#FFD700]"></i><span>Submit Feedback</span>
+                        </button>
                     </div>
                 </form>
             </div>

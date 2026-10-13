@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Models\AuditLog;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AuthenticatedSessionController extends Controller
@@ -61,14 +62,15 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Record the login event
+        AuditLog::logAction('Logged In', 'Authentication', 'User successfully logged into the system.');
+
         $role = strtolower(trim($request->user()->role ?? ''));
 
         // Route SuperAdmins and Feedback Committee to the unified RBAC command center.
         $fallbackUrl = match ($role) {
-            'superadmin'         => '/superAdmin/dashboard',
-            'feedback committee' => '/superAdmin/dashboard',
-            'feedbackcommittee'  => '/superAdmin/dashboard',
-            default              => '/focalPerson/dashboard', // Focal Person Default
+            'superadmin', 'feedback committee', 'feedbackcommittee' => route('superadmin.dashboard'),
+            default => route('focalperson.dashboard'), // Focal Person Default
         };
 
         $targetUrl = session()->pull('url.intended', $fallbackUrl);
@@ -80,8 +82,12 @@ class AuthenticatedSessionController extends Controller
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): SymfonyResponse
+   public function destroy(Request $request): SymfonyResponse
     {
+        if (Auth::check()) {
+            AuditLog::logAction('Logged Out', 'Authentication', 'User securely logged out.');
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

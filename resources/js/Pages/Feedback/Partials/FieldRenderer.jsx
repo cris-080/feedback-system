@@ -47,6 +47,8 @@ const MultiSelectDropdown = ({ field, answerVal, handleAnswerChange }) => {
 };
 
 export default function FieldRenderer({ field, data, handleAnswerChange, departmentName, serviceProviders, ph_regions, steps }) {
+    const [showProviderDropdown, setShowProviderDropdown] = useState(false);
+
     const answerVal = data.answers[field.field_id] || '';
     const normalizedLabel = field.field_label.trim().replace(/:$/, '');
     const isDeptField = normalizedLabel === 'Name of Office/Department';
@@ -75,17 +77,40 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
         );
     }
 
-    if (isProviderField && serviceProviders && serviceProviders.length > 0) {
+    if (isProviderField) {
+        const hasProviders = serviceProviders && serviceProviders.length > 0;
+
         return (
-            <div className="relative">
-                <select className="w-full border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 py-3 px-3.5 bg-white shadow-sm appearance-none cursor-pointer text-base text-gray-800"
-                    value={answerVal} onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required}>
-                    <option value="" disabled>-- Select a Provider --</option>
-                    {serviceProviders.map((prov, idx) => <option key={idx} value={prov.name}>{prov.position ? `${prov.name} (${prov.position})` : prov.name}</option>)}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                    <i className="fa-solid fa-chevron-down text-sm"></i>
-                </div>
+            <div className="flex flex-col space-y-2.5">
+                {hasProviders && showProviderDropdown ? (
+                    <div className="relative">
+                        <select className="w-full border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 py-3 px-3.5 bg-white shadow-sm appearance-none cursor-pointer text-base text-gray-800"
+                            value={answerVal} onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required}>
+                            <option value="" disabled>-- Select a Provider --</option>
+                            {serviceProviders.map((prov, idx) => <option key={idx} value={prov.name}>{prov.position ? `${prov.name} (${prov.position})` : prov.name}</option>)}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                            <i className="fa-solid fa-chevron-down text-sm"></i>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="relative w-full">
+                        <input type="text" value={answerVal} placeholder="Type service provider name..."
+                            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 py-3 px-3.5 text-base placeholder:text-gray-400 bg-white text-gray-800"
+                            onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required} />
+                    </div>
+                )}
+                
+                {hasProviders && (
+                    <button 
+                        type="button" 
+                        onClick={() => setShowProviderDropdown(!showProviderDropdown)} 
+                        className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-[#1E6031] bg-emerald-50 hover:bg-[#1E6031] hover:text-white border border-emerald-300 shadow-xs transition-all active:scale-95 self-start cursor-pointer"
+                    >
+                        <i className={`fa-solid ${showProviderDropdown ? 'fa-pen-to-square' : 'fa-list-check'} text-sm`}></i>
+                        <span>{showProviderDropdown ? 'Type name manually instead' : 'Choose from existing providers'}</span>
+                    </button>
+                )}
             </div>
         );
     }
@@ -98,16 +123,25 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
             const isYesNo = radioOptions.length === 2 && radioOptions.includes('Yes') && radioOptions.includes('No');
             if (isYesNo) radioOptions = ['Yes', 'No'];
 
+            // Check if the field belongs to Step 1 (Respondent Demographics or Office & Transaction Details)
+            const isStepOne = field.step_number === 1 || field.step_number === '1' || steps?.[1]?.some(f => f.field_id === field.field_id);
+            const isHorizontalDesktop = isStepOne || isYesNo;
+
             return (
-                // DYNAMIC CONTAINER: Horizontal row for Yes/No, Vertical column for everything else
-                <div className={`mt-3 ${isYesNo ? 'flex flex-row flex-wrap gap-4 sm:gap-8' : 'flex flex-col space-y-3 w-full'}`}>
+                <div className={`mt-2.5 ${isHorizontalDesktop ? 'flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-6' : 'flex flex-col space-y-3 w-full'}`}>
                     {radioOptions.map((opt, idx) => {
                         const isNAOption = opt === 'N/A' || opt.includes('N/A') || opt.includes('Not Applicable');
                         const isDisabled = isCC2orCC3 && isCC1Option4 && !isNAOption;
                         
                         return (
-                            // DYNAMIC LABEL: Fixed width for Yes/No, Full width for long CC1 answers
-                            <label key={idx} className={`flex items-start space-x-3 p-3 rounded-md transition-colors ${isYesNo ? 'min-w-[120px] pr-6 ' : 'w-full border border-transparent'} ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-green-50 hover:border-green-200'}`}>
+                            <label 
+                                key={idx} 
+                                className={`flex ${isHorizontalDesktop ? 'items-center' : 'items-start'} space-x-2.5 p-2 rounded-md transition-colors ${
+                                    isHorizontalDesktop ? 'w-full sm:w-auto' : 'w-full'
+                                } border border-transparent ${
+                                    isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-green-50 hover:border-green-200'
+                                }`}
+                            >
                                 <input 
                                     type="radio" 
                                     name={`field_${field.field_id}`} 
@@ -115,7 +149,7 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
                                     checked={answerVal === opt} 
                                     onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} 
                                     disabled={isDisabled} 
-                                    className="mt-0.5 shrink-0 w-5 h-5 text-green-600 focus:ring-green-500 border-gray-400 disabled:opacity-50 disabled:bg-gray-200 cursor-pointer" 
+                                    className="shrink-0 w-4.5 h-4.5 text-green-600 focus:ring-green-500 border-gray-400 disabled:opacity-50 disabled:bg-gray-200 cursor-pointer" 
                                     required={field.is_required && !isDisabled} 
                                 />
                                 <span className="text-gray-800 font-medium text-sm sm:text-base leading-snug">{opt}</span>

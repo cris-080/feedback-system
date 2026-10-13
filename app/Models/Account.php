@@ -53,28 +53,35 @@ class Account extends Authenticatable
                      ->where('account.is_root', 0);
     }
 
-    public function scopeFilterUserManagement(Builder $query, array $filters): Builder
+   public function scopeFilterUserManagement(Builder $query, array $filters): Builder
     {
         return $query
             ->select('account.*', 'department.department_name')
             ->leftJoin('department', 'account.department_id', '=', 'department.department_id')
             ->excludeSuperAdmins()
-            ->when($filters['search'] ?? null, function ($q, $search) {
-                $q->where(function ($sub) use ($search) {
-                    $sub->where('account.firstname', 'like', "%{$search}%")
-                        ->orWhere('account.lastname', 'like', "%{$search}%")
-                        ->orWhere('account.email', 'like', "%{$search}%")
-                        ->orWhere('account.username', 'like', "%{$search}%");
+            ->when(!empty($filters['search']), function ($q) use ($filters) {
+                $trimmed = trim($filters['search']);
+                $like = '%' . $trimmed . '%';
+
+                $q->where(function ($sub) use ($like) {
+                    $sub->where('account.firstname', 'LIKE', $like)
+                        ->orWhere('account.lastname', 'LIKE', $like)
+                        ->orWhereRaw("CONCAT(account.firstname, ' ', account.lastname) LIKE ?", [$like])
+                        ->orWhere('account.email', 'LIKE', $like)
+                        ->orWhere('account.username', 'LIKE', $like)
+                        ->orWhere('account.role', 'LIKE', $like)
+                        ->orWhere('department.department_name', 'LIKE', $like)
+                        ->orWhere('account.status', 'LIKE', $like);
                 });
             })
-            ->when($filters['role'] ?? null, function ($q, $role) {
-                $q->where('account.role', $role);
+            ->when(!empty($filters['role']), function ($q) use ($filters) {
+                $q->where('account.role', $filters['role']);
             })
-            ->when($filters['department'] ?? null, function ($q, $department) {
-                if ($department === 'unassigned') {
+            ->when(!empty($filters['department']), function ($q) use ($filters) {
+                if ($filters['department'] === 'unassigned') {
                     $q->whereNull('account.department_id');
                 } else {
-                    $q->where('department.department_name', $department);
+                    $q->where('department.department_name', $filters['department']);
                 }
             });
     }

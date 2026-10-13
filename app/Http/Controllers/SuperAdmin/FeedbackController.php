@@ -38,13 +38,66 @@ class FeedbackController extends Controller
             $query->where('forms.department_id', $user->department_id);
         }
 
-        // 4. Apply the Keyword Filter if a word was clicked or searched
+      // 4. Apply the Keyword Filter across Control Number, Department, Date/Time, Harassment, Sentiment, and Answers
         if (!empty($keyword)) {
-            $query->whereExists(function ($q) use ($keyword) {
-                $q->select(DB::raw(1))
-                  ->from('feedback_answers')
-                  ->whereColumn('feedback_answers.response_id', 'feedback.response_id')
-                  ->where('feedback_answers.answer_text', 'LIKE', '%' . $keyword . '%');
+            $trimmedKeyword = trim($keyword);
+            $like = '%' . $trimmedKeyword . '%';
+            $kwLower = strtolower($trimmedKeyword);
+
+            $query->where(function ($q) use ($like, $kwLower) {
+                // Control Number & Response ID
+                $q->where('feedback.control_number', 'LIKE', $like)
+                  ->orWhere('feedback.response_id', 'LIKE', $like)
+                  // Department / Office
+                  ->orWhere('department.department_name', 'LIKE', $like)
+                  // Date & Time Submitted (supports both raw YYYY-MM-DD and formatted "Sep 17, 2026")
+                  ->orWhere('feedback.submitted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(feedback.submitted_at, '%b %e, %Y %h:%i %p') LIKE ?", [$like])
+                  ->orWhereRaw("DATE_FORMAT(feedback.submitted_at, '%b %d, %Y') LIKE ?", [$like])
+                  ->orWhereRaw("DATE_FORMAT(feedback.submitted_at, '%M %e, %Y') LIKE ?", [$like])
+                  // Sentiment Analysis & Confidence Score
+                  ->orWhere('sentiment_analysis.sentiment', 'LIKE', $like)
+                  ->orWhere('sentiment_analysis.confidence_score', 'LIKE', $like)
+                  // Any Feedback Answer Text
+                  ->orWhereExists(function ($sub) use ($like) {
+                      $sub->select(DB::raw(1))
+                          ->from('feedback_answers')
+                          ->whereColumn('feedback_answers.response_id', 'feedback.response_id')
+                          ->where('feedback_answers.answer_text', 'LIKE', $like);
+                  });
+
+                // Pending Sentiment badge text
+                if (str_contains('pending analysis', $kwLower)) {
+                    $q->orWhereNull('sentiment_analysis.sentiment');
+                }
+
+                // Harassment Column: "Reported" / "Harassment"
+                if (str_contains('reported', $kwLower) || str_contains('harassment', $kwLower)) {
+                    $q->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where('ff.field_label', 'LIKE', '%harassment%')
+                            ->where('ff.field_label', 'NOT LIKE', '%detail%')
+                            ->where('ff.field_label', 'NOT LIKE', '%if yes%')
+                            ->whereRaw("LOWER(TRIM(fa.answer_text)) = 'yes'");
+                    });
+                }
+
+                // Harassment Column: "None"
+                if ($kwLower === 'none') {
+                    $q->orWhereNotExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where('ff.field_label', 'LIKE', '%harassment%')
+                            ->where('ff.field_label', 'NOT LIKE', '%detail%')
+                            ->where('ff.field_label', 'NOT LIKE', '%if yes%')
+                            ->whereRaw("LOWER(TRIM(fa.answer_text)) = 'yes'");
+                    });
+                }
             });
         }
 

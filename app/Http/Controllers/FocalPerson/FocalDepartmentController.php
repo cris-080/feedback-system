@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Models\DepartmentService;
 use App\Models\DepartmentPosition;
 use App\Models\ServiceProvider;
+use App\Models\AuditLog;
 use Inertia\Inertia;
 
 class FocalDepartmentController extends Controller
@@ -38,20 +39,25 @@ class FocalDepartmentController extends Controller
             'service_name'  => trim($request->service_name)
         ]);
 
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Added service '{$request->service_name}' to department configuration.");
+
         return back()->with('success', 'Service added successfully.');
     }
 
     public function destroyService($id)
     {
         // The where() clause ensures they can only delete their own department's services
-        DepartmentService::where('department_id', auth()->user()->department_id)
-            ->findOrFail($id)
-            ->delete();
+        $service = DepartmentService::where('department_id', auth()->user()->department_id)->findOrFail($id);
+        $serviceName = $service->service_name;
+        $service->delete();
+
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Removed service '{$serviceName}' from department configuration.");
 
         return back()->with('success', 'Service removed.');
     }
-
-    // --- POSITIONS ---
+   // --- POSITIONS ---
     public function storePosition(Request $request)
     {
         $validated = $request->validate(['position_name' => 'required|string|max:255']);
@@ -61,19 +67,25 @@ class FocalDepartmentController extends Controller
             'position_name' => trim($validated['position_name'])
         ]);
 
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Added position '{$validated['position_name']}' to department configuration.");
+
         return back()->with('success', 'Position added successfully.');
     }
 
     public function destroyPosition($id)
     {
-        DepartmentPosition::where('department_id', auth()->user()->department_id)
-            ->findOrFail($id)
-            ->delete();
+        $position = DepartmentPosition::where('department_id', auth()->user()->department_id)->findOrFail($id);
+        $positionName = $position->position_name;
+        $position->delete();
+
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Removed position '{$positionName}' from department configuration.");
 
         return back()->with('success', 'Position removed.');
     }
 
-    // --- SERVICE PROVIDERS ---
+   // --- SERVICE PROVIDERS ---
     public function storeProvider(Request $request)
     {
         $validated = $request->validate([
@@ -87,14 +99,20 @@ class FocalDepartmentController extends Controller
             'position'      => trim($validated['position'] ?? '')
         ]);
 
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Added service provider '{$validated['name']}' to department configuration.");
+
         return back()->with('success', 'Service Provider added successfully.');
     }
 
     public function destroyProvider($id)
     {
-        ServiceProvider::where('department_id', auth()->user()->department_id)
-            ->findOrFail($id)
-            ->delete();
+        $provider = ServiceProvider::where('department_id', auth()->user()->department_id)->findOrFail($id);
+        $providerName = $provider->name;
+        $provider->delete();
+
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Removed service provider '{$providerName}' from department configuration.");
 
         return back()->with('success', 'Service Provider removed.');
     }

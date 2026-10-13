@@ -10,6 +10,8 @@ use App\Models\Form;
 use App\Models\Feedback;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Carbon\Carbon;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -40,7 +42,7 @@ class DashboardController extends Controller
         }
 
         // 2. Fetch necessary base data
-        $departments = Department::select('department_id', 'department_name')->get();
+        $departments = Department::select('department_id', 'department_name', 'classification')->get();
 
         // 3. Focal Person Extras (Deployment Kit)
         $deploymentData = null;
@@ -60,13 +62,48 @@ class DashboardController extends Controller
             }
         }
 
-      // 4. Fetch Dynamic Top 10 Performance Data
+       // 4. Shared Date-Range Filter for Dashboard Queries (Syncs with monthly reset & filter dropdown)
+        $dateColumn = Schema::hasColumn('feedback', 'created_at') ? 'f.created_at' : 'f.submitted_at';
+        $specificDate = $request->get('specific_date');
+        $specificMonth = $request->get('specific_month');
+
+        $applyDateFilter = function ($query) use ($range, $specificDate, $specificMonth, $dateColumn) {
+            $now = Carbon::now();
+
+            if ($range === 'today') {
+                $query->whereDate($dateColumn, $now->toDateString());
+            } elseif ($range === 'week') {
+                $query->whereBetween($dateColumn, [
+                    $now->copy()->startOfWeek()->startOfDay(),
+                    $now->copy()->endOfWeek()->endOfDay(),
+                ]);
+            } elseif ($range === 'month') {
+                $query->whereYear($dateColumn, $now->year)
+                      ->whereMonth($dateColumn, $now->month);
+            } elseif ($range === 'year') {
+                $query->whereYear($dateColumn, $now->year);
+            } elseif ($range === 'custom_date' && !empty($specificDate)) {
+                $query->whereDate($dateColumn, $specificDate);
+            } elseif ($range === 'custom_month' && !empty($specificMonth)) {
+                try {
+                    $parsedMonth = Carbon::parse($specificMonth . '-01');
+                    $query->whereYear($dateColumn, $parsedMonth->year)
+                          ->whereMonth($dateColumn, $parsedMonth->month);
+                } catch (\Throwable $e) {
+                    $query->whereYear($dateColumn, $now->year)
+                          ->whereMonth($dateColumn, $now->month);
+                }
+            }
+            // If $range === 'all', no date constraint is applied
+        };
+
+        // 4a. Fetch Dynamic Top 10 Most Availed Services
         $serviceQuery = DB::table('feedback_answers as fa')
             ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
             ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')
             ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
             ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
-            ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id') // Added join
+            ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id')
             ->where('ff.field_label', 'LIKE', '%Service Availed%')
             ->whereNotNull('fa.answer_text')
             ->where('fa.answer_text', '!=', '');
@@ -74,24 +111,26 @@ class DashboardController extends Controller
         if ($selectedDepartment !== 'overall') {
             $serviceQuery->where('frm.department_id', $selectedDepartment);
         }
+        $applyDateFilter($serviceQuery);
 
         $servicePerformance = $serviceQuery->select(
                 'fa.answer_text as name',
-                DB::raw('COALESCE(d.department_name, "General") as department_name'), // Get Department Name
+                DB::raw('COALESCE(d.department_name, "General") as department_name'),
                 DB::raw('COUNT(fa.response_id) as total'),
                 DB::raw('COALESCE(ROUND(AVG(sa.confidence_score), 0), 0) as score')
             )
-            ->groupBy('fa.answer_text', 'd.department_name') // Group by both
+            ->groupBy('fa.answer_text', 'd.department_name')
             ->orderByDesc('total')
             ->limit(10)
             ->get();
 
+        // 4b. Fetch Dynamic Top 10 Service Providers
         $providerQuery = DB::table('feedback_answers as fa')
             ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
             ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')
             ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
             ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
-            ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id') // Added join
+            ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id')
             ->where('ff.field_label', 'LIKE', '%Name of Service Provider%')
             ->whereNotNull('fa.answer_text')
             ->where('fa.answer_text', '!=', '');
@@ -99,29 +138,93 @@ class DashboardController extends Controller
         if ($selectedDepartment !== 'overall') {
             $providerQuery->where('frm.department_id', $selectedDepartment);
         }
+        $applyDateFilter($providerQuery);
 
         $providerPerformance = $providerQuery->select(
                 'fa.answer_text as name',
-                DB::raw('COALESCE(d.department_name, "General") as department_name'), // Get Department Name
+                DB::raw('COALESCE(d.department_name, "General") as department_name'),
                 DB::raw('COUNT(fa.response_id) as total'),
                 DB::raw('COALESCE(ROUND(AVG(sa.confidence_score), 0), 0) as score')
             )
-            ->groupBy('fa.answer_text', 'd.department_name') // Group by both
+            ->groupBy('fa.answer_text', 'd.department_name')
             ->orderByDesc('total')
             ->limit(10)
             ->get();
-            
+
+        // 4c. Institutional Recommendation Data (Synced with Date Filter)
+        $recommendQuery = DB::table('feedback_answers as fa')
+            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+            ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
+            ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
+            ->where(function($q) {
+                $q->where('ff.field_label', 'LIKE', '%recommend CLSU%')
+                  ->orWhere('ff.field_label', 'LIKE', '%Overall, I would recommend%');
+            })
+            ->whereNotNull('fa.answer_text')
+            ->where('fa.answer_text', '!=', '');
+
+        if ($selectedDepartment !== 'overall') {
+            $recommendQuery->where('frm.department_id', $selectedDepartment);
+        }
+        $applyDateFilter($recommendQuery);
+
+        $recommendationData = $recommendQuery->select('fa.answer_text as name', DB::raw('COUNT(fa.response_id) as value'))
+            ->groupBy('fa.answer_text')
+            ->orderByDesc('value')
+            ->get();
+
+        // 4d. Harassment Keyword Text Analysis (Synced with Date Filter)
+        $harassmentQuery = DB::table('feedback_answers as fa')
+            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+            ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
+            ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
+            ->where(function($q) {
+                $q->where('ff.field_label', 'LIKE', '%detail the harassment%')
+                  ->orWhere('ff.field_label', 'LIKE', '%specify%')
+                  ->orWhere('ff.field_label', 'LIKE', '%experienced%');
+            })
+            ->whereNotNull('fa.answer_text')
+            ->where('fa.answer_text', '!=', '')
+            ->whereNotIn(DB::raw('LOWER(TRIM(fa.answer_text))'), ['yes', 'no', 'n/a', 'none', 'na']);
+
+        if ($selectedDepartment !== 'overall') {
+            $harassmentQuery->where('frm.department_id', $selectedDepartment);
+        }
+        $applyDateFilter($harassmentQuery);
+
+        // Fetch all raw harassment texts for the active date range
+        $harassmentTexts = $harassmentQuery->pluck('fa.answer_text')->toArray();
+        
+        // Analyze frequency (ignoring common stop words)
+        $stopWords = ['the', 'and', 'to', 'a', 'of', 'in', 'i', 'was', 'he', 'she', 'it', 'for', 'on', 'with', 'is', 'that', 'at', 'my', 'me', 'they', 'this', 'but', 'not', 'have', 'had', 'from', 'you', 'are', 'none', 'nothing'];
+        $wordCounts = [];
+        
+        foreach ($harassmentTexts as $text) {
+            $words = str_word_count(strtolower($text), 1);
+            foreach ($words as $word) {
+                if (strlen($word) > 3 && !in_array($word, $stopWords)) {
+                    $wordCounts[$word] = ($wordCounts[$word] ?? 0) + 1;
+                }
+            }
+        }
+        
+        arsort($wordCounts);
+        $harassmentWords = [];
+        $count = 0;
+        foreach ($wordCounts as $word => $freq) {
+            if ($count++ >= 10) break; // Limit to top 10 harassment words
+            $harassmentWords[] = ['word' => $word, 'count' => $freq];
+        }
+
+
         // 5. Assemble Metrics
         $metrics = [
-            // SuperAdmins see global stats; Focal Persons see limited general stats
             'total_users'         => $isSuperAdmin ? Account::getTotalCount() : 0,
             'total_departments'   => $isSuperGroup ? $departments->count() : 1,
             'active_forms'        => $isSuperGroup ? Form::getActiveCount() : ($activeForm ? 1 : 0),
             
-            // Allow Feedback Committee to populate the filter dropdown
             'departments'         => $isSuperGroup ? $departments : $departments->where('department_id', $departmentId)->values(),
 
-            // Scoped by the forced $selectedDepartment variable
             'total_feedback'      => Feedback::getFilteredCount($range, $selectedDepartment),
             'harassment_reports'  => Feedback::getHarassmentAlerts($range, $selectedDepartment),
             'trends'              => Feedback::getTrends($range, $selectedDepartment),
@@ -142,9 +245,12 @@ class DashboardController extends Controller
             'cc_metrics'          => Feedback::getCcMetrics($range, $selectedDepartment),
             'top_words'           => Feedback::getTopRecurringWords($range, $selectedDepartment),
             
-            // Replaced the mock arrays with the dynamic SQL variable queries
             'service_performance' => $servicePerformance,
-            'provider_performance'=> $providerPerformance
+            'provider_performance'=> $providerPerformance,
+            
+            // NEW METRICS ADDED HERE
+            'recommendation_data' => $recommendationData,
+            'harassment_words'    => $harassmentWords
         ];
 
         // 6. Return View

@@ -7,15 +7,18 @@ use App\Models\AdminRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use \App\Models\Feedback;
+use App\Models\AuditLog;
 use Inertia\Inertia;
 
 class AdminRequestController extends Controller
 {
-    public function index()
+  public function index(Request $request)
     {
-        // 1. Delegate the complex join and sorting query to the Model
+        $search = $request->query('search');
+        $status = $request->query('status');
+
         return Inertia::render('SuperAdmin/Requests', [
-            'requests' => AdminRequest::getRequestsWithAccountDetails()
+            'requests' => AdminRequest::getRequestsWithAccountDetails('SuperAdmin', 10, $search, $status),
         ]);
     }
 
@@ -32,8 +35,18 @@ class AdminRequestController extends Controller
         if ($request->status === 'Rejected' && $request->filled('remarks')) {
             $adminReq->remarks = $request->remarks;
         }
+$adminReq->save();
 
-        $adminReq->save();
+        // --- AUDIT TRAIL ---
+        $reqId = $adminReq->request_id ?? $id;
+        $remarksNote = ($request->status === 'Rejected' && $request->filled('remarks'))
+            ? " Remarks: {$request->remarks}"
+            : "";
+        AuditLog::logAction(
+            $request->status,
+            'Admin Requests',
+            "{$request->status} {$adminReq->request_type} request (ID: {$reqId}).{$remarksNote}"
+        );
 
         // Dynamic success message based on the status
         $message = $request->status === 'Approved' 
@@ -50,7 +63,7 @@ class AdminRequestController extends Controller
 
         // 1. Bulk "Mark all as done" (Clears BOTH tables)
         if ($id == 0 || $request->input('clear_all')) {
-           AdminRequest::clearAllNotifications($role, auth()->user()->user_id);
+            AdminRequest::clearAllNotifications($role, auth()->user()->user_id);
             Feedback::clearAllHarassmentNotifications($role);
             return redirect()->back();
         }
@@ -81,6 +94,14 @@ class AdminRequestController extends Controller
             } else {
                 $adminReq->is_cleared_by_committee = true;
             }
+
+            // --- AUDIT TRAIL (Only log when explicitly cleared from the Requests table, not notification bell dismissal) ---
+            $reqId = $adminReq->request_id ?? $id;
+            AuditLog::logAction(
+                'Deleted',
+                'Admin Requests',
+                "Cleared resolved {$adminReq->request_type} request from history log (ID: {$reqId})."
+            );
         }
         
         $adminReq->save();

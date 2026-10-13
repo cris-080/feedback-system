@@ -224,7 +224,7 @@ class FormField extends Model
                 'is_required' => true,
                 'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
-            [
+           [
                 'field_id' => 'temp_18',
                 'step_number' => 3,
                 'field_label' => 'SQD4: I easily found information about my transaction from the office or its website.',
@@ -235,16 +235,15 @@ class FormField extends Model
             [
                 'field_id' => 'temp_19',
                 'step_number' => 3,
-                'field_label' => "SQD5: I paid a reasonable amount of fees for my transaction.",
+                'field_label' => 'SQD5: I paid a reasonable amount of fees for my transaction.',
                 'input_type' => 'radio',
                 'is_required' => true,
                 'options' => ['1', '2', '3', '4', '5', 'N/A']
-
             ],
             [
                 'field_id' => 'temp_20',
                 'step_number' => 3,
-                'field_label' => "SQD6: I feel the office was fair to everyone, or “walang palakasan” during my transaction.",
+                'field_label' => 'SQD6: I feel the office was fair to everyone, or “walang palakasan” during my transaction.',
                 'input_type' => 'radio',
                 'is_required' => true,
                 'options' => ['1', '2', '3', '4', '5', 'N/A']
@@ -294,8 +293,16 @@ class FormField extends Model
                 'is_required' => false, 
                 'options' => []
             ],
-            [
+             [
                 'field_id' => 'temp_26',
+                'step_number' => 4,
+                'field_label' => 'Overall, I would recommend CLSU to my peers.',
+                'input_type' => 'radio',
+                'is_required' => true, 
+                'options' => ['Yes','No']
+            ],
+            [
+                'field_id' => 'temp_27',
                 'step_number' => 4,
                 'field_label' => 'Suggestions on how we can further improve our services:',
                 'input_type' => 'text',

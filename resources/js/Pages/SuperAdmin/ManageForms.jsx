@@ -277,7 +277,7 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
                                                     
                                                     {/* EVERYONE (SuperAdmin & Feedback Committee) gets the Preview Button */}
-                                                    <a href={`/superAdmin/forms/${form.form_id}/preview`} 
+                                                    <a href={isSuperAdmin ? route('superadmin.forms.preview', form.form_id) : route('feedback_committee.forms.preview', form.form_id)} 
                                                         target="_blank" 
                                                         rel="noreferrer"
                                                         className="w-8 h-8 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded inline-flex justify-center items-center transition" 
@@ -305,7 +305,7 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                                                                 <i className="fa-solid fa-copy"></i>
                                                             </button>
                                                                                                                 
-                                                            <Link href={`/superAdmin/forms/${form.form_id}/edit`} 
+                                                            <Link href={route('superadmin.forms.edit', form.form_id)} 
                                                                 className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit">
                                                                 <i className="fa-solid fa-pen"></i>
                                                             </Link>

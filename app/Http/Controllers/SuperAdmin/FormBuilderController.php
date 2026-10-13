@@ -10,6 +10,7 @@ use App\Models\DepartmentService;
 use App\Models\ServiceProvider; 
 use App\Models\FormField;
 use App\Models\Form;
+use App\Models\AuditLog;
 use Inertia\Inertia;
 
 class FormBuilderController extends Controller
@@ -77,9 +78,11 @@ class FormBuilderController extends Controller
         // Delegate Database Transaction to the Model
         Form::storeDynamicForm($validated);
 
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Created', 'Form Builder', "Created a new {$validated['form_type']} form blueprint: {$validated['title']}.");
+
         return to_route('superadmin.forms.index')->with('success', 'Form blueprint created successfully!');
     }
-
 
     /**
      * Display the edit form builder for an existing form.
@@ -134,6 +137,9 @@ class FormBuilderController extends Controller
 
         // Delegate Versioning Logic to the Model
         Form::createNewFormVersion($id, $validated);
+
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Form Builder', "Published a new version for form (ID: {$id}): {$validated['title']}.");
 
         return to_route('superadmin.forms.index')->with('success', 'New form version published successfully!');
     }

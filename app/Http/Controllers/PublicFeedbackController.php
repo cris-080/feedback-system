@@ -104,33 +104,36 @@ class PublicFeedbackController extends Controller
      */
    public function store(Request $request)
     {
-        // 1. Validate Request
+        // 1. Validate Request (Added is_kiosk and office_pin)
         $validated = $request->validate([
             'form_id'          => 'required|integer|exists:forms,form_id',
             'department_id'    => 'required|integer|exists:department,department_id',
             'email_address'    => 'required|email|max:255',
             'transaction_date' => 'required|date|before_or_equal:today',
             'answers'          => 'required|array',
+            'is_kiosk'         => 'required|boolean',
+            'office_pin'       => 'nullable|string',
         ]);
 
         // --- SPAM PREVENTION 1: IP Rate Limiting ---
-        // Prevent an IP from submitting more than 5 forms per hour to stop bots or fake email spam
         if (RateLimiter::tooManyAttempts('feedback-submission:' . $request->ip(), 5)) {
             return back()->withErrors(['spam' => 'Too many submissions from this device. Please try again later.']);
         }
-        RateLimiter::hit('feedback-submission:' . $request->ip(), 3600); // Lockout for 1 hour after 5 hits
+        RateLimiter::hit('feedback-submission:' . $request->ip(), 3600); 
 
-        // --- SPAM PREVENTION 2: Email & Department Daily Limit ---
-        // Prevent the exact same email from evaluating the exact same department multiple times in one day
-        $alreadySubmittedToday = Feedback::where('email_address', $validated['email_address'])
-            ->where('department_id', $validated['department_id'])
-            ->whereDate('created_at', \Carbon\Carbon::today())
-            ->exists();
-
-        if ($alreadySubmittedToday) {
-            return back()->withErrors(['email_address' => 'You have already submitted an evaluation for this department today.']);
+        // --- SPAM PREVENTION 2: Secure QR PIN Check (The Kiosk Bypass) ---
+        // If the user scanned a QR code (not a kiosk), they MUST provide the correct Office PIN
+        if (!$validated['is_kiosk']) {
+            $department = \App\Models\Department::find($validated['department_id']);
+            
+            // NOTE: Once you add a 'daily_pin' column to your database, it will use that. 
+            // Until then, it safely defaults to '1234' so your system doesn't break today.
+            $actualPin = $department->daily_pin ?? '1234'; 
+            
+            if (trim($validated['office_pin']) !== (string) $actualPin) {
+                return back()->withErrors(['office_pin' => 'Invalid Office PIN. Please check the 4-digit code displayed at the counter.']);
+            }
         }
-
         // 2. Identify selected services for Payload Splitting
         $servicesAvailed = [];
         // ... rest of your existing code

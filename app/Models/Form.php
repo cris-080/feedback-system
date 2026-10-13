@@ -52,12 +52,23 @@ class Form extends Model
         $query->whereIn('status', ['Archived', 'Archived', 'Deleted']);
     }
 
-    public function scopeSearch($query, $search)
+   public function scopeSearch($query, $search)
     {
-        if ($search) {
-            $query->where(function($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('form_id', 'like', "%{$search}%");
+        if (!empty($search)) {
+            $trimmed = trim($search);
+            $like = '%' . $trimmed . '%';
+
+            $query->where(function ($q) use ($like) {
+                // Search Parent Form Table
+                $q->where('forms.title', 'LIKE', $like)
+                  ->orWhere('forms.form_id', 'LIKE', $like)
+                  ->orWhere('forms.status', 'LIKE', $like)
+                  ->orWhere('forms.form_type', 'LIKE', $like)
+                  
+                  // Search Associated Department Name
+                  ->orWhereHas('department', function ($sub) use ($like) {
+                      $sub->where('department_name', 'LIKE', $like);
+                  });
             });
         }
     }

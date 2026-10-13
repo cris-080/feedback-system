@@ -12,8 +12,9 @@ use Illuminate\Validation\Rule;
 use App\Models\DepartmentPosition;
 use App\Models\Account;
 use App\Models\Form;
+use App\Models\AuditLog;
 use Illuminate\Support\Facades\DB; 
-use Inertia\Inertia;
+use Inertia\Inertia;;
 
 class DepartmentController extends Controller
 {    
@@ -45,6 +46,7 @@ class DepartmentController extends Controller
         $validated = $request->validate([
             'name'              => 'required|string|max:255|unique:department,department_name',
             'description'       => 'nullable|string',
+            'classification'    => 'required|in:CC,Non-CC',
             'initial_services'  => 'nullable|string',
             'initial_positions' => 'nullable|string',
             'initial_providers' => 'nullable|string',
@@ -52,21 +54,33 @@ class DepartmentController extends Controller
 
         // Delegate entirely to the Fat Model
         Department::createDepartment($validated);
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Created', 'Departments', "Created new department: {$validated['name']}.");
 
         return back()->with('success', 'Department successfully created.');
     }
 
     public function update(UpdateDepartmentRequest $request, $id)
     {
+        // Add extra validation here in case it's not in your UpdateDepartmentRequest yet
+        $extraValidated = $request->validate([
+            'classification' => 'required|in:CC,Non-CC'
+        ]);
+
         $department = Department::findOrFail($id);
         
         $payload = [
             'department_name' => trim($request->validated('name')),
             'description'     => trim($request->validated('description') ?? ''),
+            'classification'  => $extraValidated['classification'],
         ];
 
         // Delegate to Fat Model
         $department->updateDepartment($payload);
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Updated department: {$payload['department_name']}.");
 
         return back()->with('success', 'Department successfully updated.');
     }
@@ -77,10 +91,14 @@ class DepartmentController extends Controller
     public function destroy($id)
     {
         $department = Department::findOrFail($id);
+        $departmentName = $department->department_name;
 
         // Soft delete the department without nullifying forms/accounts.
         // This preserves historical data relationships.
         $department->delete();
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Archived', 'Departments', "Archived department: {$departmentName}.");
 
         return back()->with('success', 'Department successfully archived.');
     }
@@ -92,6 +110,9 @@ class DepartmentController extends Controller
     {
         $department = Department::onlyTrashed()->findOrFail($id);
         $department->restore();
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Restored', 'Departments', "Restored archived department: {$department->department_name}.");
 
         return back()->with('success', 'Department restored successfully.');
     }
@@ -102,6 +123,7 @@ class DepartmentController extends Controller
     public function forceDelete($id)
     {
         $department = Department::onlyTrashed()->findOrFail($id);
+        $departmentName = $department->department_name;
 
         // Perform strict cleanup only when permanently destroying data
         DepartmentService::where('department_id', $id)->delete();
@@ -109,11 +131,14 @@ class DepartmentController extends Controller
         Form::where('department_id', $id)->update(['department_id' => null]);
 
         $department->forceDelete();
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Deleted', 'Departments', "Permanently deleted department: {$departmentName} and nullified related accounts/forms.");
 
         return back()->with('success', 'Department permanently deleted.');
     }
 
-    public function addService(Request $request, $departmentId)
+   public function addService(Request $request, $departmentId)
     {
         $request->validate([
             'service_name' => [
@@ -127,6 +152,9 @@ class DepartmentController extends Controller
         $department->services()->create([
             'service_name' => trim($request->service_name)
         ]);
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Added service '{$request->service_name}' to department: {$department->department_name}.");
 
         return back()->with('success', 'Service added to department.');
     }
@@ -134,7 +162,13 @@ class DepartmentController extends Controller
     public function removeService($id) 
     {
         $service = DepartmentService::findOrFail($id);
+        $serviceName = $service->service_name;
+        $departmentName = Department::find($service->department_id)->department_name ?? 'Unknown';
+        
         $service->delete();
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Removed service '{$serviceName}' from department: {$departmentName}.");
 
         return back()->with('success', 'Service successfully removed.');
     }
@@ -153,6 +187,11 @@ class DepartmentController extends Controller
             'department_id' => $departmentId,
             'position_name' => trim($validated['position_name']),
         ]);
+        
+        $departmentName = Department::find($departmentId)->department_name ?? 'Unknown';
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Added position '{$validated['position_name']}' to department: {$departmentName}.");
 
         return back()->with('success', 'Position added successfully.');
     }
@@ -161,7 +200,13 @@ class DepartmentController extends Controller
     public function destroyPosition($positionId)
     {
         $position = DepartmentPosition::findOrFail($positionId);
+        $positionName = $position->position_name;
+        $departmentName = Department::find($position->department_id)->department_name ?? 'Unknown';
+        
         $position->delete();
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Removed position '{$positionName}' from department: {$departmentName}.");
 
         return back()->with('success', 'Position removed successfully.');
     }
@@ -186,6 +231,10 @@ class DepartmentController extends Controller
             $validated['department_ids'], 
             $validated['position_name']
         );
+        
+        // --- AUDIT TRAIL ---
+        $deptCount = count($validated['department_ids']);
+        AuditLog::logAction('Updated', 'Departments', "Bulk assigned position '{$validated['position_name']}' to {$deptCount} departments.");
 
         // 3. Return Response
         return back()->with('success', 'Position successfully bulk-added to selected departments.');
@@ -206,6 +255,11 @@ class DepartmentController extends Controller
             'name'          => trim($validated['name']),
             'position'      => trim($validated['position'] ?? ''),
         ]);
+        
+        $departmentName = Department::find($departmentId)->department_name ?? 'Unknown';
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Added service provider '{$validated['name']}' to department: {$departmentName}.");
 
         return back()->with('success', 'Service provider added successfully.');
     }
@@ -213,7 +267,13 @@ class DepartmentController extends Controller
     public function destroyProvider($providerId)
     {
         $provider = ServiceProvider::findOrFail($providerId);
+        $providerName = $provider->name;
+        $departmentName = Department::find($provider->department_id)->department_name ?? 'Unknown';
+        
         $provider->delete();
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Departments', "Removed service provider '{$providerName}' from department: {$departmentName}.");
 
         return back()->with('success', 'Service provider removed successfully.');
     }

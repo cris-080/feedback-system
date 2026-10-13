@@ -22,9 +22,9 @@ export const StepOne = ({ form, stepFields, data, setData, handleAnswerChange, d
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:gap-6">
                 
-                {/* LEFT COLUMN: Respondent Demographics & Email */}
+                {/* TOP SECTION: Respondent Demographics & Email */}
                 <div className="bg-gray-50/70 rounded-xl p-4 border border-gray-200/80 space-y-3">
                     <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#1E6031] border-b border-gray-200 pb-2">Respondent Demographics</h4>
                     <div className="grid grid-cols-1 gap-3">
@@ -53,7 +53,7 @@ export const StepOne = ({ form, stepFields, data, setData, handleAnswerChange, d
                     </div>
                 </div>
 
-                {/* RIGHT COLUMN: Office & Transaction Details */}
+                {/* BOTTOM SECTION: Office & Transaction Details */}
                 <div className="bg-gray-50/70 rounded-xl p-4 border border-gray-200/80 space-y-3">
                     <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#1E6031] border-b border-gray-200 pb-2">Office & Transaction Details</h4>
                     <div className="grid grid-cols-1 gap-3">
@@ -109,71 +109,172 @@ export const StepOne = ({ form, stepFields, data, setData, handleAnswerChange, d
         </div>
     );
 
-  export const StepThree = ({ stepFields, data, handleAnswerChange }) => (
-        // 1. ADDED: flex flex-col flex-1 min-h-0 h-full
-        <div className="animate-fade-in-up pr-1 flex flex-col flex-1 min-h-0 h-full">
-            
-            {/* 2. ADDED: shrink-0 so the title never gets squished */}
-            <div className="border-b border-gray-200 pb-2.5 mb-4 shrink-0">
-                <h3 className="text-2xl font-black text-gray-900 ">Service Quality Dimensions (SQD)</h3>
-                <p className="text-sm text-gray-500 mt-1">Rate each statement from Strongly Disagree (1) to Strongly Agree (5).</p>
+  export const StepThree = ({ stepFields, data, handleAnswerChange }) => {
+        // Separate the Overall Satisfaction question from the standard SQD matrix
+        const isOverallQuestion = (label) => {
+            const lower = label.toLowerCase();
+            return lower.includes('educational experience') || lower.includes('overall, how would you rate');
+        };
+
+        const matrixFields = stepFields.filter(f => !isOverallQuestion(f.field_label));
+        const overallField = stepFields.find(f => isOverallQuestion(f.field_label));
+
+        const rawOverallVal = overallField ? (data.answers[overallField.field_id] || 'N/A') : 'N/A';
+        const currentStars = parseInt(rawOverallVal, 10) || 0;
+
+        const handleStarClick = (val) => {
+            if (!overallField) return;
+            const nextVal = currentStars === val ? 'N/A' : String(val);
+            handleAnswerChange(overallField.field_id, nextVal);
+        };
+
+        const ratingLabels = {
+            1: '1 - Poor (Lowest)',
+            2: '2 - Fair',
+            3: '3 - Satisfactory',
+            4: '4 - Very Good',
+            5: '5 - Excellent (Highest)'
+        };
+
+        const sqdOptionLabels = {
+            '1': 'Strongly Disagree',
+            '2': 'Disagree',
+            '3': 'Neutral',
+            '4': 'Agree',
+            '5': 'Strongly Agree',
+            'N/A': 'Not Applicable'
+        };
+
+        return (
+            <div className="animate-fade-in-up pr-1 space-y-8">
+                
+                {/* 1. PRIMARY SQD SEGMENTED CARDS */}
+                <div>
+                    <div className="border-b border-gray-200 pb-2.5 mb-5">
+                        <h3 className="text-2xl font-black text-gray-900">Service Quality Dimensions (SQD)</h3>
+                        <p className="text-sm text-gray-500 mt-1">Rate each statement from Strongly Disagree (1) to Strongly Agree (5).</p>
+                    </div>
+
+                    <div className="space-y-4">
+                        {matrixFields.map((field) => {
+                            const currentAnswer = data.answers[field.field_id] || '';
+                            const optionsList = field.options && field.options.length > 0 ? field.options : ['1', '2', '3', '4', '5', 'N/A'];
+
+                            return (
+                                <div key={field.field_id} className="bg-gray-50/80 p-5 sm:p-6 rounded-2xl border border-gray-200/90 shadow-2xs transition-all hover:border-emerald-300">
+                                    <div className="flex items-start justify-between gap-3 mb-4">
+                                        <p className="text-sm sm:text-base font-bold text-gray-900 leading-snug">
+                                            {field.field_label} {field.is_required && <span className="text-red-500">*</span>}
+                                        </p>
+                                        {currentAnswer ? (
+                                            <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-emerald-100 text-[#1E6031] border border-emerald-200 hidden sm:inline-flex items-center gap-1">
+                                                <i className="fa-solid fa-check text-xs"></i> Answered
+                                            </span>
+                                        ) : (
+                                            <span className="shrink-0 text-[11px] font-semibold text-gray-400 hidden sm:inline-block">
+                                                Required
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Segmented Chips */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5">
+                                        {optionsList.map((opt, idx) => {
+                                            const isSelected = currentAnswer === opt;
+                                            const labelDesc = sqdOptionLabels[opt] || opt;
+
+                                            return (
+                                                <label
+                                                    key={idx}
+                                                    className={`relative flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all cursor-pointer select-none text-center ${
+                                                        isSelected
+                                                            ? 'bg-[#1E6031] text-white border-[#1E6031] shadow-md scale-[1.02]'
+                                                            : 'bg-white text-gray-700 border-gray-200 hover:border-emerald-400 hover:bg-emerald-50/40 shadow-2xs'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name={`field_${field.field_id}`}
+                                                        value={opt}
+                                                        checked={isSelected}
+                                                        onChange={() => handleAnswerChange(field.field_id, opt)}
+                                                        className="sr-only"
+                                                        required={field.is_required}
+                                                    />
+                                                    <span className={`text-base sm:text-lg font-black leading-none mb-1 ${isSelected ? 'text-[#FFD700]' : 'text-gray-900'}`}>
+                                                        {opt}
+                                                    </span>
+                                                    <span className={`text-[11px] sm:text-xs font-semibold leading-tight line-clamp-1 ${isSelected ? 'text-white/95' : 'text-gray-500'}`}>
+                                                        {labelDesc}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Active Selection Feedback Badge */}
+                                    {currentAnswer && (
+                                        <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                                            <i className="fa-solid fa-circle-check text-emerald-600"></i>
+                                            <span>Selected: {sqdOptionLabels[currentAnswer] || currentAnswer} ({currentAnswer})</span>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* 2. SEPARATE OVERALL STAR RATING CARD */}
+                {overallField && (
+                    <div className="bg-gradient-to-br from-emerald-50/90 to-amber-50/50 p-6 sm:p-8 rounded-2xl border-2 border-emerald-200/80 shadow-sm flex flex-col items-center text-center">
+                        <span className="text-[11px] font-black uppercase tracking-widest text-[#1E6031] bg-white px-3 py-1 rounded-full border border-emerald-200 mb-3 shadow-xs">
+                            Overall Assessment
+                        </span>
+
+                        <h4 className="text-lg sm:text-xl font-black text-gray-900 max-w-2xl leading-snug">
+                            {overallField.field_label} {overallField.is_required && <span className="text-red-500">*</span>}
+                        </h4>
+                        
+                       
+                        {/* Interactive Star Buttons */}
+                        <div className="flex items-center gap-2 sm:gap-4 my-2">
+                            {[1, 2, 3, 4, 5].map((star) => {
+                                const isFilled = currentStars >= star;
+                                return (
+                                    <button
+                                        type="button"
+                                        key={star}
+                                        onClick={() => handleStarClick(star)}
+                                        className="p-1 sm:p-2 text-3xl sm:text-4xl transition-transform hover:scale-125 active:scale-95 focus:outline-hidden cursor-pointer"
+                                        title={`Rate ${star} Star${star > 1 ? 's' : ''}`}
+                                    >
+                                        <i className={`fa-star ${isFilled ? 'fa-solid text-amber-400 drop-shadow-sm' : 'fa-regular text-gray-300 hover:text-amber-200'}`}></i>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Active Selection Badge */}
+                        <div className="mt-3">
+                            {currentStars > 0 ? (
+                                <span className="inline-flex items-center gap-2 text-sm font-bold text-emerald-800 bg-white px-4 py-1.5 rounded-full border border-emerald-300 shadow-xs">
+                                    <i className="fa-solid fa-circle-check text-emerald-600"></i>
+                                    {ratingLabels[currentStars]}
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 bg-white/70 px-3 py-1 rounded-full border border-gray-200">
+                                    <i className="fa-solid fa-circle-minus text-gray-300"></i>
+                                    No rating selected (N/A)
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+
             </div>
-            
-            {/* 3. CHANGED: Removed max-h-[vh]. Used flex-1 so it dynamically claims 100% of remaining space! */}
-            <div className="overflow-auto flex-1 rounded-xl border border-gray-200 shadow-sm bg-white relative">
-                <table className="min-w-full divide-y divide-gray-200 table-fixed">
-                    <thead className="bg-gray-100 sticky top-0 z-20 shadow-sm outline outline-1 outline-gray-200">
-                        <tr>
-                            <th className="px-3 sm:px-5 py-3.5 text-left text-sm font-bold text-gray-800 uppercase tracking-wider w-2/5">
-                                Evaluation Statements
-                            </th>
-                            
-                            <th className="px-1 sm:px-2 py-3.5 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase w-[10%] break-words">
-                                Strongly Disagree<br/><span className="text-gray-500 font-normal">(1)</span>
-                            </th>
-                            <th className="px-1 sm:px-2 py-3.5 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase w-[10%] break-words">
-                                Disagree<br/><span className="text-gray-500 font-normal">(2)</span>
-                            </th>
-                            <th className="px-1 sm:px-2 py-3.5 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase w-[10%] break-words">
-                                Neutral<br/><span className="text-gray-500 font-normal">(3)</span>
-                            </th>
-                            <th className="px-1 sm:px-2 py-3.5 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase w-[10%] break-words">
-                                Agree<br/><span className="text-gray-500 font-normal">(4)</span>
-                            </th>
-                            <th className="px-1 sm:px-2 py-3.5 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase w-[10%] break-words">
-                                Strongly Agree<br/><span className="text-gray-500 font-normal">(5)</span>
-                            </th>
-                            <th className="px-1 sm:px-2 py-3.5 text-center text-[10px] sm:text-xs font-bold text-gray-800 uppercase w-[10%] break-words">
-                                N/A
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-100">
-                        {stepFields.map(field => (
-                            <tr key={field.field_id} className="hover:bg-emerald-50/40 transition-colors">
-                                <td className="px-3 sm:px-5 py-4 text-xs sm:text-sm font-medium text-gray-900 border-r border-gray-100 break-words">
-                                    {field.field_label} {field.is_required && <span className="text-red-500">*</span>}
-                                </td>
-                                {field.options.map((opt, idx) => (
-                                    <td key={idx} className="px-1 sm:px-2 py-4 text-center border-r border-gray-100 last:border-0 hover:bg-emerald-100/40 transition">
-                                        <input 
-                                            type="radio" 
-                                            name={`field_${field.field_id}`} 
-                                            value={opt} 
-                                            checked={data.answers[field.field_id] === opt} 
-                                            onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} 
-                                            className="w-4 h-4 text-[#1E6031] focus:ring-[#1E6031] border-gray-400 cursor-pointer" 
-                                            required={field.is_required} 
-                                        />
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+        );
+    };
 
    export const StepFour = ({ stepFields, data, setData, handleAnswerChange, departmentName, serviceProviders, ph_regions, steps }) => (
         <div className="space-y-5 animate-fade-in-up">

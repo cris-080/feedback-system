@@ -33,6 +33,9 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         const filterRef = useRef(null);
         const [isRefreshing, setIsRefreshing] = useState(false);
         const [timeRange, setTimeRange] = useState('30d');
+        
+        // NEW: Tab state for text analysis
+        const [complaintTab, setComplaintTab] = useState('complaints'); // 'complaints' | 'harassment'
 
         useEffect(() => {
             setTempDept(currentDept);
@@ -49,7 +52,11 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         const transactionTypeData = metrics?.transaction_types || [];
         const regionData = metrics?.region_demographics || []; 
         const ccMetrics = metrics?.cc_metrics || { awareness_rate: 0, visibility_rate: 0, helpfulness_rate: 0, total_responses: 0 };
+        
         const topWords = metrics?.top_words || [];
+        const harassmentWords = metrics?.harassment_words || []; // NEW: Harassment keywords
+        const recommendData = metrics?.recommendation_data || []; // NEW: Recommendation stats
+        
         const departmentData = metrics?.department_scores && metrics.department_scores.length > 0 
             ? metrics.department_scores 
             : [];
@@ -133,8 +140,16 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         }, [trendData, timeRange, showLocalTabs]);
 
         // WIDGET VISIBILITY LOGIC
-        // SuperAdmin sees CC. Focal person sees CC if they have responses. Feedback Committee NEVER sees CC.
-       const showCC = isSuperAdmin || (!isSuperGroup && ccMetrics.total_responses > 0);
+        let showCC = false;
+        if (isFeedbackCommittee) {
+            showCC = false; // FC never sees this
+        } else if (currentDept === 'overall') {
+            showCC = true; // SuperAdmin viewing all departments
+        } else {
+            // View specific department or Focal Person view
+            const activeDept = deptArray.find(d => String(d.department_id) === String(currentDept)) || deptArray[0];
+            showCC = activeDept?.classification !== 'Non-CC';
+        }
 
     return (
         <SuperAdminLayout headerTitle={dashboardTitle}>
@@ -794,7 +809,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                     </div>
 
                                     {/* Sex Breakdown Donut */}
-                                    <div>
+                                    <div className="mb-6">
                                         <span className="text-xs font-bold uppercase tracking-wider text-gray-500 block mb-3">Sex Breakdown</span>
                                         {sexData.length === 0 ? (
                                             <p className="text-xs text-gray-400 italic py-2">No data recorded</p>
@@ -839,6 +854,54 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                             })()
                                         )}
                                     </div>
+
+                                    {/* --- NEW: Institutional Recommendation Donut --- */}
+                                    <div>
+                                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500 block mb-3">Institutional Recommendation</span>
+                                        {recommendData.length === 0 ? (
+                                            <p className="text-xs text-gray-400 italic py-2">No data recorded</p>
+                                        ) : (
+                                            (() => {
+                                                const recColorMap = { yes: '#10b981', no: '#ef4444', maybe: '#f59e0b' };
+                                                const recColorClasses = { yes: 'bg-emerald-500', no: 'bg-red-500', maybe: 'bg-amber-500' };
+                                                const totalRec = recommendData.reduce((acc, curr) => acc + (Number(curr.value) || 0), 0) || 1;
+
+                                                return (
+                                                    <div className="flex items-center space-x-4">
+                                                        <div className="w-20 h-20 relative flex-shrink-0">
+                                                            <ResponsiveContainer width="100%" height="100%">
+                                                                <PieChart>
+                                                                    <Pie data={recommendData} cx="50%" cy="50%" innerRadius={24} outerRadius={35} paddingAngle={3} dataKey="value" stroke="none">
+                                                                        {recommendData.map((entry, index) => <Cell key={`rec-cell-${index}`} fill={recColorMap[String(entry.name).toLowerCase()] || '#3b82f6'} />)}
+                                                                    </Pie>
+                                                                    <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 4px -1px rgb(0 0 0 / 0.1)' }} />
+                                                                </PieChart>
+                                                            </ResponsiveContainer>
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                                                <span className="text-xs font-bold text-gray-800">{totalRec}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex-1 space-y-1">
+                                                            {recommendData.map((item, index) => {
+                                                                const percent = Math.round(((Number(item.value) || 0) / totalRec) * 100);
+                                                                return (
+                                                                    <div key={index} className="flex items-center justify-between text-xs">
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <span className={`w-2.5 h-2.5 rounded-full ${recColorClasses[String(item.name).toLowerCase()] || 'bg-blue-500'} inline-block`}></span>
+                                                                            <span className="text-gray-700 font-medium">{item.name}</span>
+                                                                        </div>
+                                                                        <span className="text-gray-500 font-semibold">{item.value} ({percent}%)</span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()
+                                        )}
+                                    </div>
+
                                 </div>
                             </div>
 
@@ -1094,54 +1157,82 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                 </div>
                             )}
 
-                            {/* Recurring Complaints gracefully shifts layout if CC Compliance is hidden */}
+                            {/* --- TEXT ANALYSIS & ISSUES TABS --- */}
                             <div className={`bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 flex flex-col justify-between transition duration-200 hover:shadow-md ${showCC ? '' : 'lg:col-span-3'}`}>
                                 <div>
-                                    <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center justify-between mb-4">
                                         <div className="flex items-center gap-2">
                                             <i className="fa-solid fa-triangle-exclamation text-rose-500 text-sm"></i>
-                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Recurring Complaints</h2>
+                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Issues & Alerts</h2>
                                         </div>
                                         <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                                            Issues Log
+                                            Text Analysis
                                         </span>
                                     </div>
-                                    <p className="text-xs text-gray-500 mb-5">Most frequent pain points in negative & constructive feedback</p>
 
-                                    {topWords.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-                                            <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
-                                                <i className="fa-solid fa-check-double text-emerald-500 text-lg"></i>
+                                    {/* NEW: Toggles for Complaints / Harassment */}
+                                    <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
+                                        <button 
+                                            onClick={() => setComplaintTab('complaints')} 
+                                            className={`flex-1 text-[11px] font-bold py-1.5 rounded-md transition ${complaintTab === 'complaints' ? 'bg-white text-rose-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                        >
+                                            Recurring Complaints
+                                        </button>
+                                        <button 
+                                            onClick={() => setComplaintTab('harassment')} 
+                                            className={`flex-1 text-[11px] font-bold py-1.5 rounded-md transition ${complaintTab === 'harassment' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                        >
+                                            Harassment Words
+                                        </button>
+                                    </div>
+
+                                    <p className="text-xs text-gray-500 mb-5">
+                                        {complaintTab === 'complaints' 
+                                            ? 'Most frequent pain points in negative & constructive feedback' 
+                                            : 'Keywords flagged from qualitative harassment reports'}
+                                    </p>
+
+                                    {/* Dynamic rendering based on selected tab */}
+                                    {(complaintTab === 'complaints' ? topWords : harassmentWords).length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-6 text-gray-400">
+                                            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                                                <i className="fa-solid fa-check-double text-emerald-500 text-base"></i>
                                             </div>
-                                            <p className="text-xs font-medium text-gray-600">No recurring complaints detected</p>
-                                            <p className="text-[11px] text-gray-400 mt-0.5">All transactions within this period meet standards.</p>
+                                            <p className="text-xs font-medium text-gray-600">No keywords detected</p>
                                         </div>
                                     ) : (
                                         <div className="flex flex-wrap gap-2 pt-1">
-                                            {topWords.map((item, idx) => {
-    // Determine correct datastore route based on role
-   const feedbackRoute = isSuperGroup ? 'superadmin.feedbacks.index' : 'focalperson.feedbacks.index';
-    return (
-        <Link 
-            key={idx} 
-            href={route(feedbackRoute, { search: item.word })}
-            className="inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg border shadow-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:scale-105 active:scale-95 transition cursor-pointer"
-            title={`View feedback containing "${item.word}"`}
-        >
-            <i className="fa-regular fa-circle-dot mr-1.5 text-[8px] text-rose-500"></i>
-            {item.word}
-            <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-white text-rose-800 rounded-md font-bold shadow-xs border border-rose-100">
-                {item.count}
-            </span>
-        </Link>
-    );
-})}
+                                            {(complaintTab === 'complaints' ? topWords : harassmentWords).map((item, idx) => {
+                                                const feedbackRoute = isSuperGroup ? 'superadmin.feedbacks.index' : 'focalperson.feedbacks.index';
+                                                
+                                                // Dynamic styles based on active tab
+                                                const isComplaint = complaintTab === 'complaints';
+                                                
+                                                return (
+                                                    <Link 
+                                                        key={idx} 
+                                                        href={route(feedbackRoute, { search: item.word })}
+                                                        className={`inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg border shadow-xs transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                                            isComplaint 
+                                                                ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
+                                                                : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                                                        }`}
+                                                        title={`View feedback containing "${item.word}"`}
+                                                    >
+                                                        <i className={`fa-regular fa-circle-dot mr-1.5 text-[8px] ${isComplaint ? 'text-rose-500' : 'text-red-500'}`}></i>
+                                                        {item.word}
+                                                        <span className={`ml-2 px-1.5 py-0.5 text-[10px] bg-white rounded-md font-bold shadow-xs border ${isComplaint ? 'text-rose-800 border-rose-100' : 'text-red-800 border-red-100'}`}>
+                                                            {item.count}
+                                                        </span>
+                                                    </Link>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
 
                                 <p className="text-[11px] text-gray-400 mt-4 border-t border-gray-100 pt-3 flex items-center justify-between">
-                                    <span>Filtered from Negative / Harassment remarks</span>
+                                    <span>Filtered from {complaintTab === 'complaints' ? 'Negative remarks' : 'Harassment reports'}</span>
                                     <i className="fa-solid fa-shield-halved text-gray-300"></i>
                                 </p>
                             </div>

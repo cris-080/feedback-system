@@ -3,88 +3,104 @@
 namespace App\Http\Controllers\FeedbackCommittee;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use App\Models\AdminRequest;
-use \App\Models\Feedback;
+use Illuminate\Http\Request;
+use App\Models\AuditLog;
 use Inertia\Inertia;
 
 class FeedbackCommitteeRequestController extends Controller
 {
-    // Fetches ONLY the personal requests made by the logged-in Feedback Committee member (Paginated)
-    public function index()
+   public function index(Request $request)
     {
-        // Calling the Fat Model method
-        $requests = AdminRequest::getPersonalRequests(Auth::id(), 10);
+        $search = $request->query('search');
+        $status = $request->query('status');
 
         return Inertia::render('FeedbackCommittee/Requests', [
-            'requests' => $requests
+            // Inbox: Requests sent TO the Feedback Committee
+            'inboxRequests' => AdminRequest::getRequestsWithAccountDetails('Feedback Committee', 10, $search, $status),
+            
+            // Outbox: Requests the Committee sent TO the SuperAdmin
+            'myRequests'    => AdminRequest::getPersonalRequests(auth()->id(), 10, $search, $status),
         ]);
     }
 
-    // Allows the Feedback Committee to submit a new ticket
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'request_type' => 'required|string|max:255',
-            'details'      => 'required|string',
+            'request_type' => 'required|string|max:100',
+            'details'      => 'required|string|max:1000',
         ]);
 
-        // Using Eloquent instead of DB facade
-        AdminRequest::create([
-            'admin_id'     => Auth::id(), 
+        $adminReq = AdminRequest::create([
+            'admin_id'     => auth()->id(),
+            'recipient'    => 'SuperAdmin', // FC always sends technical requests to SuperAdmin
             'request_type' => $validated['request_type'],
             'details'      => $validated['details'],
             'status'       => 'Pending',
         ]);
 
-        return redirect()->back()->with('success', 'Your request has been sent to the SuperAdmin.');
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Created', 'Admin Requests', "Submitted a {$validated['request_type']} ticket to SuperAdmin (ID: {$adminReq->id}).");
+
+        return back()->with('success', 'Your ticket has been successfully sent to the SuperAdmin.');
     }
 
-    /**
-     * Cancel, hide, or clear requests based on where the action originated.
-     */
-    public function destroy(Request $request, $id)
+    public function updateStatus(Request $request, $id)
     {
-        $role = strtolower(trim(auth()->user()->role ?? ''));
+        $request->validate([
+            'status'  => 'required|string|in:Approved,Rejected',
+            'remarks' => 'nullable|string'
+        ]);
 
-        // 1. Bulk "Mark all as done" (Clears BOTH tables)
-        if ($id == 0 || $request->input('clear_all')) {
-            AdminRequest::clearAllNotifications($role, auth()->user()->user_id);
-            Feedback::clearAllHarassmentNotifications($role);
-            return redirect()->back();
+        $adminReq = AdminRequest::findOrFail($id);
+        
+        // Security check: Only allow updates on requests routed to the FC
+        if ($adminReq->recipient !== 'Feedback Committee') {
+            abort(403, 'Unauthorized action.');
         }
 
-        // 2. NEW: Catch Harassment Alerts
-        if (str_starts_with($id, 'harassment_')) {
-            $responseId = str_replace('harassment_', '', $id);
-            if ($role === 'superadmin') {
-                DB::table('feedback')->where('response_id', $responseId)->update(['is_notified_superadmin' => true]);
-            } else {
-                DB::table('feedback')->where('response_id', $responseId)->update(['is_notified_committee' => true]);
-            }
-            return redirect()->back();
+        $adminReq->status = $request->status;
+        if ($request->status === 'Rejected' && $request->filled('remarks')) {
+            $adminReq->remarks = $request->remarks;
         }
+        $adminReq->save();
 
-        // 3. Normal Admin Request Clearing
+        // --- AUDIT TRAIL ---
+        $actionWord = $request->status;
+        $remarksLog = $request->filled('remarks') ? " Remarks: {$request->remarks}" : "";
+        AuditLog::logAction($actionWord, 'Admin Requests', "{$actionWord} focal person request (ID: {$id}).{$remarksLog}");
+
+        $message = $request->status === 'Approved' ? 'Request approved successfully.' : 'Request rejected.';
+        return back()->with('success', $message);
+    }
+
+    public function destroy($id)
+    {
         $adminReq = AdminRequest::findOrFail($id);
 
-        if ($request->input('from_notification')) {
-            if ($role === 'superadmin') {
-                $adminReq->is_notified_superadmin = true;
-            } else {
-                $adminReq->is_notified_committee = true;
+        // Scenario 1: FC is cancelling a pending ticket they sent to SuperAdmin
+        if ($adminReq->admin_id === auth()->id()) {
+            if ($adminReq->status === 'Pending') {
+                $adminReq->delete();
+                
+                // --- AUDIT TRAIL ---
+                AuditLog::logAction('Deleted', 'Admin Requests', "Cancelled pending request sent to SuperAdmin (ID: {$id}).");
+                
+                return back()->with('success', 'Pending request cancelled.');
             }
-        } else {
-            if ($role === 'superadmin') {
-                $adminReq->is_cleared_by_superadmin = true;
-            } else {
-                $adminReq->is_cleared_by_committee = true;
-            }
+            return back()->with('error', 'Cannot cancel a processed request.');
         }
-        
-        $adminReq->save();
-        return redirect()->back();
+
+        // Scenario 2: FC is clearing a resolved Focal Person request from their Inbox
+        if ($adminReq->recipient === 'Feedback Committee') {
+            $adminReq->is_cleared_by_committee = true;
+            $adminReq->save();
+            
+            // --- AUDIT TRAIL ---
+            AuditLog::logAction('Archived', 'Admin Requests', "Cleared resolved request from inbox (ID: {$id}).");
+            
+            return back()->with('success', 'Record cleared from your inbox.');
+        }
+
     }
 }

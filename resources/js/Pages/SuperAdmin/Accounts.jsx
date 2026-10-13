@@ -5,7 +5,7 @@ import Swal from 'sweetalert2';
 import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
-export default function Users({ accounts, departments, roles, filters }) {
+export default function Accounts({ accounts, departments, roles, filters }) {
     const { flash, auth } = usePage().props;
     
     // --- TAB STATE ('accounts' | 'roles') ---
@@ -685,18 +685,27 @@ export default function Users({ accounts, departments, roles, filters }) {
                         </div>
 
                         <div className="sm:col-span-2">
-                            <label className="block text-xs font-semibold mb-1 text-gray-700">
-                                {isEditing ? 'Update Password' : 'Initial Temporary Password'} {!isEditing && <span className="text-red-500">*</span>}
-                            </label>
-                            <input 
-                                type="text" 
-                                className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
-                                placeholder={isEditing ? 'Leave blank to preserve current password' : 'Enter temporary password'}
-                                value={data.password} 
-                                onChange={e => setData('password', e.target.value)} 
-                                required={!isEditing} 
-                            />
-                            {errors.password && <div className="text-red-500 text-xs mt-1 font-medium">{errors.password}</div>}
+                            {isEditing ? (
+                                <>
+                                    <label className="block text-xs font-semibold mb-1 text-gray-700">Update Password</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full text-sm border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639]" 
+                                        placeholder="Leave blank to preserve current password"
+                                        value={data.password} 
+                                        onChange={e => setData('password', e.target.value)} 
+                                    />
+                                    {errors.password && <div className="text-red-500 text-xs mt-1 font-medium">{errors.password}</div>}
+                                </>
+                            ) : (
+                                <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg flex items-start gap-3 shadow-sm">
+                                    <i className="fa-solid fa-envelope mt-1 text-blue-600 text-lg"></i>
+                                    <div>
+                                        <p className="text-sm font-bold text-blue-800">Automated Credentials</p>
+                                        <p className="text-xs text-blue-700 mt-0.5">A secure, random password will be generated automatically. An email containing their username, email, and this temporary password will be sent to the user immediately.</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

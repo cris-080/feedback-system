@@ -1,5 +1,5 @@
+import React, { useState, useEffect, useRef } from 'react';
 import { Head, useForm, usePage, router, Link } from '@inertiajs/react';
-import { useState, useEffect, useRef } from 'react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
 import SearchFilter from '@/Components/SearchFilter';
@@ -16,6 +16,9 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
     const [statusFilter, setStatusFilter] = useState(filters?.status || 'all');
     const isInitialRender = useRef(true);
 
+    // --- NEW: ACCORDION EXPANSION STATE ---
+    const [expandedDeptId, setExpandedDeptId] = useState(null);
+
     useEffect(() => {
         if (isInitialRender.current) {
             isInitialRender.current = false;
@@ -25,7 +28,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
         const timeout = setTimeout(() => {
             const queryParams = {};
             if (searchQuery) queryParams.search = searchQuery;
-            if (statusFilter !== 'all') queryParams.status = statusFilter; // Add status payload
+            if (statusFilter !== 'all') queryParams.status = statusFilter;
 
             router.get(
                 route('superadmin.departments.index'),
@@ -48,10 +51,27 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
     const { data, setData, post, put, processing, reset, clearErrors, errors } = useForm({
         name: '',
         description: '',
-        initial_services: '',
-        initial_positions: '',
-        initial_providers: ''
+        classification: 'CC',
+        initial_services: [{ name: '' }],
+        initial_positions: [{ name: '' }],
+        initial_providers: [{ name: '', position: '' }]
     });
+
+    // Dynamic Form Handlers for Initial Setup
+    const handleDynamicFieldChange = (field, index, key, value) => {
+        const updatedList = [...data[field]];
+        updatedList[index][key] = value;
+        setData(field, updatedList);
+    };
+
+    const addDynamicField = (field, defaultObj) => {
+        setData(field, [...data[field], defaultObj]);
+    };
+
+    const removeDynamicField = (field, index) => {
+        const updatedList = data[field].filter((_, i) => i !== index);
+        setData(field, updatedList);
+    };
 
     // Service Form
     const { data: serviceData, setData: setServiceData, post: postService, processing: processingService, reset: resetService } = useForm({
@@ -76,7 +96,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
     });
     const [showBulkModal, setShowBulkModal] = useState(false);
 
-    // --- SWEETALERT2 TOAST NOTIFICATIONS (For minor actions) ---
+    // --- SWEETALERT2 TOAST NOTIFICATIONS ---
     useEffect(() => {
         if (flash?.success) {
             Swal.fire({
@@ -92,6 +112,11 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
         }
     }, [flash]);
 
+    // --- ACCORDION TOGGLE ---
+    const toggleAccordion = (deptId) => {
+        setExpandedDeptId(expandedDeptId === deptId ? null : deptId);
+    };
+
    // --- MODAL CONTROLS ---
     const openModal = (dept = null) => {
         if (dept && dept.department_id) {
@@ -99,32 +124,49 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             setEditDeptId(dept.department_id);
             setData({
                 name: dept.department_name,
-                description: dept.description || ''
+                description: dept.description || '',
+                classification: dept.classification || 'CC',
+                initial_services: [{ name: '' }],
+                initial_positions: [{ name: '' }],
+                initial_providers: [{ name: '', position: '' }]
             });
             setSyncedEmail(dept.focal_person ? dept.focal_person.email : '');
         } else {
             setIsEditing(false);
             setEditDeptId(null);
-            // Explicitly clear the fields instead of using reset()
-            setData({ name: '', description: '' });
+            setData({ 
+                name: '', 
+                description: '', 
+                classification: 'CC',
+                initial_services: [{ name: '' }],
+                initial_positions: [{ name: '' }],
+                initial_providers: [{ name: '', position: '' }]
+            });
             setSyncedEmail('');
         }
         setShowModal(true);
         setTimeout(() => setAnimateModal(true), 10);
     };
     
-    const closeModal = () => {
+   const closeModal = () => {
         setAnimateModal(false);
         setTimeout(() => {
             setShowModal(false);
-            // Explicitly clear the fields on close
-            setData({ name: '', description: '' });
+            setData({ 
+                name: '', 
+                description: '', 
+                classification: 'CC',
+                initial_services: [{ name: '' }],
+                initial_positions: [{ name: '' }],
+                initial_providers: [{ name: '', position: '' }]
+            });
             clearErrors();
             setIsEditing(false);
             setEditDeptId(null);
             setSyncedEmail('');
         }, 300); 
     };
+
     // --- ACTIONS ---
     const submitDepartment = (e) => {
         e.preventDefault();
@@ -132,24 +174,14 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             put(route('superadmin.departments.update', editDeptId), { 
                 onSuccess: () => {
                     closeModal();
-                    Swal.fire({
-                        title: 'Updated!',
-                        text: 'The department has been successfully updated.',
-                        icon: 'success',
-                        confirmButtonColor: '#009639'
-                    });
+                    Swal.fire({ title: 'Updated!', text: 'The department has been successfully updated.', icon: 'success', confirmButtonColor: '#009639' });
                 }
             });
         } else {
             post(route('superadmin.departments.store'), { 
                 onSuccess: () => {
                     closeModal();
-                    Swal.fire({
-                        title: 'Created!',
-                        text: 'The new department has been successfully created.',
-                        icon: 'success',
-                        confirmButtonColor: '#009639'
-                    });
+                    Swal.fire({ title: 'Created!', text: 'The new department has been successfully created.', icon: 'success', confirmButtonColor: '#009639' });
                 }
             });
         }
@@ -168,14 +200,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             if (result.isConfirmed) {
                 router.delete(route('superadmin.departments.destroy', id), { 
                     preserveScroll: true,
-                    onSuccess: () => {
-                        Swal.fire({
-                            title: 'Archived!',
-                            text: 'The department has been successfully archived.',
-                            icon: 'success',
-                            confirmButtonColor: '#009639'
-                        });
-                    }
+                    onSuccess: () => { Swal.fire({ title: 'Archived!', text: 'The department has been successfully archived.', icon: 'success', confirmButtonColor: '#009639' }); }
                 });
             }
         });
@@ -184,8 +209,6 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
     // --- Services ---
     const submitService = (e, deptId) => {
         e.preventDefault();
-        
-        // Prevent Duplicate Service Check
         const currentDept = deptList.find(d => d.department_id === deptId);
         const isDuplicate = currentDept?.services?.some(s => s.service_name.trim().toLowerCase() === serviceData.service_name.trim().toLowerCase());
         
@@ -196,11 +219,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
 
         postService(route('superadmin.departments.services.store', deptId), {
             preserveScroll: true,
-            onSuccess: () => {
-                resetService();
-                setActiveServiceDept(null);
-                Swal.fire({ title: 'Service Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-            },
+            onSuccess: () => { resetService(); setActiveServiceDept(null); Swal.fire({ title: 'Service Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }); },
         });
     };
 
@@ -217,9 +236,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             if (result.isConfirmed) {
                 router.delete(route('superadmin.departments.services.destroy', serviceId), { 
                     preserveScroll: true,
-                    onSuccess: () => {
-                        Swal.fire({ title: 'Removed!', text: 'The service has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-                    }
+                    onSuccess: () => { Swal.fire({ title: 'Removed!', text: 'The service has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }); }
                 });
             }
         });
@@ -228,8 +245,6 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
     // --- Positions ---
     const submitPosition = (e, deptId) => {
         e.preventDefault();
-
-        // Prevent Duplicate Position Check
         const currentDept = deptList.find(d => d.department_id === deptId);
         const isDuplicate = currentDept?.positions?.some(p => p.position_name.trim().toLowerCase() === positionData.position_name.trim().toLowerCase());
         
@@ -240,11 +255,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
 
         postPosition(route('superadmin.departments.positions.store', deptId), {
             preserveScroll: true,
-            onSuccess: () => {
-                resetPosition();
-                setActivePositionDept(null);
-                Swal.fire({ title: 'Position Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-            },
+            onSuccess: () => { resetPosition(); setActivePositionDept(null); Swal.fire({ title: 'Position Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }); },
         });
     };
 
@@ -261,9 +272,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             if (result.isConfirmed) {
                 router.delete(route('superadmin.departments.positions.destroy', positionId), { 
                     preserveScroll: true,
-                    onSuccess: () => {
-                        Swal.fire({ title: 'Removed!', text: 'The position has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-                    }
+                    onSuccess: () => { Swal.fire({ title: 'Removed!', text: 'The position has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }); }
                 });
             }
         });
@@ -272,8 +281,6 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
    // --- Providers ---
     const submitProvider = (e, deptId) => {
         e.preventDefault();
-
-        // Prevent Duplicate Provider Check
         const currentDept = deptList.find(d => d.department_id === deptId);
         const isDuplicate = currentDept?.service_providers?.some(p => p.name.trim().toLowerCase() === providerData.name.trim().toLowerCase());
         
@@ -284,11 +291,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
 
         postProvider(route('superadmin.departments.providers.store', deptId), {
             preserveScroll: true,
-            onSuccess: () => {
-                resetProvider();
-                setActiveProviderDept(null);
-                Swal.fire({ title: 'Provider Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-            },
+            onSuccess: () => { resetProvider(); setActiveProviderDept(null); Swal.fire({ title: 'Provider Added!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }); },
         });
     };
     const handleDeleteProvider = (providerId, providerName) => {
@@ -304,9 +307,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             if (result.isConfirmed) {
                 router.delete(route('superadmin.departments.providers.destroy', providerId), { 
                     preserveScroll: true,
-                    onSuccess: () => {
-                        Swal.fire({ title: 'Removed!', text: 'The provider has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-                    }
+                    onSuccess: () => { Swal.fire({ title: 'Removed!', text: 'The provider has been removed.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false }); }
                 });
             }
         });
@@ -326,12 +327,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             onSuccess: () => {
                 setShowBulkModal(false);
                 resetBulk();
-                Swal.fire({
-                    title: 'Positions Added!',
-                    text: 'The position was successfully assigned to the selected departments.',
-                    icon: 'success',
-                    confirmButtonColor: '#009639'
-                });
+                Swal.fire({ title: 'Positions Added!', text: 'The position was successfully assigned to the selected departments.', icon: 'success', confirmButtonColor: '#009639' });
             }
         });
     };
@@ -365,7 +361,6 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                     <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white p-4 rounded-lg shadow-sm border border-gray-200 gap-4">
                         <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
                             
-                            {/* Combined Search & Filter Component */}
                             <SearchFilter 
                                 searchValue={searchQuery}
                                 onSearchChange={setSearchQuery}
@@ -412,14 +407,13 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                            <table className="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead className="bg-[#009639] text-white">
                                     <tr>
-                                        {/* Reduced padding to px-4 and removed fixed widths to save space */}
-                                        <th className="px-4 py-4 text-left font-semibold uppercase tracking-wider">Department</th>
-                                        <th className="px-4 py-4 text-left font-semibold uppercase tracking-wider">Focal Person</th>
-                                        <th className="px-4 py-4 text-left font-semibold uppercase tracking-wider">Services</th>
-                                        <th className="px-4 py-4 text-left font-semibold uppercase tracking-wider">Positions</th>
-                                        <th className="px-4 py-4 text-left font-semibold uppercase tracking-wider">Providers</th>
+                                        <th className="px-5 py-4 text-left font-semibold uppercase tracking-wider">Department</th>
+                                        <th className="px-5 py-4 text-left font-semibold uppercase tracking-wider">Focal Person</th>
+                                        <th className="px-5 py-4 text-center font-semibold uppercase tracking-wider">Services</th>
+                                        <th className="px-5 py-4 text-center font-semibold uppercase tracking-wider">Positions</th>
+                                        <th className="px-5 py-4 text-center font-semibold uppercase tracking-wider">Providers</th>
                                        {isSuperAdmin && (
-                                            <th className="px-4 py-4 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap">Actions</th>
+                                            <th className="px-5 py-4 text-center text-xs font-bold uppercase tracking-wider whitespace-nowrap">Actions</th>
                                         )}
                                     </tr>
                                 </thead>
@@ -432,105 +426,172 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                                             </td>
                                         </tr>
                                     ) : (
-                                        deptList.map((dept) => (
-                                            <tr key={dept.department_id} className="hover:bg-gray-50 align-top transition-colors">
-                                                
-                                                {/* Department Details */}
-                                                <td className="px-4 py-4 w-1/5 min-w-[180px]">
-                                                    {/* Removed whitespace-nowrap so long titles wrap nicely! */}
-                                                    <div className="font-bold text-gray-900 text-base leading-tight">
-                                                        {dept.department_name}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 mt-1.5 line-clamp-2">
-                                                        {dept.description || 'No description provided.'}
-                                                    </div>
-                                                </td>
+                                        deptList.map((dept) => {
+                                            const isExpanded = expandedDeptId === dept.department_id;
+                                            
+                                            return (
+                                                <React.Fragment key={dept.department_id}>
+                                                    {/* --- PRIMARY SUMMARY ROW --- */}
+                                                    <tr 
+                                                        onClick={() => toggleAccordion(dept.department_id)}
+                                                        className={`align-middle transition-colors cursor-pointer ${isExpanded ? 'bg-blue-50/40 border-l-4 border-l-blue-500' : 'hover:bg-gray-50 border-l-4 border-l-transparent'}`}
+                                                    >
+                                                        {/* Department Details */}
+                                                        <td className="px-5 py-4 w-2/6">
+                                                            <div className="flex items-start gap-3">
+                                                                <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-gray-400 mt-1 transition-transform`}></i>
+                                                                <div>
+                                                                    <div className={`font-bold text-base leading-tight flex items-center gap-2 ${isExpanded ? 'text-blue-700' : 'text-gray-900'}`}>
+                                                                        {dept.department_name}
+                                                                        <span className={`px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded border ${dept.classification === 'CC' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-300'}`}>
+                                                                            {dept.classification || 'CC'}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-500 mt-1 line-clamp-1">
+                                                                        {dept.description || 'No description provided.'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
 
-                                                {/* Focal Person */}
-                                                <td className="px-4 py-4 min-w-[160px]">
-                                                    {dept.focal_person ? (
-                                                        <span className="flex items-center text-gray-700 text-[11px] font-medium bg-blue-50 px-2 py-1.5 rounded-md border border-blue-100 w-fit whitespace-nowrap">
-                                                            <i className="fa-solid fa-user-tie mr-1.5 text-blue-600"></i>
-                                                            {dept.focal_person.email}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100 italic">Unassigned</span>
+                                                        {/* Focal Person */}
+                                                        <td className="px-5 py-4">
+                                                            {dept.focal_person ? (
+                                                                <span className="flex items-center text-gray-700 text-[11px] font-medium bg-blue-50 px-2.5 py-1.5 rounded-md border border-blue-100 w-fit whitespace-nowrap">
+                                                                    <i className="fa-solid fa-user-tie mr-1.5 text-blue-600"></i>
+                                                                    {dept.focal_person.email}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100 italic font-medium">Unassigned</span>
+                                                            )}
+                                                        </td>
+
+                                                        {/* Metric: Services */}
+                                                        <td className="px-5 py-4 text-center">
+                                                            <div className="inline-flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg text-gray-700 w-20">
+                                                                <i className="fa-solid fa-layer-group text-blue-500 opacity-80"></i>
+                                                                <span className="font-bold">{dept.services?.length || 0}</span>
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Metric: Positions */}
+                                                        <td className="px-5 py-4 text-center">
+                                                            <div className="inline-flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg text-gray-700 w-20">
+                                                                <i className="fa-solid fa-briefcase text-emerald-500 opacity-80"></i>
+                                                                <span className="font-bold">{dept.positions?.length || 0}</span>
+                                                            </div>
+                                                        </td>
+
+                                                        {/* Metric: Providers */}
+                                                        <td className="px-5 py-4 text-center">
+                                                            <div className="inline-flex items-center justify-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg text-gray-700 w-20">
+                                                                <i className="fa-solid fa-user-tie text-purple-500 opacity-80"></i>
+                                                                <span className="font-bold">{dept.service_providers?.length || 0}</span>
+                                                            </div>
+                                                        </td>
+                                                        
+                                                        {/* Actions */}
+                                                        {isSuperAdmin && (
+                                                            <td className="px-5 py-4 text-center space-x-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                                                <button 
+                                                                    onClick={() => openModal(dept)}
+                                                                    className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" 
+                                                                    title="Edit & Configure"
+                                                                >
+                                                                    <i className="fa-solid fa-pen"></i>
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleDelete(dept.department_id, dept.department_name)}
+                                                                    className="w-8 h-8 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white rounded inline-flex justify-center items-center transition" 
+                                                                    title="Archive"
+                                                                >
+                                                                    <i className="fa-solid fa-box-archive"></i>
+                                                                </button>
+                                                            </td>
+                                                        )}
+                                                    </tr>
+
+                                                    {/* --- EXPANDED DETAILS ACCORDION --- */}
+                                                    {isExpanded && (
+                                                        <tr className="bg-gray-50/60 border-l-4 border-l-blue-500 shadow-inner">
+                                                            <td colSpan={isSuperAdmin ? 6 : 5} className="px-8 py-6">
+                                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+                                                                    
+                                                                    {/* Details: Services */}
+                                                                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center">
+                                                                            <i className="fa-solid fa-layer-group text-blue-500 mr-2"></i> Services Offered
+                                                                        </h4>
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            {dept.services && dept.services.length > 0 ? (
+                                                                                dept.services.map(service => (
+                                                                                    <span key={service.service_id} className="px-2.5 py-1 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                                                                                        {service.service_name}
+                                                                                    </span>
+                                                                                ))
+                                                                            ) : (
+                                                                                <span className="text-xs text-gray-400 italic">No services configured.</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Details: Positions */}
+                                                                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center">
+                                                                            <i className="fa-solid fa-briefcase text-emerald-500 mr-2"></i> Job Positions
+                                                                        </h4>
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            {dept.positions && dept.positions.length > 0 ? (
+                                                                                dept.positions.map(pos => (
+                                                                                    <span key={pos.position_id} className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
+                                                                                        {pos.position_name}
+                                                                                    </span>
+                                                                                ))
+                                                                            ) : (
+                                                                                <span className="text-xs text-gray-400 italic">No positions configured.</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Details: Providers */}
+                                                                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center">
+                                                                            <i className="fa-solid fa-user-tie text-purple-500 mr-2"></i> Service Providers
+                                                                        </h4>
+                                                                        <div className="flex flex-wrap gap-2">
+                                                                            {dept.service_providers && dept.service_providers.length > 0 ? (
+                                                                                dept.service_providers.map(prov => (
+                                                                                    <span key={prov.provider_id} className="inline-flex items-center px-2.5 py-1 text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded">
+                                                                                        {prov.name} 
+                                                                                        {prov.position && <span className="font-normal opacity-70 ml-1">({prov.position})</span>}
+                                                                                    </span>
+                                                                                ))
+                                                                            ) : (
+                                                                                <span className="text-xs text-gray-400 italic">No providers configured.</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+
+                                                                </div>
+                                                                
+                                                                {isSuperAdmin && (
+                                                                    <div className="mt-4 flex justify-end">
+                                                                    
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </tr>
                                                     )}
-                                                </td>
-
-                                                {/* READ-ONLY: Services */}
-                                                <td className="px-4 py-4 min-w-[120px]">
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {dept.services && dept.services.length > 0 ? (
-                                                            dept.services.map(service => (
-                                                                <span key={service.service_id} className="inline-flex items-center px-2 py-1 text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded">
-                                                                    {service.service_name}
-                                                                </span>
-                                                            ))
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400 italic">None</span>
-                                                        )}
-                                                    </div>
-                                                </td>
-
-                                                {/* READ-ONLY: Positions */}
-                                                <td className="px-4 py-4 min-w-[120px]">
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {dept.positions && dept.positions.length > 0 ? (
-                                                            dept.positions.map(pos => (
-                                                                <span key={pos.position_id} className="inline-flex items-center px-2 py-1 text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
-                                                                    {pos.position_name}
-                                                                </span>
-                                                            ))
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400 italic">None</span>
-                                                        )}
-                                                    </div>
-                                                </td>
-
-                                                {/* READ-ONLY: Providers */}
-                                                <td className="px-4 py-4 min-w-[140px]">
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {dept.service_providers && dept.service_providers.length > 0 ? (
-                                                            dept.service_providers.map(prov => (
-                                                                <span key={prov.provider_id} className="inline-flex items-center px-2 py-1 text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded">
-                                                                    {prov.name} {prov.position && <span className="font-normal opacity-75 ml-1">({prov.position})</span>}
-                                                                </span>
-                                                            ))
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400 italic">None</span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                
-                                                {/* Actions */}
-                                                {isSuperAdmin && (
-                                                    <td className="px-4 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
-                                                        <button 
-                                                            onClick={() => openModal(dept)}
-                                                            className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" 
-                                                            title="Edit & Configure"
-                                                        >
-                                                            <i className="fa-solid fa-pen"></i>
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleDelete(dept.department_id, dept.department_name)}
-                                                            className="w-8 h-8 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white rounded inline-flex justify-center items-center transition" 
-                                                            title="Archive"
-                                                        >
-                                                            <i className="fa-solid fa-box-archive"></i>
-                                                        </button>
-                                                    </td>
-                                                )}
-                                            </tr>
-                                        ))
+                                                </React.Fragment>
+                                            );
+                                        })
                                     )}
                                 </tbody>
                             </table>
                         </div>
 
                         {/* Server-Side Pagination */}
-                            <Pagination dataObject={departments} />
+                        <Pagination dataObject={departments} />
                     </div>
                 </div>
             </div>
@@ -549,11 +610,26 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
 
                         <div className="p-6 overflow-y-auto flex-1">
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1 text-gray-700">Department Name <span className="text-red-500">*</span></label>
-                                    <input type="text" className="w-full border-gray-300 rounded focus:ring focus:ring-emerald-200 focus:border-emerald-500 shadow-sm" 
-                                        value={data.name} onChange={e => setData('name', e.target.value)} required placeholder="e.g. Office of Admission" />
-                                    {errors.name && <div className="text-red-500 text-xs mt-1">{errors.name}</div>}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="sm:col-span-2">
+                                        <label className="block text-sm font-semibold mb-1 text-gray-700">Department Name <span className="text-red-500">*</span></label>
+                                        <input type="text" className="w-full border-gray-300 rounded focus:ring focus:ring-emerald-200 focus:border-emerald-500 shadow-sm" 
+                                            value={data.name} onChange={e => setData('name', e.target.value)} required placeholder="e.g. Office of Admission" />
+                                        {errors.name && <div className="text-red-500 text-xs mt-1">{errors.name}</div>}
+                                    </div>
+                                    <div className="sm:col-span-1">
+                                        <label className="block text-sm font-semibold mb-1 text-gray-700">Classification <span className="text-red-500">*</span></label>
+                                        <select 
+                                            className="w-full border-gray-300 rounded focus:ring focus:ring-emerald-200 focus:border-emerald-500 shadow-sm bg-white" 
+                                            value={data.classification} 
+                                            onChange={e => setData('classification', e.target.value)} 
+                                            required
+                                        >
+                                            <option value="CC">CC</option>
+                                            <option value="Non-CC">Non-CC</option>
+                                        </select>
+                                        {errors.classification && <div className="text-red-500 text-xs mt-1">{errors.classification}</div>}
+                                    </div>
                                 </div>
 
                                 <div>
@@ -579,34 +655,62 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                                         value={data.description} onChange={e => setData('description', e.target.value)} placeholder="Optional details..."></textarea>
                                 </div>
                             </div>
-                                        {/* --- QUICK ADD CONFIGURATIONS (Visible only when creating) --- */}
-                                {!isEditing && (
-                                    <div className="mt-6 pt-4 border-t border-gray-200 space-y-4">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">Initial Setup (Optional)</h4>
-                                            <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded border border-gray-200">Comma-separated</span>
-                                        </div>
                                         
-                                        <div>
-                                            <label className="block text-sm font-semibold mb-1 text-gray-700">Services Offered</label>
-                                            <input type="text" className="w-full border-gray-300 rounded focus:ring focus:ring-blue-200 focus:border-blue-500 shadow-sm text-sm" 
-                                                value={data.initial_services || ''} onChange={e => setData('initial_services', e.target.value)} placeholder="e.g. Clearance, Enrollment, Consultation" />
+                               {/* --- QUICK ADD CONFIGURATIONS (Visible only when creating) --- */}
+                                {!isEditing && (
+                                    <div className="mt-6 pt-4 border-t border-gray-200 space-y-6">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">Initial Setup (Optional)</h4>
+                                        
+                                        {/* Dynamic Services */}
+                                        <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+                                            <label className="block text-sm font-semibold mb-2 text-blue-800">Services Offered</label>
+                                            {data.initial_services.map((service, index) => (
+                                                <div key={`service-${index}`} className="flex gap-2 mb-2">
+                                                    <input type="text" className="flex-1 border-gray-300 rounded focus:ring focus:ring-blue-200 text-sm" placeholder="e.g. Clearance" value={service.name} onChange={e => handleDynamicFieldChange('initial_services', index, 'name', e.target.value)} />
+                                                    {index > 0 && (
+                                                        <button type="button" onClick={() => removeDynamicField('initial_services', index)} className="px-3 text-red-500 hover:text-red-700 bg-white border border-gray-200 rounded"><i className="fa-solid fa-trash"></i></button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <button type="button" onClick={() => addDynamicField('initial_services', { name: '' })} className="text-xs text-blue-600 font-bold mt-1 hover:text-blue-800"><i className="fa-solid fa-plus mr-1"></i> Add Another Service</button>
                                         </div>
 
-                                        <div>
-                                            <label className="block text-sm font-semibold mb-1 text-gray-700">Job Positions</label>
-                                            <input type="text" className="w-full border-gray-300 rounded focus:ring focus:ring-emerald-200 focus:border-emerald-500 shadow-sm text-sm" 
-                                                value={data.initial_positions || ''} onChange={e => setData('initial_positions', e.target.value)} placeholder="e.g. Faculty Member, Staff, Cashier" />
+                                        {/* Dynamic Positions */}
+                                        <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
+                                            <label className="block text-sm font-semibold mb-2 text-emerald-800">Job Positions</label>
+                                            {data.initial_positions.map((pos, index) => (
+                                                <div key={`pos-${index}`} className="flex gap-2 mb-2">
+                                                    <input type="text" className="flex-1 border-gray-300 rounded focus:ring focus:ring-emerald-200 text-sm" placeholder="e.g. Faculty Member" value={pos.name} onChange={e => handleDynamicFieldChange('initial_positions', index, 'name', e.target.value)} />
+                                                    {index > 0 && (
+                                                        <button type="button" onClick={() => removeDynamicField('initial_positions', index)} className="px-3 text-red-500 hover:text-red-700 bg-white border border-gray-200 rounded"><i className="fa-solid fa-trash"></i></button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <button type="button" onClick={() => addDynamicField('initial_positions', { name: '' })} className="text-xs text-emerald-600 font-bold mt-1 hover:text-emerald-800"><i className="fa-solid fa-plus mr-1"></i> Add Another Position</button>
                                         </div>
 
-                                        <div>
-                                            <label className="block text-sm font-semibold mb-1 text-gray-700">Service Providers</label>
-                                            <input type="text" className="w-full border-gray-300 rounded focus:ring focus:ring-purple-200 focus:border-purple-500 shadow-sm text-sm" 
-                                                value={data.initial_providers || ''} onChange={e => setData('initial_providers', e.target.value)} placeholder="e.g. John Doe, Jane Smith, Dr. Banner" />
-                                            <p className="text-[11px] text-gray-500 mt-1.5 italic">Note: You can link specific positions to these providers later by clicking the edit icon.</p>
+                                        {/* Dynamic Providers */}
+                                        <div className="bg-purple-50/50 p-4 rounded-lg border border-purple-100">
+                                            <label className="block text-sm font-semibold mb-2 text-purple-800">Service Providers</label>
+                                            {data.initial_providers.map((prov, index) => (
+                                                <div key={`prov-${index}`} className="flex gap-2 mb-2">
+                                                    <input type="text" className="flex-1 border-gray-300 rounded focus:ring focus:ring-purple-200 text-sm" placeholder="Name (e.g. Dr. Banner)" value={prov.name} onChange={e => handleDynamicFieldChange('initial_providers', index, 'name', e.target.value)} />
+                                                    <select className="flex-1 border-gray-300 rounded focus:ring focus:ring-purple-200 text-sm bg-white" value={prov.position} onChange={e => handleDynamicFieldChange('initial_providers', index, 'position', e.target.value)}>
+                                                        <option value="">-- Assign Position (Optional) --</option>
+                                                        {data.initial_positions.filter(p => p.name.trim() !== '').map((p, i) => (
+                                                            <option key={`opt-${i}`} value={p.name}>{p.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    {index > 0 && (
+                                                        <button type="button" onClick={() => removeDynamicField('initial_providers', index)} className="px-3 text-red-500 hover:text-red-700 bg-white border border-gray-200 rounded"><i className="fa-solid fa-trash"></i></button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            <button type="button" onClick={() => addDynamicField('initial_providers', { name: '', position: '' })} className="text-xs text-purple-600 font-bold mt-1 hover:text-purple-800"><i className="fa-solid fa-plus mr-1"></i> Add Another Provider</button>
                                         </div>
                                     </div>
                                 )}
+                            
                             {/* --- EDITABLE CONFIGURATIONS (Only visible when editing an existing dept) --- */}
                             {isEditing && currentDeptData && (
                                 <div className="mt-8 pt-6 border-t border-gray-200 space-y-6">
@@ -703,19 +807,26 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                                                     value={providerData.name} 
                                                     onChange={e => setProviderData('name', e.target.value)} 
                                                 />
-                                                <select 
-                                                    className="text-sm border border-gray-300 rounded p-2 w-full bg-white focus:ring focus:ring-purple-200 outline-none"
-                                                    value={providerData.position}
-                                                    onChange={e => setProviderData('position', e.target.value)}
-                                                >
-                                                    <option value="">-- Optional Position --</option>
-                                                    {currentDeptData.positions?.map(p => (
-                                                        <option key={p.position_id} value={p.position_name}>{p.position_name}</option>
-                                                    ))}
-                                                </select>
+                                                {currentDeptData.positions && currentDeptData.positions.length > 0 ? (
+                                                    <select 
+                                                        className="text-sm border border-gray-300 rounded p-2 w-full bg-white focus:ring focus:ring-purple-200 outline-none"
+                                                        value={providerData.position}
+                                                        onChange={e => setProviderData('position', e.target.value)}
+                                                        required
+                                                    >
+                                                        <option value="" disabled>-- Select Job Position --</option>
+                                                        {currentDeptData.positions.map(p => (
+                                                            <option key={p.position_id} value={p.position_name}>{p.position_name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <div className="text-xs text-red-500 italic bg-red-50 p-2 rounded border border-red-100">
+                                                        <i className="fa-solid fa-triangle-exclamation mr-1"></i> You must add Job Positions to this department before assigning a provider.
+                                                    </div>
+                                                )}
                                                 <div className="flex justify-end gap-2 mt-2">
                                                     <button type="button" onClick={() => setActiveProviderDept(null)} className="bg-gray-200 text-gray-600 px-4 py-2 rounded hover:bg-gray-300 text-sm font-semibold">Cancel</button>
-                                                    <button type="submit" disabled={processingProvider} className="bg-purple-600 text-white px-5 py-2 rounded hover:bg-purple-700 text-sm font-semibold">Save Provider</button>
+                                                    <button type="submit" disabled={processingProvider || (!currentDeptData.positions || currentDeptData.positions.length === 0)} className="bg-purple-600 text-white px-5 py-2 rounded hover:bg-purple-700 text-sm font-semibold disabled:opacity-50">Save Provider</button>
                                                 </div>
                                             </form>
                                         ) : (

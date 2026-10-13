@@ -19,8 +19,9 @@ class Report extends Model
     protected $fillable = [
         'department_id',
         'report_type',
-        'month',
-        'year',
+        'start_date',
+        'end_date',
+        'export_format',
         'report_data',
         'generated_by'
     ];
@@ -40,13 +41,12 @@ class Report extends Model
     }
 
     // --- FAT MODEL METHOD ---
-    public static function generateSnapshot(array $validated): ?array
+    public static function generateSnapshot(array $validated): ?self
     {
         // 1. Join Feedback to Forms to access 'department_id'
         $query = DB::table('feedback')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
-            ->whereYear('feedback.submitted_at', $validated['year'])
-            ->whereMonth('feedback.submitted_at', $validated['month'])
+            ->whereBetween(DB::raw('DATE(feedback.submitted_at)'), [$validated['start_date'], $validated['end_date']])
             ->where('feedback.status', 'Valid'); // Only crunch valid, non-spam feedback
 
         if ($validated['department_id'] !== 'all') {
@@ -57,7 +57,7 @@ class Report extends Model
         $totalRespondents = count($validResponseIds);
 
         if ($totalRespondents === 0) {
-            return null; // Signals controller to return error
+            return null; 
         }
 
         // 2. Fetch the dynamic answers from the EAV structure
@@ -71,11 +71,11 @@ class Report extends Model
         $mappedData = [];
         foreach ($validResponseIds as $rId) {
             $mappedData[$rId] = [
-                'client_type' => 'N/A', 'sex' => 'N/A', 'service_name' => 'N/A',
+                'client_type' => 'N/A', 'sex' => 'N/A', 'service_name' => 'N/A', 'region' => 'N/A',
                 'cc1' => 'N/A', 'cc2' => 'N/A', 'cc3' => 'N/A',
                 'sqd0' => 'na', 'sqd1' => 'na', 'sqd2' => 'na', 'sqd3' => 'na', 
                 'sqd4' => 'na', 'sqd5' => 'na', 'sqd6' => 'na', 'sqd7' => 'na', 'sqd8' => 'na',
-                'overall_satisfaction' => 'na', 'recommend_clsu' => 'N/A', 'comments' => null
+                'overall_satisfaction' => 'na', 'recommend_clsu' => 'N/A', 'harassment' => 'No', 'harassment_details' => null, 'comments' => null
             ];
         }
 
@@ -86,24 +86,84 @@ class Report extends Model
 
             if (empty($val)) continue;
 
+            $cleanLabel = str_replace([' ', '_', '-', '.', ':', '’', '\''], '', $label);
+            $valLower = strtolower($val);
+
             if (str_contains($label, 'client type')) $mappedData[$rId]['client_type'] = $val;
             elseif (str_contains($label, 'sex')) $mappedData[$rId]['sex'] = $val;
+            elseif (str_contains($label, 'region')) $mappedData[$rId]['region'] = $val;
             elseif (str_contains($label, 'service availed')) $mappedData[$rId]['service_name'] = $val;
-            elseif (str_contains($label, 'cc1')) $mappedData[$rId]['cc1'] = $val;
-            elseif (str_contains($label, 'cc2')) $mappedData[$rId]['cc2'] = $val;
-            elseif (str_contains($label, 'cc3')) $mappedData[$rId]['cc3'] = $val;
-            elseif (str_contains($label, 'sqd0')) $mappedData[$rId]['sqd0'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd1')) $mappedData[$rId]['sqd1'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd2')) $mappedData[$rId]['sqd2'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd3')) $mappedData[$rId]['sqd3'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd4')) $mappedData[$rId]['sqd4'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd5')) $mappedData[$rId]['sqd5'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd6')) $mappedData[$rId]['sqd6'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd7')) $mappedData[$rId]['sqd7'] = self::extractNumber($val);
-            elseif (str_contains($label, 'sqd8')) $mappedData[$rId]['sqd8'] = self::extractNumber($val);
-            elseif (str_contains($label, 'educational experience')) $mappedData[$rId]['overall_satisfaction'] = self::extractNumber($val);
-            elseif (str_contains($label, 'recommend')) $mappedData[$rId]['recommend_clsu'] = $val;
-            elseif (str_contains($label, 'suggestions')) $mappedData[$rId]['comments'] = $val;
+         // PRIORITY 1: Handle SQD 0-8 FIRST to prevent overlap with CC keywords
+            elseif (preg_match('/sqd([0-8])/i', $cleanLabel, $sqdMatch)) {
+                $sqdKey = 'sqd' . $sqdMatch[1]; // e.g., "sqd6"
+                $mappedData[$rId][$sqdKey] = self::extractNumber($val);
+            }
+            elseif (str_contains($label, 'satisfied with the service')) $mappedData[$rId]['sqd0'] = self::extractNumber($val);
+            elseif (str_contains($label, 'reasonable amount of time')) $mappedData[$rId]['sqd1'] = self::extractNumber($val);
+            elseif (str_contains($label, 'requirement from the office')) $mappedData[$rId]['sqd2'] = self::extractNumber($val);
+            elseif (str_contains($label, 'payment) i needed to do') || str_contains($label, 'easy and simple')) $mappedData[$rId]['sqd3'] = self::extractNumber($val);
+            elseif (str_contains($label, 'easily found information')) $mappedData[$rId]['sqd4'] = self::extractNumber($val);
+            elseif (str_contains($label, 'paid a reasonable amount')) $mappedData[$rId]['sqd5'] = self::extractNumber($val);
+            elseif (str_contains($label, 'fair to everyone') || str_contains($label, 'walang palakasan')) $mappedData[$rId]['sqd6'] = self::extractNumber($val);
+            elseif (str_contains($label, 'treated courteously') || str_contains($label, 'staff was helpful')) $mappedData[$rId]['sqd7'] = self::extractNumber($val);
+            elseif (str_contains($label, 'got what i needed') || str_contains($label, 'denial of request')) $mappedData[$rId]['sqd8'] = self::extractNumber($val);
+
+            // PRIORITY 2: Evaluate CC3
+            elseif (
+                str_starts_with($cleanLabel, 'cc3') || 
+                str_contains($cleanLabel, 'cc3') ||
+                str_contains($label, 'help') || 
+                str_contains($valLower, 'helped very much') || 
+                str_contains($valLower, 'somewhat helped') || 
+                str_contains($valLower, 'did not help')
+            ) {
+                $mappedData[$rId]['cc3'] = $val;
+            } 
+            // PRIORITY 3: Evaluate CC2
+            elseif (
+                str_starts_with($cleanLabel, 'cc2') || 
+                str_contains($cleanLabel, 'cc2') ||
+                str_contains($label, 'visibility') || 
+                str_contains($label, 'office was') || 
+                str_contains($valLower, 'easy to see') || 
+                str_contains($valLower, 'difficult to see') || 
+                str_contains($valLower, 'not visible')
+            ) {
+                $mappedData[$rId]['cc2'] = $val;
+            } 
+            // PRIORITY 4: Evaluate CC1
+            elseif (
+                str_starts_with($cleanLabel, 'cc1') || 
+                str_contains($cleanLabel, 'cc1') || 
+                str_contains($label, 'awareness') || 
+                str_contains($valLower, 'know what a cc') || 
+                str_contains($valLower, 'learned of the cc') || 
+                str_contains($valLower, 'do not know')
+            ) {
+                if ($valLower !== 'n/a' && $valLower !== 'na') {
+                    $mappedData[$rId]['cc1'] = $val;
+                }
+            }
+            
+           // Overall Satisfaction
+            elseif (str_contains($label, 'educational experience')) {
+                $mappedData[$rId]['overall_satisfaction'] = self::extractNumber($val);
+            }
+            // Recommend CLSU
+            elseif (str_contains($label, 'recommend')) {
+                // Force proper capitalization (Yes/No) so the grouping works perfectly
+                $mappedData[$rId]['recommend_clsu'] = ucfirst(strtolower($val)); 
+            }
+            // Harassment
+            elseif (str_contains($label, 'harassment') && in_array(strtolower($val), ['yes', 'no'])) {
+                $mappedData[$rId]['harassment'] = ucfirst(strtolower($val));
+            }
+            elseif (str_contains($label, 'detail the harassment') || str_contains($label, 'experienced') || (str_contains($label, 'if yes') && str_contains($label, 'harassment'))) {
+                $mappedData[$rId]['harassment_details'] = $val;
+            }
+            elseif (str_contains($label, 'suggestions') || str_contains($label, 'comments')) {
+                $mappedData[$rId]['comments'] = $val;
+            }
         }
 
         $collection = collect(array_values($mappedData));
@@ -112,6 +172,7 @@ class Report extends Model
         $demographics = [
             'client_type' => self::calculateFrequencies($collection, 'client_type', $totalRespondents),
             'sex'         => self::calculateFrequencies($collection, 'sex', $totalRespondents),
+            'region'      => self::calculateFrequencies($collection, 'region', $totalRespondents),
             'services'    => self::calculateFrequencies($collection, 'service_name', $totalRespondents),
         ];
 
@@ -138,36 +199,38 @@ class Report extends Model
         $reportPayload = [
             'metadata' => [
                 'department'        => $departmentName,
-                'period'            => Carbon::create($validated['year'], $validated['month'], 1)->format('F Y'),
+                'period'            => Carbon::parse($validated['start_date'])->format('M d, Y') . ' - ' . Carbon::parse($validated['end_date'])->format('M d, Y'),
                 'total_respondents' => $totalRespondents,
                 'type'              => $validated['report_type'],
+                'format'            => $validated['export_format'],
             ],
-            'demographics'    => $demographics,
-            'cc_metrics'      => $ccMetrics,
-            'sqd_metrics'     => $sqdMetrics,
-            'recommendations' => self::calculateFrequencies($collection, 'recommend_clsu', $totalRespondents),
-            'comments'        => $collection->pluck('comments')->filter()->values()
+            'demographics'       => $demographics,
+            'cc_metrics'         => $ccMetrics,
+            'sqd_metrics'        => $sqdMetrics,
+            'recommendations'    => self::calculateFrequencies($collection, 'recommend_clsu', $totalRespondents),
+            'harassment'         => self::calculateFrequencies($collection, 'harassment', $totalRespondents),
+            'harassment_details' => $collection->pluck('harassment_details')->filter()->values()->toArray(),
+            'comments'           => $collection->pluck('comments')->filter()->values()->toArray()
         ];
 
-        // 5. Save Snapshot 
-        self::create([
+      // 5. Save Snapshot 
+        $newReport = self::create([
             'department_id' => $validated['department_id'] === 'all' ? null : $validated['department_id'],
             'report_type'   => $validated['report_type'],
-            'month'         => $validated['month'],
-            'year'          => $validated['year'],
+            'start_date'    => $validated['start_date'],
+            'end_date'      => $validated['end_date'],
+            'export_format' => $validated['export_format'],
             'report_data'   => $reportPayload,
             'generated_by'  => Auth::id(),
         ]);
 
-        return $reportPayload;
+        return $newReport; 
     }
 
     // --- PRIVATE MATH HELPERS ---
-
     private static function extractNumber($val)
     {
         if (empty($val) || in_array(strtolower(trim($val)), ['n/a', 'na', 'none'])) return 'na';
-        // Plucks out "5" from "5 (Highest)"
         if (preg_match('/^[1-5]/', trim($val), $matches)) {
             return $matches[0];
         }

@@ -12,6 +12,7 @@ use App\Http\Requests\UpdateFormVersionRequest;
 use App\Http\Resources\FormResource;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
+use App\Models\AuditLog;
 use Illuminate\Support\Facades\Crypt;
 use Inertia\Inertia;
 
@@ -50,9 +51,13 @@ class FormController extends Controller
         ]);
     }
 
-    public function store(StoreFormRequest $request)
+   public function store(StoreFormRequest $request)
     {
         $this->formService->createForm($request->validated());
+        
+        // --- AUDIT TRAIL ---
+         AuditLog::logAction('Created', 'Forms', 'Created a new form blueprint and saved to Drafts.');
+        
         return back()->with('success', 'Form blueprint successfully created and saved to Drafts.');
     }
 
@@ -60,6 +65,9 @@ class FormController extends Controller
     {
         $form = Form::findOrFail($id);
         $this->formService->archiveForm($form);
+        
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Archived', 'Forms', "Archived form (ID: {$id}).");
         
         return back()->with('success', 'Form successfully archived');
     }
@@ -75,6 +83,9 @@ class FormController extends Controller
         // Pass department ID to the publish handler
         $this->formService->publishForm($form, $request->input('department_id'));
 
+        // --- AUDIT TRAIL ---
+       AuditLog::logAction('Published', 'Forms', "Published {$form->form_type} form (ID: {$id}) and archived the previously active version.");
+
         return back()->with('success', "Form published successfully! Previous active {$form->form_type} form for this department has been archived.");
     }
     
@@ -83,25 +94,21 @@ class FormController extends Controller
         $form = Form::with('fields.options')->findOrFail($id);
         $this->formService->cloneForm($form);
 
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Created', 'Forms', "Cloned form (ID: {$id}) into a new Draft.");
+
         return back()->with('success', 'Form cloned successfully! You can now edit the newly created Draft.');
     }
 
-    public function edit($id)
-    {
-        $currentForm = Form::getFormWithFields($id);
+   
 
-        return Inertia::render('SuperAdmin/EditForm', [
-            'currentForm'        => new FormResource($currentForm),
-            'departments'        => Department::getDropdownList(), 
-            'departmentServices' => DepartmentService::getGroupedServices(),
-            'existingFields'     => $currentForm->getFormattedFields(),
-        ]);
-    }
-
-    public function update(UpdateFormVersionRequest $request, $id)
+   public function update(UpdateFormVersionRequest $request, $id)
     {
         $oldForm = Form::findOrFail($id);
         $this->formService->updateFormVersion($oldForm, $request->validated());
+
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Updated', 'Forms', "Updated form (ID: {$id}) by creating a new version.");
 
         return redirect()->route('superadmin.forms.index')->with('success', 'Form updated successfully! (New version created)');
     }
@@ -112,16 +119,23 @@ class FormController extends Controller
         
         try {
             $this->formService->deleteForm($form);
+            
+            // --- AUDIT TRAIL ---
+            AuditLog::logAction('Deleted', 'Forms', "Deleted form (ID: {$id}).");
+            
             return to_route('superadmin.forms.index')->with('success', 'Form permanently deleted.');
         } catch (ValidationException $e) {
             return back()->with('error', $e->getMessage());
         }
     }
 
-    public function softDelete($id)
+   public function softDelete($id)
     {
         $form = Form::findOrFail($id);
         $form->delete();
+
+        // --- AUDIT TRAIL ---
+         AuditLog::logAction('Deleted', 'Forms', "Soft-deleted archived form (ID: {$id}).");
 
         return back()->with('success', 'Archived form successfully deleted.');
     }
@@ -152,6 +166,9 @@ class FormController extends Controller
         // Reset the status back to Draft so it doesn't accidentally go live immediately
         $form->update(['status' => 'Draft']);
 
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Restored', 'Forms', "Restored form (ID: {$id}) back to Active Drafts.");
+
         return back()->with('success', 'Form successfully restored to Active Drafts.');
     }
 
@@ -164,6 +181,9 @@ class FormController extends Controller
         
         // Permanently remove the record from the database
         $form->forceDelete();
+
+        // --- AUDIT TRAIL ---
+        AuditLog::logAction('Deleted', 'Forms', "Permanently force-deleted form (ID: {$id}).");
 
         return back()->with('success', 'Form permanently deleted from the system.');
     }

@@ -19,7 +19,13 @@ class Department extends Model
     
     public $timestamps = false; 
 
-    protected $fillable = ['department_name', 'description', 'focal_person_id'];
+    protected $fillable = [
+        'department_name', 
+        'description', 
+        'classification',
+        'daily_pin', 
+        'focal_person_id'
+    ];
 
     // --- RELATIONSHIPS ---
 
@@ -64,12 +70,36 @@ class Department extends Model
 
     public function scopeSearch($query, $search)
     {
-        if ($search) {
-            $query->where('department_name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhereHas('services', function($q) use ($search) {
-                      $q->where('service_name', 'like', "%{$search}%");
+        if (!empty($search)) {
+            $trimmed = trim($search);
+            $like = '%' . $trimmed . '%';
+
+            $query->where(function ($q) use ($like) {
+                // Search Parent Department
+                $q->where('department_name', 'LIKE', $like)
+                  ->orWhere('description', 'LIKE', $like)
+                  
+                  // Search Focal Person Email
+                  ->orWhereHas('focal_person', function ($sub) use ($like) {
+                      $sub->where('email', 'LIKE', $like);
+                  })
+                  
+                  // Search Associated Services
+                  ->orWhereHas('services', function ($sub) use ($like) {
+                      $sub->where('service_name', 'LIKE', $like);
+                  })
+                  
+                  // Search Associated Job Positions
+                  ->orWhereHas('positions', function ($sub) use ($like) {
+                      $sub->where('position_name', 'LIKE', $like);
+                  })
+                  
+                  // Search Associated Service Providers
+                  ->orWhereHas('service_providers', function ($sub) use ($like) {
+                      $sub->where('name', 'LIKE', $like)
+                          ->orWhere('position', 'LIKE', $like);
                   });
+            });
         }
     }
 
@@ -79,16 +109,12 @@ class Department extends Model
      * Retrieve paginated departments with all necessary relationships eager loaded.
      * ADDED: $status filter for Assigned/Unassigned Focal Persons.
      */
-    public static function getPaginatedWithRelations(?string $search = null, string $status = 'all', int $perPage = 10)
-    {
-        $query = self::with(['services', 'positions', 'service_providers', 'focal_person'])
+    public static function getPaginatedWithRelations(?string $search = null, string$status = 'all', int $perPage = 10)     {$query = self::with(['services', 'positions', 'service_providers', 'focal_person'])
             ->search($search);
 
         // Apply Focal Person Assignment Filter
-        if ($status === 'assigned') {
-            $query->has('focal_person');
-        } elseif ($status === 'unassigned') {
-            $query->doesntHave('focal_person');
+        if ($status === 'assigned') {$query->has('focal_person');
+        } elseif ($status === 'unassigned') {$query->doesntHave('focal_person');
         }
 
         return $query->latest('department_id')
@@ -100,13 +126,15 @@ class Department extends Model
     /**
      * FAT MODEL: Handles the creation of the Department AND all its initial child configurations.
      */
-    public static function createDepartment(array $data)
+   public static function createDepartment(array $data)
     {
-        // 1. Create the parent Department
+       // 1. Create the parent Department
         $department = self::create([
             'department_name' => trim($data['name'] ?? $data['department_name']),
             'description'     => trim($data['description'] ?? ''),
+            'classification'  => $data['classification'] ?? 'CC',
             'focal_person_id' => $data['focal_person_id'] ?? null,
+            'daily_pin'       => str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT), 
         ]);
 
         if ($department->focal_person_id) {
@@ -114,42 +142,48 @@ class Department extends Model
                    ->update(['department_id' => $department->department_id]);
         }
 
-        // 2. Quick Add Services
-        if (!empty($data['initial_services'])) {
-            $services = array_filter(array_map('trim', explode(',', $data['initial_services'])));
+       // 2. Quick Add Services (Array Mode)
+        if (!empty($data['initial_services']) && is_array($data['initial_services'])) {
             $serviceData = [];
-            foreach ($services as $service) {
-                $serviceData[] = ['department_id' => $department->department_id, 'service_name' => $service];
+            foreach ($data['initial_services'] as $service) {
+                if (!empty(trim($service['name']))) {
+                    $serviceData[] = ['department_id' => $department->department_id, 'service_name' => trim($service['name'])];
+                }
             }
             if (!empty($serviceData)) {
                 DB::table('department_services')->insert($serviceData);
             }
         }
 
-        // 3. Quick Add Positions
-        if (!empty($data['initial_positions'])) {
-            $positions = array_filter(array_map('trim', explode(',', $data['initial_positions'])));
+        // 3. Quick Add Positions (Array Mode)
+        if (!empty($data['initial_positions']) && is_array($data['initial_positions'])) {
             $positionData = [];
-            foreach ($positions as $position) {
-                $positionData[] = ['department_id' => $department->department_id, 'position_name' => $position];
+            foreach ($data['initial_positions'] as $position) {
+                if (!empty(trim($position['name']))) {
+                    $positionData[] = ['department_id' => $department->department_id, 'position_name' => trim($position['name'])];
+                }
             }
             if (!empty($positionData)) {
                 DB::table('department_positions')->insert($positionData);
             }
         }
 
-        // 4. Quick Add Providers
-        if (!empty($data['initial_providers'])) {
-            $providers = array_filter(array_map('trim', explode(',', $data['initial_providers'])));
+        // 4. Quick Add Providers (Array Mode)
+        if (!empty($data['initial_providers']) && is_array($data['initial_providers'])) {
             $providerData = [];
-            foreach ($providers as $provider) {
-                $providerData[] = ['department_id' => $department->department_id, 'name' => $provider, 'position' => null];
+            foreach ($data['initial_providers'] as $provider) {
+                if (!empty(trim($provider['name']))) {
+                    $providerData[] = [
+                        'department_id' => $department->department_id, 
+                        'name'          => trim($provider['name']), 
+                        'position'      => !empty(trim($provider['position'])) ? trim($provider['position']) : null
+                    ];
+                }
             }
             if (!empty($providerData)) {
                 DB::table('service_providers')->insert($providerData);
             }
         }
-
         return $department;
     }
 
@@ -158,7 +192,10 @@ class Department extends Model
         $this->update([
             'department_name' => $data['department_name'],
             'description'     => $data['description'] ?? '',
+            'classification'  => $data['classification'] ?? $this->classification,
             'focal_person_id' => $data['focal_person_id'] ?? null,
+            // Let them optionally update the daily_pin from the request if it exists
+            'daily_pin'       => $data['daily_pin'] ?? $this->daily_pin,
         ]);
 
         if ($this->focal_person_id) {
@@ -178,10 +215,10 @@ class Department extends Model
         return $department ? $department->department_name : 'General';
     }
 
-    public static function getDropdownList()
+   public static function getDropdownList()
     {
         return self::orderBy('department_name', 'asc')
-            ->get(['department_id', 'department_name']); 
+            ->get(['department_id', 'department_name', 'classification']); 
     }
 
     public static function getTotalCount()
