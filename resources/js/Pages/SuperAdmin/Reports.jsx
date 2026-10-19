@@ -13,23 +13,23 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
     const [activeDropdown, setActiveDropdown] = useState(null);
     const isInitialMount = useRef(true);
 
-    const { data, setData, post, processing, errors } = useForm({
+   const { data, setData, post, processing, errors } = useForm({
         report_name: '',
-        department_id: 'all',
+        department_id: 'all_non_cc', // Match the visual default of the dropdown
         start_date: '',
         end_date: '',
-        report_type: 'cc',
+        report_type: 'non-cc', // Global is always non-cc
         export_format: 'docx',
     });
 
-    // Auto-sync Template Type (CC vs Non-CC) when selecting a department
+   // Auto-sync Template Type (CC vs Non-CC) when selecting a department
     const handleDepartmentChange = (e) => {
         const deptId = e.target.value;
-        if (deptId === 'all') {
+        if (['all_non_cc', 'all_cc', 'all'].includes(deptId)) {
             setData((prev) => ({
                 ...prev,
-                department_id: 'all',
-                report_type: 'cc',
+                department_id: deptId,
+                report_type: deptId === 'all_non_cc' ? 'non-cc' : 'cc',
             }));
             return;
         }
@@ -42,7 +42,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
             department_id: deptId,
             report_type: inferredType,
         }));
-    };
+    };;
 
     const formatDateYMD = (year, monthIndex, day) => {
         const y = String(year);
@@ -251,12 +251,16 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
                                     onChange={handleDepartmentChange}
                                     required
                                 >
-                                    <option value="all">All Departments (University-Wide Summary)</option>
-                                    {departments.map((dept) => (
-                                        <option key={dept.department_id} value={dept.department_id}>
-                                            {dept.department_name} ({dept.default_report_type === 'non-cc' ? 'Non-CC' : 'CC'})
-                                        </option>
-                                    ))}
+                                  <option value="" disabled>-- Select Target --</option>
+                                    <option value="all_non_cc">University-Wide Summary (Non-CC)</option>
+                                    <option value="all_cc">University-Wide Summary (With CC)</option>
+                                    <optgroup label="Individual Departments">
+                                        {departments.map((dept) => (
+                                            <option key={dept.department_id} value={dept.department_id}>
+                                                {dept.department_name} ({dept.default_report_type === 'non-cc' ? 'Non-CC' : 'CC'})
+                                            </option>
+                                        ))}
+                                    </optgroup>
                                 </select>
                                 {errors.department_id && <p className="text-xs text-red-500 mt-1">{errors.department_id}</p>}
                             </div>

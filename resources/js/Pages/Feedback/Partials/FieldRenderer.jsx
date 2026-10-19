@@ -46,7 +46,7 @@ const MultiSelectDropdown = ({ field, answerVal, handleAnswerChange }) => {
     );
 };
 
-export default function FieldRenderer({ field, data, handleAnswerChange, departmentName, serviceProviders, ph_regions, steps }) {
+export default function FieldRenderer({ field, data, handleAnswerChange, departmentName = '', serviceProviders = [], ph_regions = [], steps = {} }) {
     const [showProviderDropdown, setShowProviderDropdown] = useState(false);
 
     const answerVal = data.answers[field.field_id] || '';
@@ -57,7 +57,7 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
     const isRegionField = normalizedLabel.toLowerCase() === 'region of residence';
     const isAgeField = normalizedLabel.toLowerCase() === 'age';
 
-    const cc1Field = steps[2]?.find(f => f.field_label.toUpperCase().includes('CC1'));
+    const cc1Field = steps?.[2]?.find(f => f.field_label.toUpperCase().includes('CC1'));
     const cc1Answer = cc1Field ? data.answers[cc1Field.field_id] : '';
     const isCC1Option4 = cc1Answer && (cc1Answer.startsWith('4') || cc1Answer.includes('I do not know'));
     const isCC2orCC3 = field.field_label.toUpperCase().includes('CC2') || field.field_label.toUpperCase().includes('CC3');
@@ -77,15 +77,26 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
         );
     }
 
-    if (isProviderField) {
+   if (isProviderField) {
         const hasProviders = serviceProviders && serviceProviders.length > 0;
+        const isUnknown = answerVal === 'I do not know';
 
         return (
             <div className="flex flex-col space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none mb-1">
+                    <input 
+                        type="checkbox" 
+                        checked={isUnknown} 
+                        onChange={(e) => handleAnswerChange(field.field_id, e.target.checked ? 'I do not know' : '')}
+                        className="w-4.5 h-4.5 text-[#1E6031] focus:ring-[#1E6031] border-gray-300 rounded cursor-pointer" 
+                    />
+                    <span className="text-sm font-semibold text-gray-700">I don't know the name of the service provider</span>
+                </label>
+
                 {hasProviders && showProviderDropdown ? (
                     <div className="relative">
-                        <select className="w-full border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 py-3 px-3.5 bg-white shadow-sm appearance-none cursor-pointer text-base text-gray-800"
-                            value={answerVal} onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required}>
+                        <select className={`w-full border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 py-3 px-3.5 shadow-sm appearance-none text-base ${isUnknown ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-800 cursor-pointer'}`}
+                            value={isUnknown ? '' : answerVal} onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required && !isUnknown} disabled={isUnknown}>
                             <option value="" disabled>-- Select a Provider --</option>
                             {serviceProviders.map((prov, idx) => <option key={idx} value={prov.name}>{prov.position ? `${prov.name} (${prov.position})` : prov.name}</option>)}
                         </select>
@@ -95,13 +106,13 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
                     </div>
                 ) : (
                     <div className="relative w-full">
-                        <input type="text" value={answerVal} placeholder="Type service provider name..."
-                            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 py-3 px-3.5 text-base placeholder:text-gray-400 bg-white text-gray-800"
-                            onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required} />
+                        <input type="text" value={isUnknown ? '' : answerVal} placeholder={isUnknown ? "Name disabled" : "Type service provider name..."}
+                            className={`w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 py-3 px-3.5 text-base placeholder:text-gray-400 ${isUnknown ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-800'}`}
+                            onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required && !isUnknown} disabled={isUnknown} />
                     </div>
                 )}
                 
-                {hasProviders && (
+                {hasProviders && !isUnknown && (
                     <button 
                         type="button" 
                         onClick={() => setShowProviderDropdown(!showProviderDropdown)} 
@@ -115,7 +126,84 @@ export default function FieldRenderer({ field, data, handleAnswerChange, departm
         );
     }
 
-    switch (field.input_type) {
+   if (isPositionField) {
+        const isUnknown = answerVal === 'I do not know';
+
+        return (
+            <div className="flex flex-col space-y-2.5">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none mb-1">
+                    <input 
+                        type="checkbox" 
+                        checked={isUnknown} 
+                        onChange={(e) => handleAnswerChange(field.field_id, e.target.checked ? 'I do not know' : '')}
+                        className="w-4.5 h-4.5 text-[#1E6031] focus:ring-[#1E6031] border-gray-300 rounded cursor-pointer" 
+                    />
+                    <span className="text-sm font-semibold text-gray-700">I don't know the position of the service provider</span>
+                </label>
+                <div className="relative w-full">
+                    <input type="text" value={isUnknown ? '' : answerVal} placeholder={isUnknown ? "Position disabled" : "Position will auto-fill from provider or type manually..."}
+                        className={`w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 py-3 px-3.5 text-base placeholder:text-gray-400 ${isUnknown ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-800'}`}
+                        onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} required={field.is_required && !isUnknown} disabled={isUnknown} />
+                </div>
+            </div>
+        );
+    }
+
+   switch (field.input_type) {
+        case 'star_rating':
+            const currentStars = parseInt(answerVal, 10) || 0;
+            const ratingLabels = { 1: '1 - Poor', 2: '2 - Fair', 3: '3 - Satisfactory', 4: '4 - Very Good', 5: '5 - Excellent' };
+            
+            return (
+                <div className="flex flex-col items-start gap-3 mt-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                            const isFilled = currentStars >= star;
+                            return (
+                                <button
+                                    type="button"
+                                    key={star}
+                                    onClick={() => handleAnswerChange(field.field_id, currentStars === star ? '' : String(star))}
+                                    className="p-1 sm:p-2 text-3xl sm:text-4xl transition-transform hover:scale-125 active:scale-95 focus:outline-hidden cursor-pointer"
+                                >
+                                    <i className={`fa-star ${isFilled ? 'fa-solid text-amber-400 drop-shadow-sm' : 'fa-regular text-gray-300 hover:text-amber-200'}`}></i>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    
+                    {currentStars > 0 ? (
+                        <span className="inline-flex items-center gap-2 text-sm font-bold text-emerald-800 bg-white px-4 py-1.5 rounded-full border border-emerald-300 shadow-xs">
+                            <i className="fa-solid fa-circle-check text-emerald-600"></i>
+                            {ratingLabels[currentStars]}
+                        </span>
+                    ) : (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 bg-white/70 px-3 py-1 rounded-full border border-gray-200">
+                            <i className="fa-solid fa-circle-minus text-gray-300"></i>
+                            No rating selected
+                        </span>
+                    )}
+                </div>
+            );
+        case 'radio_card':
+            const sqdOptionLabels = {
+                '1': 'Strongly Disagree', '2': 'Disagree', '3': 'Neutral', '4': 'Agree', '5': 'Strongly Agree', 'N/A': 'Not Applicable'
+            };
+            return (
+                <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 w-full">
+                    {field.options.map((opt, idx) => {
+                        const isSelected = answerVal === opt;
+                        const labelDesc = sqdOptionLabels[opt] || opt;
+                        return (
+                            <label key={idx} className={`relative flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all cursor-pointer select-none text-center ${isSelected ? 'bg-[#1E6031] text-white border-[#1E6031] shadow-md scale-[1.02]' : 'bg-white text-gray-700 border-gray-200 hover:border-emerald-400 hover:bg-emerald-50/40 shadow-sm'}`}>
+                                <input type="radio" name={`field_${field.field_id}`} value={opt} checked={isSelected} onChange={(e) => handleAnswerChange(field.field_id, e.target.value)} className="sr-only" required={field.is_required} />
+                                <span className={`text-base sm:text-lg font-black leading-none mb-1 ${isSelected ? 'text-[#FFD700]' : 'text-gray-900'}`}>{opt}</span>
+                                <span className={`text-[11px] sm:text-xs font-semibold leading-tight line-clamp-1 ${isSelected ? 'text-white/95' : 'text-gray-500'}`}>{labelDesc}</span>
+                            </label>
+                        );
+                    })}
+                </div>
+            );
         case 'radio':
             let radioOptions = [...field.options];
             

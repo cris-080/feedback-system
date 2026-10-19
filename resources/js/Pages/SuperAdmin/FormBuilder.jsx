@@ -5,18 +5,20 @@ import Swal from 'sweetalert2';
 
 export default function FormBuilder({ departments, departmentServices, departmentProviders, initialFields }) {
     
-    const validInitialFields = (initialFields || [])
+   const validInitialFields = (initialFields || [])
         .filter(field => field.field_label && field.field_label.trim() !== '')
         .map(field => {
-            let mappedOptions = field.options || [];
+            let currentInputType = field.input_type;
             
-            if (field.field_label.toUpperCase().includes('SQD')) {
-                mappedOptions = mappedOptions.filter(opt => opt !== 'N/A' && opt !== 'n/a');
+            // Auto-migrate old SQD radio buttons to the new explicit Card type in the builder
+            if (currentInputType === 'radio' && field.field_label.toUpperCase().includes('SQD')) {
+                currentInputType = 'radio_card';
             }
             
             return {
                 ...field,
-                options: mappedOptions
+                input_type: currentInputType,
+                options: field.options || []
             };
         });
 
@@ -322,7 +324,8 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                                             <option value="text">Short Text</option>
                                                             <option value="number">Number</option>
                                                             <option value="dropdown">Dropdown Menu</option>
-                                                            <option value="radio">Radio Buttons / Rating Chips</option>
+                                                            <option value="radio">Normal Radio Buttons</option>
+                                                            <option value="radio_card">Card/Chip Options</option>
                                                             <option value="multiselect">Multi-Select</option>
                                                         </select>
                                                     </div>

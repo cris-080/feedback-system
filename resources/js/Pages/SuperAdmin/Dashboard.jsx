@@ -35,7 +35,16 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         const [timeRange, setTimeRange] = useState('30d');
         
         // NEW: Tab state for text analysis
-        const [complaintTab, setComplaintTab] = useState('complaints'); // 'complaints' | 'harassment'
+      const [complaintTab, setComplaintTab] = useState('complaints'); // 'complaints' | 'harassment'
+
+       // Instantly clean URL, allowing notification to trigger first
+        useEffect(() => {
+            if (window.location.search.includes('login=')) {
+                setTimeout(() => {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }, 10); 
+            }
+        }, []);
 
         useEffect(() => {
             setTempDept(currentDept);

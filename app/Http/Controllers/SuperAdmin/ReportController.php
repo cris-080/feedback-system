@@ -85,6 +85,18 @@ class ReportController extends Controller
         }
 
         $reportData = $report->report_data;
+        
+        // Force the correct display name and type for the Overall templates
+        if ($validated['department_id'] === 'all_non_cc') {
+            $reportData['metadata']['department'] = 'University-Wide Summary (Non-CC)';
+            $report->report_type = 'non-cc';
+            $reportData['metadata']['type'] = 'non-cc';
+        } elseif ($validated['department_id'] === 'all_cc') {
+            $reportData['metadata']['department'] = 'University-Wide Summary (With CC)';
+            $report->report_type = 'cc';
+            $reportData['metadata']['type'] = 'cc';
+        }
+        
         $defaultName = ($reportData['metadata']['department'] ?? 'Department') . ' - ' . ($reportData['metadata']['period'] ?? '');
         $customName = trim((string) ($validated['report_name'] ?? ''));
         $reportData['metadata']['report_name'] = $customName !== '' ? $customName : $defaultName;
@@ -438,9 +450,13 @@ class ReportController extends Controller
     private function generateFilledDocx(Report $report): ?string
     {
         $data = $report->report_data;
-        $isCC = $report->report_type === 'cc';
+        $departmentName = $data['metadata']['department'] ?? '';
+        $isGlobal = str_contains(strtolower($departmentName), 'all departments') || str_contains(strtolower($departmentName), 'university-wide');
 
-        if ($isCC) {
+        // Target the appropriate template
+        if ($isGlobal) {
+            $templatePath = storage_path('app/templates/cc_overall_template.docx');
+        } elseif ($report->report_type === 'cc') {
             $templatePath = storage_path('app/templates/cc_template.docx');
         } else {
             $hyphenPath = storage_path('app/templates/non-cc_template.docx');
@@ -459,7 +475,7 @@ class ReportController extends Controller
         $templateProcessor->setValue('period', htmlspecialchars($data['metadata']['period']));
         $templateProcessor->setValue('total_respondents', $data['metadata']['total_respondents']);
 
-        // 2. Demographics (Client Type & Sex)
+        // 2. Demographics
         $templateProcessor->setValue('ct_cit', $data['demographics']['client_type']['Citizen']['count'] ?? 0);
         $templateProcessor->setValue('ct_cit_p', ($data['demographics']['client_type']['Citizen']['percent'] ?? 0) . '%');
         $templateProcessor->setValue('ct_bus', $data['demographics']['client_type']['Business']['count'] ?? 0);
@@ -471,71 +487,114 @@ class ReportController extends Controller
         $templateProcessor->setValue('sex_m_p', ($data['demographics']['sex']['Male']['percent'] ?? 0) . '%');
         $templateProcessor->setValue('sex_f', $data['demographics']['sex']['Female']['count'] ?? 0);
         $templateProcessor->setValue('sex_f_p', ($data['demographics']['sex']['Female']['percent'] ?? 0) . '%');
+        $templateProcessor->setValue('sex_na', $data['demographics']['sex']['Prefer not to say']['count'] ?? 0);
+        $templateProcessor->setValue('sex_na_p', ($data['demographics']['sex']['Prefer not to say']['percent'] ?? 0) . '%');
 
-        // Strip block wrapper tags present in non-cc_template.docx before cloning rows
-        $templateProcessor->setValue('block_regions', '');
-        $templateProcessor->setValue('/block_regions', '');
-        $templateProcessor->setValue('block_services', '');
-        $templateProcessor->setValue('/block_services', '');
-
-        // 3. Dynamic Table Rows (Regions and Services)
-        $regions = [];
-        foreach ($data['demographics']['region'] ?? [] as $name => $metrics) {
-            $regions[] = [
-                'region_name' => htmlspecialchars($name),
-                'region_freq' => $metrics['count'],
-                'region_pct'  => $metrics['percent'] . '%'
-            ];
-        }
-        
-        if (count($regions) > 0) {
-            $templateProcessor->cloneRowAndSetValues('region_name', $regions);
-        } else {
-            $templateProcessor->setValue('region_name', 'N/A');
-            $templateProcessor->setValue('region_freq', '0');
-            $templateProcessor->setValue('region_pct', '0%');
-        }
-
-        $services = [];
-        foreach ($data['demographics']['services'] ?? [] as $name => $metrics) {
-            $services[] = [
-                'service_name' => htmlspecialchars($name),
-                'service_freq' => $metrics['count'],
-                'service_pct'  => $metrics['percent'] . '%'
-            ];
-        }
-        
-        if (count($services) > 0) {
-            $templateProcessor->cloneRowAndSetValues('service_name', $services);
-        } else {
-            $templateProcessor->setValue('service_name', 'N/A');
-            $templateProcessor->setValue('service_freq', '0');
-            $templateProcessor->setValue('service_pct', '0%');
+       // 3. Dynamic Region Block (Table 4)
+        if ($isGlobal) {
+            $regions = [];
+            foreach ($data['demographics']['region'] ?? [] as $name => $metrics) {
+                $regions[] = [
+                    'region_name' => htmlspecialchars($name),
+                    'region_freq' => $metrics['count'],
+                    'region_pct'  => $metrics['percent'] . '%'
+                ];
+            }
+            
+            try {
+                if (count($regions) > 0) {
+                    $templateProcessor->cloneRowAndSetValues('region_name', $regions);
+                } else {
+                    $templateProcessor->setValue('region_name', 'N/A');
+                    $templateProcessor->setValue('region_freq', '0');
+                    $templateProcessor->setValue('region_pct', '0%');
+                }
+            } catch (\Exception $e) {}
         }
 
-        // 4. Citizen's Charter (If CC Template)
-        if ($isCC) {
+       // 4. Overall ARTA Structure (Tables 1, 2, 3)
+        if ($isGlobal && isset($data['table2_data'])) {
+            // Table 1: CC Formulas
+            $templateProcessor->setValue('cc_awareness_pct', ($data['cc_formulas']['cc1_aware'] ?? 0) . '%');
+            $templateProcessor->setValue('cc_visibility_pct', ($data['cc_formulas']['cc2_visible'] ?? 0) . '%');
+            $templateProcessor->setValue('cc_helpfulness_pct', ($data['cc_formulas']['cc3_helpful'] ?? 0) . '%');
+            $templateProcessor->setValue('response_rate_pct', '100%'); 
+            $templateProcessor->setValue('overall_score_pct', ($data['cc_formulas']['overall'] ?? 0) . '%');
+
+            // Tables 2 & 3: Format as multi-line strings using native Word break tags
+            $extTotalResponses = 0; $extTotalTrans = 0;
+            $intTotalResponses = 0; $intTotalTrans = 0;
+
+            $extServicesArr = []; $extRespArr = []; $extTransArr = [];
+            $intServicesArr = []; $intRespArr = []; $intTransArr = [];
+            $zeroServicesArr = [];
+
+            foreach (['external', 'internal'] as $scope) {
+                foreach ($data['table2_data'][$scope] ?? [] as $deptName => $services) {
+                    foreach ($services as $svcName => $count) {
+                        $combinedName = htmlspecialchars($deptName) . ' - ' . htmlspecialchars($svcName);
+                        if ($count > 0) {
+                            if ($scope === 'external') { 
+                                $extServicesArr[] = $combinedName;
+                                $extRespArr[] = $count;
+                                $extTransArr[] = $count;
+                                $extTotalResponses += $count; 
+                                $extTotalTrans += $count; 
+                            }
+                            if ($scope === 'internal') { 
+                                $intServicesArr[] = $combinedName;
+                                $intRespArr[] = $count;
+                                $intTransArr[] = $count;
+                                $intTotalResponses += $count; 
+                                $intTotalTrans += $count; 
+                            }
+                        } else {
+                            $zeroServicesArr[] = $combinedName;
+                        }
+                    }
+                }
+            }
+
+            // Bind Totals
+            $templateProcessor->setValue('ext_total_responses', $extTotalResponses);
+            $templateProcessor->setValue('ext_total_transactions', $extTotalTrans);
+            $templateProcessor->setValue('int_total_responses', $intTotalResponses);
+            $templateProcessor->setValue('int_total_transactions', $intTotalTrans);
+            $templateProcessor->setValue('total_responses', $extTotalResponses + $intTotalResponses);
+            $templateProcessor->setValue('total_transactions', $extTotalTrans + $intTotalTrans);
+
+           // Bind Formatted Multi-Line Lists using proper Word XML line breaks
+            $lb = '</w:t><w:br/><w:t>';
+            
+            $templateProcessor->setValue('ext_services_list', empty($extServicesArr) ? 'None' : implode($lb, $extServicesArr));
+            $templateProcessor->setValue('ext_resp_list', empty($extRespArr) ? '0' : implode($lb, $extRespArr));
+            $templateProcessor->setValue('ext_trans_list', empty($extTransArr) ? '0' : implode($lb, $extTransArr));
+
+            $templateProcessor->setValue('int_services_list', empty($intServicesArr) ? 'None' : implode($lb, $intServicesArr));
+            $templateProcessor->setValue('int_resp_list', empty($intRespArr) ? '0' : implode($lb, $intRespArr));
+            $templateProcessor->setValue('int_trans_list', empty($intTransArr) ? '0' : implode($lb, $intTransArr));
+
+            $templateProcessor->setValue('zero_services_list', empty($zeroServicesArr) ? 'None' : implode($lb, $zeroServicesArr));
+        }
+
+        // 5. CC Math (Tables 5)
+        if ($report->report_type === 'cc') {
             $ccData = $this->resolveCCMetrics($data);
-
             for ($i = 1; $i <= 4; $i++) {
                 $templateProcessor->setValue("cc1_{$i}_c", $ccData["cc1_{$i}"]['c'] > 0 ? $ccData["cc1_{$i}"]['c'] : '');
                 $templateProcessor->setValue("cc1_{$i}_p", $ccData["cc1_{$i}"]['c'] > 0 ? $ccData["cc1_{$i}"]['p'] . '%' : '');
             }
-            
             for ($i = 1; $i <= 5; $i++) {
                 if ($i === 5) {
-                    $templateProcessor->setValue("cc2_{$i}_c", '');
-                    $templateProcessor->setValue("cc2_{$i}_p", '');
+                    $templateProcessor->setValue("cc2_{$i}_c", ''); $templateProcessor->setValue("cc2_{$i}_p", '');
                 } else {
                     $templateProcessor->setValue("cc2_{$i}_c", $ccData["cc2_{$i}"]['c'] > 0 ? $ccData["cc2_{$i}"]['c'] : '');
                     $templateProcessor->setValue("cc2_{$i}_p", $ccData["cc2_{$i}"]['c'] > 0 ? $ccData["cc2_{$i}"]['p'] . '%' : '');
                 }
             }
-            
             for ($i = 1; $i <= 4; $i++) {
                 if ($i === 4) {
-                    $templateProcessor->setValue("cc3_{$i}_c", '');
-                    $templateProcessor->setValue("cc3_{$i}_p", '');
+                    $templateProcessor->setValue("cc3_{$i}_c", ''); $templateProcessor->setValue("cc3_{$i}_p", '');
                 } else {
                     $templateProcessor->setValue("cc3_{$i}_c", $ccData["cc3_{$i}"]['c'] > 0 ? $ccData["cc3_{$i}"]['c'] : '');
                     $templateProcessor->setValue("cc3_{$i}_p", $ccData["cc3_{$i}"]['c'] > 0 ? $ccData["cc3_{$i}"]['p'] . '%' : '');
@@ -543,56 +602,100 @@ class ReportController extends Controller
             }
         }
 
-        // 5. SQD Matrix & Overall Satisfaction
-        $sqdKeys = ['sqd0', 'sqd1', 'sqd2', 'sqd3', 'sqd4', 'sqd5', 'sqd6', 'sqd7', 'sqd8', 'overall_satisfaction'];
-        $totalMeanSum = 0;
-        $validMeans = 0;
+        // 6. SQD Matrix Processing
+        $sqdKeys = ['sqd0', 'sqd1', 'sqd2', 'sqd3', 'sqd4', 'sqd5', 'sqd6', 'sqd7', 'sqd8'];
 
-        foreach ($sqdKeys as $sqd) {
-            if (isset($data['sqd_metrics'][$sqd])) {
-                $metrics = $data['sqd_metrics'][$sqd];
-                $templateProcessor->setValue("{$sqd}_1", $metrics['counts']['1']);
-                $templateProcessor->setValue("{$sqd}_2", $metrics['counts']['2']);
-                $templateProcessor->setValue("{$sqd}_3", $metrics['counts']['3']);
-                $templateProcessor->setValue("{$sqd}_4", $metrics['counts']['4']);
-                $templateProcessor->setValue("{$sqd}_5", $metrics['counts']['5']);
-                $templateProcessor->setValue("{$sqd}_na", $metrics['counts']['na']);
+        if ($isGlobal && isset($data['sqd_metrics']['overall'])) {
+            // Mapping for Overall Template (Scopes: overall, internal, external)
+            foreach (['overall' => '', 'internal' => 'int_', 'external' => 'ext_'] as $scope => $prefix) {
+                $totalSatData = $data['sqd_metrics'][$scope]['overall_satisfaction'] ?? null;
+                if ($totalSatData) {
+                    // Populate Table 6, 7, 8 (SQD0 rows)
+                    $templateProcessor->setValue("{$prefix}overall_sat_5", $totalSatData['counts']['5']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_4", $totalSatData['counts']['4']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_3", $totalSatData['counts']['3']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_2", $totalSatData['counts']['2']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_1", $totalSatData['counts']['1']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_na", $totalSatData['counts']['na']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_total", $totalSatData['total_responses']);
+                    $templateProcessor->setValue("{$prefix}overall_sat_p", ($totalSatData['percentage'] ?? 0) . '%');
+                }
+
+                // Populate Tables 9 & 10
+                $allSum5 = 0; $allSum4 = 0; $allSum3 = 0; $allSum2 = 0; $allSum1 = 0; $allSumNa = 0; $allTotal = 0;
                 
-                $templateProcessor->setValue("{$sqd}_mean", $metrics['mean']);
-                $templateProcessor->setValue("{$sqd}_adj", htmlspecialchars($metrics['adjectival']));
+                foreach ($sqdKeys as $sqd) {
+                    $metrics = $data['sqd_metrics'][$scope][$sqd] ?? null;
+                    if ($metrics) {
+                        $templateProcessor->setValue("{$prefix}{$sqd}_5", $metrics['counts']['5']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_4", $metrics['counts']['4']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_3", $metrics['counts']['3']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_2", $metrics['counts']['2']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_1", $metrics['counts']['1']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_na", $metrics['counts']['na']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_total", $metrics['total_responses']);
+                        $templateProcessor->setValue("{$prefix}{$sqd}_p", ($metrics['percentage'] ?? 0) . '%');
 
-                if (is_numeric($metrics['mean']) && $metrics['mean'] > 0) {
-                    $totalMeanSum += (float) $metrics['mean'];
-                    $validMeans++;
+                        $allSum5 += $metrics['counts']['5']; $allSum4 += $metrics['counts']['4']; 
+                        $allSum3 += $metrics['counts']['3']; $allSum2 += $metrics['counts']['2']; 
+                        $allSum1 += $metrics['counts']['1']; $allSumNa += $metrics['counts']['na'];
+                        $allTotal += $metrics['total_responses'];
+                    }
+                }
+                
+                $overallPct = $allTotal > 0 ? round((($allSum5 + $allSum4) / $allTotal) * 100, 2) : 0;
+                
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_5' : "{$prefix}all_5", $allSum5);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_4' : "{$prefix}all_4", $allSum4);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_3' : "{$prefix}all_3", $allSum3);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_2' : "{$prefix}all_2", $allSum2);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_1' : "{$prefix}all_1", $allSum1);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_na' : "{$prefix}all_na", $allSumNa);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_tot' : "{$prefix}all_tot", $allTotal);
+                $templateProcessor->setValue($scope === 'overall' ? 'sqd_all_p' : "{$prefix}all_p", $overallPct . '%');
+            }
+        } else {
+            // Standard Single-Department SQD Math mapping (Mean & Adjectival)
+            $sqdKeys[] = 'overall_satisfaction';
+            $totalMeanSum = 0; $validMeans = 0;
+            
+            foreach ($sqdKeys as $sqd) {
+                if (isset($data['sqd_metrics'][$sqd])) {
+                    $metrics = $data['sqd_metrics'][$sqd];
+                    $templateProcessor->setValue("{$sqd}_1", $metrics['counts']['1']);
+                    $templateProcessor->setValue("{$sqd}_1_p", ($metrics['percentages']['1'] ?? 0) . '%');
+                    $templateProcessor->setValue("{$sqd}_2", $metrics['counts']['2']);
+                    $templateProcessor->setValue("{$sqd}_2_p", ($metrics['percentages']['2'] ?? 0) . '%');
+                    $templateProcessor->setValue("{$sqd}_3", $metrics['counts']['3']);
+                    $templateProcessor->setValue("{$sqd}_3_p", ($metrics['percentages']['3'] ?? 0) . '%');
+                    $templateProcessor->setValue("{$sqd}_4", $metrics['counts']['4']);
+                    $templateProcessor->setValue("{$sqd}_4_p", ($metrics['percentages']['4'] ?? 0) . '%');
+                    $templateProcessor->setValue("{$sqd}_5", $metrics['counts']['5']);
+                    $templateProcessor->setValue("{$sqd}_5_p", ($metrics['percentages']['5'] ?? 0) . '%');
+                    $templateProcessor->setValue("{$sqd}_na", $metrics['counts']['na']);
+                    
+                    $templateProcessor->setValue("{$sqd}_mean", $metrics['mean'] ?? '');
+                    $templateProcessor->setValue("{$sqd}_adj", htmlspecialchars($metrics['adjectival'] ?? ''));
+
+                    if (isset($metrics['mean']) && is_numeric($metrics['mean']) && $metrics['mean'] > 0) {
+                        $totalMeanSum += (float) $metrics['mean'];
+                        $validMeans++;
+                    }
                 }
             }
+
+            $rawFinalMean = $validMeans > 0 ? round($totalMeanSum / $validMeans, 2) : 0;
+            $templateProcessor->setValue('final_mean', $rawFinalMean > 0 ? number_format($rawFinalMean, 2) : '');
+
+            $finalAdj = '';
+            if ($rawFinalMean >= 4.21) $finalAdj = 'Excellent';
+            elseif ($rawFinalMean >= 3.41) $finalAdj = 'Very Good';
+            elseif ($rawFinalMean >= 2.61) $finalAdj = 'Good';
+            elseif ($rawFinalMean >= 1.81) $finalAdj = 'Fair';
+            elseif ($rawFinalMean > 0) $finalAdj = 'Needs Improvement';
+            
+            $templateProcessor->setValue('final_adj', $finalAdj);
         }
-
-        // Final Mean
-        $finalMean = $validMeans > 0 ? number_format($totalMeanSum / $validMeans, 2) : '';
-        $templateProcessor->setValue('final_mean', $finalMean);
-
-        // 6. Harassment & Recommendations
-        $templateProcessor->setValue('har_y', $data['harassment']['Yes']['count'] ?? 0);
-        $templateProcessor->setValue('har_y_p', ($data['harassment']['Yes']['percent'] ?? 0) . '%');
-        $templateProcessor->setValue('har_n', $data['harassment']['No']['count'] ?? 0);
-        $templateProcessor->setValue('har_n_p', ($data['harassment']['No']['percent'] ?? 0) . '%');
-
-        if (!empty($data['harassment_details'])) {
-            $harassmentText = implode(', ', $data['harassment_details']);
-        } else {
-            $harassmentText = "_________________________________________________________________________________________________________";
-        }
-        $templateProcessor->setValue('harassment_details', htmlspecialchars($harassmentText));
-
-        $templateProcessor->setValue('rec_y', $data['recommendations']['Yes']['count'] ?? 0);
-        $templateProcessor->setValue('rec_y_p', ($data['recommendations']['Yes']['percent'] ?? 0) . '%');
-        $templateProcessor->setValue('rec_n', $data['recommendations']['No']['count'] ?? 0);
-        $templateProcessor->setValue('rec_n_p', ($data['recommendations']['No']['percent'] ?? 0) . '%');
-
-        // 7. Comments (Comma-separated)
-        $commentsText = !empty($data['comments']) ? implode(', ', $data['comments']) : "No comments provided.";
-        $templateProcessor->setValue('comments', htmlspecialchars($commentsText));
 
         // 8. Save populated temp DOCX inside storage/app/temp
         $workDir = storage_path('app/temp');

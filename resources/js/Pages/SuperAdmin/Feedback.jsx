@@ -7,7 +7,6 @@ import Pagination from '@/Components/Pagination';
 export default function Feedback({ feedbacks, isSuperAdmin }) {
     // --- MODAL STATE ---
     const [selectedFeedback, setSelectedFeedback] = useState(null);
-    const [currentStep, setCurrentStep] = useState(1);
     const [animateModal, setAnimateModal] = useState(false);
 
     // --- SEARCH & FILTER STATE ---
@@ -36,7 +35,6 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
 
     const openModal = (feedback) => {
         setSelectedFeedback(feedback);
-        setCurrentStep(1);
         requestAnimationFrame(() => {
             setAnimateModal(true);
         });
@@ -46,12 +44,8 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
         setAnimateModal(false);
         setTimeout(() => {
             setSelectedFeedback(null);
-            setCurrentStep(1);
         }, 300);
     };
-
-    const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, 4));
-    const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
 
     // --- HELPER FUNCTIONS ---
     const formatDateTime = (dateString) => {
@@ -294,7 +288,7 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                     </div>
                 </div>
 
-                {/* --- MULTI-STEP FEEDBACK VIEWER MODAL --- */}
+               {/* --- VERTICAL SCROLL FEEDBACK VIEWER MODAL --- */}
                 {selectedFeedback && (
                     <div 
                         className={`fixed inset-0 z-50 flex items-center justify-center bg-black backdrop-blur-sm transition-opacity duration-300 ease-out p-4 ${
@@ -310,34 +304,30 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                         >
                             {/* Modal Header */}
                             <div className="flex justify-between items-center p-6 border-b border-gray-200">
-                                <h3 className="text-lg font-bold text-gray-900">
-                                    {currentStep === 1 && "Step 1: General Transaction Profile"}
-                                    {currentStep === 2 && "Step 2: Citizen's Charter (CC) Questions"}
-                                    {currentStep === 3 && "Step 3: Service Quality Dimensions (SQD)"}
-                                    {currentStep === 4 && "Step 4: Overall Institutional Experience"}
-                                </h3>
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900">Feedback Details</h3>
+                                    <p className="text-sm text-gray-500">Control No: {selectedFeedback.control_number}</p>
+                                </div>
                                 <button onClick={closeModal} className="text-gray-400 hover:text-red-500 transition-colors">
-                                    <i className="fa-solid fa-xmark text-xl"></i>
+                                    <i className="fa-solid fa-xmark text-2xl"></i>
                                 </button>
                             </div>
 
                             {/* Modal Body (Scrollable Content Area) */}
-                            <div className="p-6 overflow-y-auto flex-1 bg-white">
+                            <div className="p-6 overflow-y-auto flex-1 bg-white space-y-10">
                                 
-                                {/* STEP 1: General Profile */}
-                                {currentStep === 1 && (
-                                    <div className="space-y-4 animate-fade-in">
+                                {/* SECTION 1: General Profile */}
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">1. General Transaction Profile</h4>
+                                    <div className="space-y-4">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <DataField label="Control Number" value={selectedFeedback.control_number} />
                                             <DataField label="Department / Office" value={selectedFeedback.department_name} />
-                                            
                                             <DataField 
                                                 label="Date of Transaction" 
                                                 value={selectedFeedback.transaction_date 
                                                     ? formatDateOnly(selectedFeedback.transaction_date) 
                                                     : formatDateOnly(selectedFeedback.submitted_at)} 
                                             />
-                                            
                                             <DataField label="Client Classification" value={getFieldValue(['client classification', 'client type', 'client'])} />
                                             <DataField label="Transaction Type" value={getFieldValue(['transaction type'])} />
                                             <DataField label="Sex" value={getFieldValue(['sex', 'gender'])} />
@@ -352,29 +342,33 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                             <DataField label="Provider Position" value={getFieldValue(['position of service provider', 'provider position'])} />
                                         </div>
                                     </div>
-                                )}
+                                </div>
 
-                                {/* STEP 2: Citizen's Charter */}
-                                {currentStep === 2 && (
-                                    <div className="space-y-2 animate-fade-in">
-                                        <QABox 
-                                            question="CC1: Which of the following best describes your awareness of a CC?" 
-                                            answer={getFieldValue(['cc1', 'cc 1'])} 
-                                        />
-                                        <QABox 
-                                            question="CC2: If aware of CC (answered 1-3 in CC1), would you say that the CC of this office was...?" 
-                                            answer={getFieldValue(['cc2', 'cc 2'])} 
-                                        />
-                                        <QABox 
-                                            question="CC3: If aware of CC (answered 1-3 in CC1), how much did the CC help you in your transaction?" 
-                                            answer={getFieldValue(['cc3', 'cc 3'])} 
-                                        />
+                                {/* SECTION 2: Citizen's Charter */}
+                                {getFieldValue(['cc1', 'cc 1']) && (
+                                    <div>
+                                        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">2. Citizen's Charter</h4>
+                                        <div className="space-y-2">
+                                            <QABox 
+                                                question="CC1: Which of the following best describes your awareness of a CC?" 
+                                                answer={getFieldValue(['cc1', 'cc 1'])} 
+                                            />
+                                            <QABox 
+                                                question="CC2: If aware of CC (answered 1-3 in CC1), would you say that the CC of this office was...?" 
+                                                answer={getFieldValue(['cc2', 'cc 2'])} 
+                                            />
+                                            <QABox 
+                                                question="CC3: If aware of CC (answered 1-3 in CC1), how much did the CC help you in your transaction?" 
+                                                answer={getFieldValue(['cc3', 'cc 3'])} 
+                                            />
+                                        </div>
                                     </div>
                                 )}
 
-                                {/* STEP 3: SQD */}
-                                {currentStep === 3 && (
-                                    <div className="mb-8 animate-fade-in">
+                                {/* SECTION 3: SQD */}
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">3. Service Quality Dimensions</h4>
+                                    <div className="mb-8">
                                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
                                             <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between">
                                                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Dimension</span>
@@ -414,13 +408,31 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                             </div>
                                         </div>
                                     </div>
-                                )}
+                                    
+                                    {/* Overall Educational Experience Star Rating */}
+                                    {getFieldValue(['educational experience', 'overall, how would you rate']) && (() => {
+                                        const ratingVal = parseInt(getFieldValue(['educational experience', 'overall, how would you rate']), 10) || 0;
+                                        return (
+                                            <div className="bg-gradient-to-br from-emerald-50/50 to-amber-50/30 p-5 rounded-xl border border-emerald-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-gray-900">Overall Educational Experience</h4>
+                                                    <p className="text-xs text-gray-500">Client's institutional rating.</p>
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    {[1, 2, 3, 4, 5].map((star) => (
+                                                        <i key={star} className={`text-2xl ${ratingVal >= star ? 'fa-solid fa-star text-amber-400 drop-shadow-sm' : 'fa-regular fa-star text-gray-300'}`}></i>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
 
-                                {/* STEP 4: Remarks & AI Sentiment */}
-                                {currentStep === 4 && (
-                                    <div className="space-y-6 animate-fade-in">
+                                {/* SECTION 4: Remarks & AI Sentiment */}
+                                <div>
+                                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">4. Overall Institutional Experience</h4>
+                                    <div className="space-y-6">
                                         
-                                        {/* NEW: Recommendation & Harassment Overview */}
                                         <div className="grid grid-cols-1 gap-4">
                                             <DataField 
                                                 label="Overall, I would recommend CLSU to my peers." 
@@ -428,8 +440,8 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                             />
                                             
                                             {hasHarassmentReported(selectedFeedback.answers) && (
-                                                <div className="bg-red-50 border border-red-200 p-3 rounded-lg shadow-sm">
-                                                    <span className="block text-xs font-bold text-red-700 uppercase tracking-wider mb-1">
+                                                <div className="bg-red-50 border border-red-200 p-4 rounded-lg shadow-sm">
+                                                    <span className="block text-xs font-bold text-red-700 uppercase tracking-wider mb-2">
                                                         <i className="fa-solid fa-triangle-exclamation mr-1.5"></i> Harassment Details
                                                     </span>
                                                     <span className="block text-sm font-semibold text-red-900 whitespace-pre-wrap">
@@ -466,48 +478,17 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
                                             />
                                         </div>
                                     </div>
-                                )}
+                                </div>
                             </div>
 
-                            {/* Modal Footer / Navigation Controls */}
-                            <div className="p-5 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end gap-3 items-center">
-                                {/* Step Indicator */}
-                                <div className="mr-auto flex gap-1.5">
-                                    {[1, 2, 3, 4].map((step) => (
-                                        <span 
-                                            key={step} 
-                                            className={`block w-2.5 h-2.5 rounded-full transition-colors ${currentStep === step ? 'bg-blue-600' : 'bg-gray-300'}`}
-                                        ></span>
-                                    ))}
-                                </div>
-
+                            {/* Modal Footer */}
+                            <div className="p-5 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end">
                                 <button 
-                                    onClick={prevStep}
-                                    disabled={currentStep === 1}
-                                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition ${
-                                        currentStep === 1 
-                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 shadow-sm'
-                                    }`}
+                                    onClick={closeModal}
+                                    className="px-6 py-2 bg-gray-800 text-white rounded-lg font-bold text-sm hover:bg-gray-900 transition shadow-sm"
                                 >
-                                    <i className="fa-solid fa-chevron-left mr-1.5"></i> Previous
+                                    Close <i className="fa-solid fa-check ml-1.5"></i>
                                 </button>
-                                
-                                {currentStep < 4 ? (
-                                    <button 
-                                        onClick={nextStep}
-                                        className="px-5 py-2 bg-gray-800 text-white rounded-lg font-semibold text-sm hover:bg-gray-900 transition shadow-sm"
-                                    >
-                                        Next <i className="fa-solid fa-chevron-right ml-1.5"></i>
-                                    </button>
-                                ) : (
-                                    <button 
-                                        onClick={closeModal}
-                                        className="px-5 py-2 bg-[#009639] text-white rounded-lg font-semibold text-sm hover:bg-[#1E6031] transition shadow-sm"
-                                    >
-                                        Finish <i className="fa-solid fa-check ml-1.5"></i>
-                                    </button>
-                                )}
                             </div>
                         </div>
                     </div>

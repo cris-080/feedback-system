@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
-import { Head } from '@inertiajs/react';
+import React, { useState, useEffect } from 'react';
+import { Head, router } from '@inertiajs/react';
 
 export default function LandingPage({ form, departmentName, onStart, qrData }) {
     const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
+
+    // Auto-refresh the Kiosk QR Code every 60 seconds
+    useEffect(() => {
+        if (qrData) {
+            const interval = setInterval(() => {
+                router.reload({ only: ['qr_data'], preserveState: true, preserveScroll: true });
+            }, 60000);
+            return () => clearInterval(interval);
+        }
+    }, [qrData]);
     const [agreedPrivacy, setAgreedPrivacy] = useState(false);
     const [agreedTerms, setAgreedTerms] = useState(false);
 
@@ -36,25 +46,6 @@ export default function LandingPage({ form, departmentName, onStart, qrData }) {
                     <p className="text-xs sm:text-sm lg:text-base text-white/70 leading-relaxed font-normal">
                         Your objective feedback drives continuous modernization across university facilities, personnel workflows, and public administrative service delivery.
                     </p>
-                    
-                    {/* DYNAMIC QR CODE DISPLAY (Now on the Left Side) */}
-                    {qrData && (
-                        <div className="pt-6 mt-6 border-t border-white/20 flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                            <div className="p-2.5 bg-white rounded-2xl shadow-xl shrink-0">
-                                <img src={qrData.base64} alt="Scan QR Code" className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded-xl" />
-                            </div>
-                            <div className="flex flex-col justify-center text-center sm:text-left space-y-2.5">
-                                <p className="text-[11px] sm:text-xs font-bold text-[#FFD700] uppercase tracking-widest">Or scan to use your phone</p>
-                                <div className="bg-black/30 px-4 py-2.5 rounded-xl border border-white/10 inline-flex items-center gap-3 w-fit mx-auto sm:mx-0">
-                                    <i className="fa-solid fa-lock text-emerald-400 text-lg"></i>
-                                    <div>
-                                        <p className="text-[10px] uppercase font-bold text-emerald-200/70 tracking-wider leading-none mb-1">Office PIN</p>
-                                        <p className="text-xl font-black text-white font-mono leading-none tracking-widest">{qrData.pin}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 <div className="relative z-10 pt-4 sm:pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-[11px] sm:text-xs text-white/60">
@@ -63,7 +54,7 @@ export default function LandingPage({ form, departmentName, onStart, qrData }) {
                 </div>
             </div>
 
-            {/* Right Action Stage (Cleaned of QR Code) */}
+            {/* Right Action Stage */}
             <div className="w-full lg:w-5/12 xl:w-1/3 bg-white p-6 sm:p-10 lg:p-12 flex flex-col justify-between items-center text-center relative z-10 flex-1">
                 <div className="w-full hidden lg:flex justify-end">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Official Feedback Portal</span>
@@ -83,6 +74,22 @@ export default function LandingPage({ form, departmentName, onStart, qrData }) {
                             <i className="fa-solid fa-arrow-right text-[#FFD700] transition-transform group-hover:translate-x-1"></i>
                         </button>
                     </div>
+{/* 15-MINUTE SECURE ROTATING QR CODE */}
+                    {qrData && (
+                        <div className="pt-8 mt-8 border-t border-gray-100 flex flex-col items-center">
+                            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-4">Or Scan to use your phone</p>
+                            <div className="p-3 bg-white border-2 border-dashed border-emerald-200 rounded-[1.5rem] shadow-sm inline-block relative group">
+                                <div className="absolute top-2 right-2 flex h-3 w-3">
+                                  
+                                  
+                                </div>
+                                <img src={qrData.base64} alt="Secure Dynamic QR Code" className="w-48 h-48 sm:w-39 sm:h-39 object-contain rounded-xl" />
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-4 tracking-wide text-center px-4">
+                                Secure Session: For your protection, this code automatically rotates every 15 minutes.
+                            </p>
+                        </div>
+                    )}
                 </div>
                 
                 <div className="text-[10px] sm:text-[11px] text-gray-400 font-medium tracking-wide mt-4 lg:mt-0 pb-safe">
@@ -140,11 +147,11 @@ export default function LandingPage({ form, departmentName, onStart, qrData }) {
                             <div className="pt-4 border-t border-gray-200 space-y-3 bg-gray-50/80 p-4 rounded-xl border">
                                 <label className="flex items-start gap-3 cursor-pointer select-none">
                                     <input type="checkbox" checked={agreedPrivacy} onChange={(e) => setAgreedPrivacy(e.target.checked)} className="mt-0.5 w-4 h-4 text-[#1E6031] focus:ring-[#1E6031] rounded border-gray-300 cursor-pointer" />
-                                    <span className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">I have read, understood, and accept the <span className="text-[#1E6031]">Data Privacy Policy</span>.</span>
+                                    <span className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">I accept the <span className="text-[#1E6031]">Data Privacy Policy</span>.</span>
                                 </label>
                                 <label className="flex items-start gap-3 cursor-pointer select-none">
                                     <input type="checkbox" checked={agreedTerms} onChange={(e) => setAgreedTerms(e.target.checked)} className="mt-0.5 w-4 h-4 text-[#1E6031] focus:ring-[#1E6031] rounded border-gray-300 cursor-pointer" />
-                                    <span className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">I have read, understood, and agree to the <span className="text-[#1E6031]">Terms and Conditions</span>.</span>
+                                    <span className="text-xs sm:text-sm font-semibold text-gray-800 leading-snug">I accept the <span className="text-[#1E6031]">Terms and Conditions</span>.</span>
                                 </label>
                             </div>
                         </div>
@@ -154,7 +161,7 @@ export default function LandingPage({ form, departmentName, onStart, qrData }) {
                                 Cancel
                             </button>
                             <button type="button" disabled={!agreedPrivacy || !agreedTerms} onClick={() => { setShowPrivacyPolicy(false); onStart(); }} className="px-5 py-2.5 sm:px-6 sm:py-2.5 bg-[#1E6031] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl hover:bg-[#144823] shadow-md transition uppercase text-[11px] sm:text-xs tracking-wider flex items-center gap-1.5 cursor-pointer">
-                                <span>Accept & Proceed</span>
+                                <span>Proceed</span>
                                 <i className="fa-solid fa-arrow-right text-[#FFD700]"></i>
                             </button>
                         </div>

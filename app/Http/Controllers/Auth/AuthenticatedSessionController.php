@@ -73,12 +73,14 @@ class AuthenticatedSessionController extends Controller
             default => route('focalperson.dashboard'), // Focal Person Default
         };
 
-        $targetUrl = session()->pull('url.intended', $fallbackUrl);
+       $targetUrl = session()->pull('url.intended', $fallbackUrl);
+
+        // Send a hidden flash message to trigger the login popup
+        $request->session()->flash('login_success', true);
 
         // Using Inertia::location forces a full page reload to clear Ziggy route cache
         return Inertia::location($targetUrl);
     }
-    
     /**
      * Destroy an authenticated session.
      */
@@ -92,7 +94,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->invalidate();
 
-        $request->session()->regenerateToken();
+        // Send a hidden flash message to trigger the logout popup
+        $request->session()->flash('logout_success', true);
 
         // Inertia::location forces a hard browser reload, wiping the SPA memory cache
         return Inertia::location('/login');

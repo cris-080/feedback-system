@@ -195,85 +195,85 @@ class FormField extends Model
                 'field_id' => 'temp_14',
                 'step_number' => 3,
                 'field_label' => 'SQD0: I am satisfied with the service that I availed.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
             [
                 'field_id' => 'temp_15',
                 'step_number' => 3,
                 'field_label' => 'SQD1: I spent a reasonable amount of time for my transaction.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
 
             [
                 'field_id' => 'temp_16',
                 'step_number' => 3,
                 'field_label' => 'SQD2: The office followed the transaction’s requirement from the office or its website.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],  
             [
                 'field_id' => 'temp_17',
                 'step_number' => 3,
                 'field_label' => 'SQD3: The steps (including payment) I needed to do for my transaction were easy and simple.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
            [
                 'field_id' => 'temp_18',
                 'step_number' => 3,
                 'field_label' => 'SQD4: I easily found information about my transaction from the office or its website.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
             [
                 'field_id' => 'temp_19',
                 'step_number' => 3,
                 'field_label' => 'SQD5: I paid a reasonable amount of fees for my transaction.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
             [
                 'field_id' => 'temp_20',
                 'step_number' => 3,
                 'field_label' => 'SQD6: I feel the office was fair to everyone, or “walang palakasan” during my transaction.',
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
             [
                 'field_id' => 'temp_21',
                 'step_number' => 3,
                 'field_label' => "SQD7: I was treated courteously by the staff, and (I asked for help) the staff was helpful.",
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
             [
                 'field_id' => 'temp_22',
                 'step_number' => 3,
                 'field_label' => "SQD8: I got what I needed from the government office, or (if denied) denial of request was sufficiently explained to me. ",
-                'input_type' => 'radio',
+                'input_type' => 'radio_card',
                 'is_required' => true,
-                'options' => ['1', '2', '3', '4', '5']
+                'options' => ['1', '2', '3', '4', '5', 'N/A']
             ],
 
             [
                 'field_id' => 'temp_23',
                 'step_number' => 3,
                 'field_label' => 'Overall, how would you rate your entire educational experience at CLSU? (1 as the lowest and 5 as the highest)',
-                'input_type' => 'radio',
+                'input_type' => 'star_rating',
                 'is_required' => true,
-                'options' => ['1 (Lowest)', '2', '3', '4', '5 (Highest)', 'N/A']
+                'options' => ['1', '2', '3', '4', '5']
             ],
-
+            
             // --- STEP 4: OVERALL EXPERIENCE ---
             
             [

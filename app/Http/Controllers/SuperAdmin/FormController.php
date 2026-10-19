@@ -79,9 +79,24 @@ class FormController extends Controller
         ]);
         
         $form = Form::findOrFail($id);
+        $targetDepartmentId = $request->input('department_id') ?? $form->department_id;
         
         // Pass department ID to the publish handler
-        $this->formService->publishForm($form, $request->input('department_id'));
+        $this->formService->publishForm($form, $targetDepartmentId);
+
+        // ENSURE INITIAL QR CODE EXISTS FOR THE DEPARTMENT
+        if ($targetDepartmentId) {
+            $existingQr = \App\Models\QrCode::where('department_id', $targetDepartmentId)->first();
+            if (!$existingQr) {
+                \App\Models\QrCode::create([
+                    'department_id' => $targetDepartmentId,
+                    'qr_token' => \Illuminate\Support\Str::random(40),
+                    'label' => 'Default Kiosk QR',
+                    'is_active' => 1,
+                    'expires_at' => now()->addMinutes(15)
+                ]);
+            }
+        }
 
         // --- AUDIT TRAIL ---
        AuditLog::logAction('Published', 'Forms', "Published {$form->form_type} form (ID: {$id}) and archived the previously active version.");

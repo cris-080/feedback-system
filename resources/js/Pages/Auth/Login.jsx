@@ -6,13 +6,49 @@ import Swal from 'sweetalert2';
 export default function Login({ status, canResetPassword }) {
     const [showPassword, setShowPassword] = useState(false);
 
-    const { data, setData, post, processing, errors, reset } = useForm({
-        login: '', // Changed from email to login
+   const { data, setData, post, processing, errors, reset } = useForm({
+        email: '',
         password: '',
         remember: false,
     });
 
+    // Clean URL after 1.5s delay so the logout notification triggers first
+    useEffect(() => {
+        if (window.location.search.includes('logout=')) {
+            const timer = setTimeout(() => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('logout');
+                window.history.replaceState(null, '', url.toString() || window.location.pathname);
+            }, 1500);
+            return () => clearTimeout(timer);
+        }
+    }, []);
     
+  useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('logout') === 'success') {
+            // Check the lock to ensure it only fires once per logout
+            if (!sessionStorage.getItem('logout_toast_consumed')) {
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true
+                });
+                Toast.fire({
+                    icon: 'success',
+                    title: 'Successfully logged out'
+                });
+                
+                sessionStorage.setItem('logout_toast_consumed', 'true');
+                sessionStorage.removeItem('login_toast_consumed'); // Reset the opposite lock
+            }
+            
+            // Instantly scrub the query parameter from the address bar
+            window.history.replaceState(null, '', window.location.pathname);
+        }
+    }, []);
 
     const submit = (e) => {
         e.preventDefault();

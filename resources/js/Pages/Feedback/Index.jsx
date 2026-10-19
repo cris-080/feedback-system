@@ -4,8 +4,8 @@ import Swal from 'sweetalert2';
 import LandingPage from './Partials/LandingPage';
 import { StepOne, StepTwo, StepThree, StepFour } from './Partials/FormSteps';
 
-export default function FeedbackIndex({ form, departmentName, serviceProviders, isCC, steps, qr_id, ph_regions, qr_data }) {
-    const [status, setStatus] = useState('active'); 
+export default function FeedbackIndex({ form, departmentName, serviceProviders = [], isCC, steps, qr_id, ph_regions, qr_data }) {
+    const [status, setStatus] = useState('active');
     const [timeLeft, setTimeLeft] = useState(3600); 
     const [hasStarted, setHasStarted] = useState(false);
 
@@ -20,21 +20,10 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
         answers: {},
         email_address: '',
         transaction_date: '',
-        is_kiosk: isKiosk, 
-        office_pin: ''     
+        is_kiosk: isKiosk
     });
 
-    const totalSteps = isCC ? 4 : 3;
-
-    useEffect(() => {
-        if (!isQR) return; 
-        if (status === 'expired' || status === 'submitted') {
-            const exitTimer = setTimeout(() => {
-                window.location.reload(); 
-            }, 3000);
-            return () => clearTimeout(exitTimer);
-        }
-    }, [status, isQR]);
+    
 
     useEffect(() => {
         if (!isQR || status !== 'active' || !hasStarted) return; 
@@ -43,21 +32,34 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
                 if (prevTime <= 1) {
                     clearInterval(timer);
                     setStatus('expired');
+                    
+                    Swal.fire({
+                        title: 'Session Expired',
+                        text: 'Your secure session has expired. Please scan the QR code again.',
+                        icon: 'warning',
+                        confirmButtonColor: '#1E6031',
+                        confirmButtonText: 'Okay'
+                    }).then(() => {
+                        window.close();
+                        window.location.replace('https://clsu.edu.ph');
+                    });
+                    
                     return 0;
                 }
                 return prevTime - 1;
             });
         }, 1000);
         return () => clearInterval(timer);
-    }, [status, isQR, hasStarted]); 
+    }, [status, isQR, hasStarted]);
 
     useEffect(() => {
         if (!isQR) return; 
-        if (status === 'expired' || status === 'submitted') {
+        if (status === 'submitted') {
+            // Auto-close the Thank You page after 2 minutes (120,000 milliseconds)
             const exitTimer = setTimeout(() => {
                 window.close();
                 window.location.replace('https://clsu.edu.ph'); 
-            }, 3000);
+            }, 120000);
             return () => clearTimeout(exitTimer);
         }
     }, [status, isQR]);
@@ -69,17 +71,13 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
     };
 
     // Global Validation for the entire form at once
-    const validateForm = () => {
+   const validateForm = () => {
         if (!data.transaction_date) {
             Swal.fire({ title: 'Required Field Missing', text: 'Please provide the Date of Transaction.', icon: 'warning', confirmButtonColor: '#1E6031' });
             return false;
         }
         if (!data.email_address || data.email_address.trim() === '') {
             Swal.fire({ title: 'Required Field Missing', text: 'Please provide a valid Email Address.', icon: 'warning', confirmButtonColor: '#1E6031' });
-            return false;
-        }
-        if (!isKiosk && (!data.office_pin || data.office_pin.trim().length < 4)) {
-            Swal.fire({ title: 'Missing Office PIN', text: 'Please enter the 4-digit Office PIN displayed at the counter to submit.', icon: 'warning', confirmButtonColor: '#dc2626' });
             return false;
         }
 
@@ -120,6 +118,10 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
             const matchedProvider = serviceProviders?.find(p => p.name === value);
             if (matchedProvider && positionField) {
                 newAnswers[positionField.field_id] = matchedProvider.position || '';
+            } else if (value === 'I do not know' && positionField) {
+                newAnswers[positionField.field_id] = 'I do not know';
+            } else if (value === '' && positionField && newAnswers[positionField.field_id] === 'I do not know') {
+                newAnswers[positionField.field_id] = '';
             }
         }
 
@@ -175,11 +177,33 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
             reverseButtons: true,
         }).then((result) => {
             if (result.isConfirmed) {
+                
+                // Trigger the highly visible global loading screen
+                Swal.fire({
+                    title: 'Processing Feedback...',
+                    html: 'Please wait while we securely save your responses.',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
                 post(route('feedback.store'), {
-                    onSuccess: () => {
+                   onSuccess: () => {
                         if (isQR) {
                             sessionStorage.setItem(`submitted_dept_${form.department_id}`, 'true');
-                            setStatus('submitted');
+                            
+                            Swal.fire({
+                                title: 'Feedback Recorded!',
+                                text: 'Thank you! Your feedback has been successfully submitted.',
+                                icon: 'success',
+                                confirmButtonColor: '#1E6031',
+                                confirmButtonText: 'Done',
+                            }).then(() => {
+                                setStatus('submitted'); // Change to Thank You screen after they click Done
+                            });
                         } else {
                             Swal.fire({
                                 title: 'Feedback Recorded!',
@@ -192,11 +216,11 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
                             });
                         }
                     },
-                   onError: (errors) => {
+                  onError: (errors) => {
                         console.error("Submission Errors:", errors);
                         
                         // Extract the specific spam message if it exists, otherwise use fallback
-                       const errorMessage = errors.office_pin || errors.email_address || errors.spam || 'There was an issue saving your response. Please review required fields.';
+                       const errorMessage = errors.email_address || errors.spam || 'There was an issue saving your response. Please review required fields.';
                         
                         Swal.fire({
                             title: 'Submission Failed',
@@ -211,7 +235,30 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
         });
     };
 
-   if (!hasStarted && status === 'active') {
+   if (status === 'submitted') {
+        return (
+            <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4 font-sans">
+                <Head title="Feedback Submitted - CLSU" />
+                <div className="bg-white p-8 sm:p-10 rounded-2xl shadow-xl border border-gray-200 text-center max-w-md w-full animate-fade-in-up">
+                    <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-green-200">
+                        <i className="fa-solid fa-check text-4xl text-[#009639]"></i>
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-black text-gray-900 mb-3 tracking-tight">Thank You!</h2>
+                    <p className="text-gray-600 mb-8 font-medium leading-relaxed">
+                        Your feedback has been successfully submitted. It will help us improve our services at {departmentName}.
+                    </p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-center gap-3">
+                        <i className="fa-solid fa-shield-halved text-gray-400"></i>
+                        <p className="text-xs text-gray-500 font-semibold text-left">
+                            For your privacy, this page will automatically close in 2 minutes. You may also close this tab now.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!hasStarted && status === 'active') {
         return <LandingPage form={form} departmentName={departmentName} onStart={() => setHasStarted(true)} qrData={qr_data} />;
     }
 
@@ -260,32 +307,19 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders, 
                         <hr className="border-gray-200 border-2 rounded" />
                         <StepThree stepFields={steps[3] || []} data={data} handleAnswerChange={handleAnswerChange} />
                         
-                        <hr className="border-gray-200 border-2 rounded" />
+                       <hr className="border-gray-200 border-2 rounded" />
                         <StepFour stepFields={steps[4] || []} form={form} data={data} setData={setData} handleAnswerChange={handleAnswerChange} departmentName={departmentName} serviceProviders={serviceProviders} ph_regions={ph_regions} steps={steps} />
-
-                        {/* --- SECURE PIN INPUT FOR QR SCANS --- */}
-                        {!isKiosk && (
-                            <div className="mt-8 p-6 bg-red-50 border border-red-200 rounded-xl shadow-sm max-w-xl mx-auto text-center shrink-0">
-                                <i className="fa-solid fa-lock text-3xl text-red-500 mb-3"></i>
-                                <h3 className="text-lg font-black text-red-800 mb-1 tracking-wide">OFFICE PIN REQUIRED</h3>
-                                <p className="text-sm text-red-600 mb-5 font-medium">To prevent spam, please enter the 4-digit PIN displayed at the {departmentName} counter.</p>
-                                
-                                <input
-                                    type="text"
-                                    maxLength="4"
-                                    placeholder="• • • •"
-                                    value={data.office_pin}
-                                    onChange={(e) => setData('office_pin', e.target.value.replace(/\D/g, ''))} 
-                                    className="w-48 px-4 py-3 text-3xl font-mono font-black tracking-widest text-center border-2 border-red-300 rounded-lg focus:ring-red-500 focus:border-red-500 shadow-inner bg-white text-gray-800"
-                                />
-                            </div>
-                        )}
                     </div>
                     
                     {/* 3. BOTTOM ACTION BAR */}
                     <div className="py-5 px-6 sm:px-8 border-t border-gray-200 bg-white flex justify-center sm:justify-end items-center shrink-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                        <button type="submit" disabled={processing} className="w-full sm:w-auto px-10 py-3.5 bg-[#009639] hover:bg-[#1E6031] text-white rounded-xl font-black text-sm uppercase tracking-wider shadow-md hover:shadow-lg active:scale-98 transition flex items-center justify-center gap-2 disabled:opacity-50">
-                            <i className="fa-solid fa-paper-plane text-[#FFD700]"></i><span>Submit Feedback</span>
+                        <button type="submit" disabled={processing} className="w-full sm:w-auto px-10 py-3.5 bg-[#009639] hover:bg-[#1E6031] text-white rounded-xl font-black text-sm uppercase tracking-wider shadow-md hover:shadow-lg active:scale-98 transition flex items-center justify-center gap-2 disabled:opacity-75 disabled:cursor-wait">
+                            {processing ? (
+                                <i className="fa-solid fa-circle-notch fa-spin text-[#FFD700]"></i>
+                            ) : (
+                                <i className="fa-solid fa-paper-plane text-[#FFD700]"></i>
+                            )}
+                            <span>{processing ? 'Submitting...' : 'Submit Feedback'}</span>
                         </button>
                     </div>
                 </form>

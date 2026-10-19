@@ -12,10 +12,12 @@ use App\Models\Department;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\HarassmentAlertMail;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use App\Models\QrCode;
 use Illuminate\Support\Facades\Log;
 use App\Models\Feedback;
-use App\Services\GeminiSentimentService;
-use Inertia\Inertia;
+use App\Services\FeedbackSubmissionService;
+use Inertia\Inertia;;
 
 class PublicFeedbackController extends Controller
 {
@@ -28,36 +30,46 @@ class PublicFeedbackController extends Controller
         $token = $request->token;
         $qrId = null;
         $formId = null;
+        $isExpired = false;
 
+        // 1. Check if token is the Kiosk's permanent encrypted Form ID
         try {
             $decrypted = Crypt::decryptString($token);
             if (is_numeric($decrypted)) {
                 $formId = $decrypted;
             }
         } catch (DecryptException $e) {
-            // Decryption failed. 
+            // Decryption failed, treat as scanned QR token.
         }
 
+        // 2. Token is a Scanned QR Code
         if (!$formId) {
-            $qrCode = \App\Models\QrCode::where('qr_token', $token)
-                            ->where('is_active', 1)
-                            ->first();
+            $qrCode = QrCode::where('qr_token', $token)->where('is_active', 1)->first();
 
             if (!$qrCode) {
                 abort(404, 'Access Denied: This link is invalid or has been deactivated.');
             }
 
             $qrId = $qrCode->qr_id;
-
-            $activeForm = Form::where('department_id', $qrCode->department_id)
-                        ->where('status', 'Active')
-                        ->first();
+            $activeForm = Form::where('department_id', $qrCode->department_id)->where('status', 'Active')->first();
 
             if (!$activeForm) {
                 abort(404, 'There is no active feedback form for this department at the moment.');
             }
-            
             $formId = $activeForm->form_id;
+
+            // Check if the 15-minute QR link has expired
+            if ($qrCode->expires_at && now()->greaterThan($qrCode->expires_at)) {
+                $isExpired = true;
+            }
+        }
+
+        // 3. The 2-Hour VIP Pass Check
+        // If they scanned an expired code but ALREADY have a valid session cookie, let them in.
+        if ($isExpired) {
+            if (!$request->cookie('csm_session_' . $formId)) {
+                abort(403, 'This QR code has expired. Please scan the latest QR code on the kiosk screen.');
+            }
         }
 
         $fullForm = Form::getActiveForm($formId);
@@ -66,32 +78,50 @@ class PublicFeedbackController extends Controller
             abort(404, 'No active feedback form is currently available for this link.');
         }
 
-        // --- FETCH AND CACHE REGIONS FOR 30 DAYS ---
         $phRegions = Cache::remember('ph_regions', 2592000, function () {
             try {
                 $response = Http::timeout(5)->get('https://psgc.gitlab.io/api/regions/');
                 if ($response->successful()) {
                     $data = $response->json();
-                    // Sort alphabetically by region name
                     usort($data, fn($a, $b) => strcmp($a['name'], $b['name']));
                     return $data;
                 }
             } catch (\Exception $e) {
-                // Safe fallback if the API is ever down
                 return [['name' => 'Central Luzon', 'regionName' => 'Region III']];
             }
             return [];
         });
 
-      // FETCH DEPARTMENT AND EAGER LOAD SERVICE PROVIDERS
         $department = Department::with('service_providers')
             ->where('department_id', $fullForm->department_id)
             ->first();
 
-      // GENERATE DYNAMIC QR CODE (Only show if accessed via the Kiosk link)
+        // 4. Kiosk Auto-Rotation Logic (Only runs if opened on the physical tablet)
         $isKiosk = $request->boolean('kiosk');
-        $baseUrl = url('/feedback?token=' . $token);
-        $qrImageUrl = 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2';
+        $qrImageUrl = null;
+
+        if ($isKiosk && $department) {
+            $activeQrCode = QrCode::where('department_id', $fullForm->department_id)
+                ->where('is_active', 1)
+                ->first();
+
+           if ($activeQrCode) {
+                // If it's expired (or has no expiration), generate a fresh 15-minute token
+                if (is_null($activeQrCode->expires_at) || now()->greaterThan($activeQrCode->expires_at)) {
+                    $activeQrCode->qr_token = Str::random(40);
+                    $activeQrCode->expires_at = now()->addMinutes(15);
+                    $activeQrCode->save();
+                }
+
+                $scanUrl = url('/feedback?token=' . $activeQrCode->qr_token);
+                $qrImageUrl = 'https://quickchart.io/qr?text=' . urlencode($scanUrl) . '&size=400&margin=2';
+            }
+        }
+
+       // 5. Drop the 2-Hour Cookie (120 minutes) for mobile scanners
+        if (!$isKiosk) {
+            \Illuminate\Support\Facades\Cookie::queue('csm_session_' . $formId, 'valid', 120);
+        }
 
         return Inertia::render('Feedback/Index', [
             'form'             => $fullForm,
@@ -101,9 +131,8 @@ class PublicFeedbackController extends Controller
             'steps'            => $fullForm->getFormattedSteps(),
             'qr_id'            => $qrId,
             'ph_regions'       => $phRegions,
-            'qr_data'          => $isKiosk ? [
+            'qr_data'          => $isKiosk && $qrImageUrl ? [
                 'base64' => $qrImageUrl,
-                'pin'    => $department->daily_pin ?? '1234'
             ] : null
         ]);
     }
@@ -113,7 +142,7 @@ class PublicFeedbackController extends Controller
      */
    public function store(Request $request)
     {
-        // 1. Validate Request (Added is_kiosk and office_pin)
+        // 1. Validate Request (PIN removed)
         $validated = $request->validate([
             'form_id'          => 'required|integer|exists:forms,form_id',
             'department_id'    => 'required|integer|exists:department,department_id',
@@ -121,175 +150,19 @@ class PublicFeedbackController extends Controller
             'transaction_date' => 'required|date|before_or_equal:today',
             'answers'          => 'required|array',
             'is_kiosk'         => 'required|boolean',
-            'office_pin'       => 'nullable|string',
         ]);
 
-        // --- SPAM PREVENTION 1: IP Rate Limiting ---
-        if (RateLimiter::tooManyAttempts('feedback-submission:' . $request->ip(), 5)) {
-            return back()->withErrors(['spam' => 'Too many submissions from this device. Please try again later.']);
-        }
-        RateLimiter::hit('feedback-submission:' . $request->ip(), 3600); 
-
-        // --- SPAM PREVENTION 2: Secure QR PIN Check (The Kiosk Bypass) ---
-        // If the user scanned a QR code (not a kiosk), they MUST provide the correct Office PIN
+        // --- SPAM PREVENTION 2: Secure Session Cookie Check (The PIN Replacement) ---
         if (!$validated['is_kiosk']) {
-            $department = \App\Models\Department::find($validated['department_id']);
-            
-            // NOTE: Once you add a 'daily_pin' column to your database, it will use that. 
-            // Until then, it safely defaults to '1234' so your system doesn't break today.
-            $actualPin = $department->daily_pin ?? '1234'; 
-            
-            if (trim($validated['office_pin']) !== (string) $actualPin) {
-                return back()->withErrors(['office_pin' => 'Invalid Office PIN. Please check the 4-digit code displayed at the counter.']);
+            if (!$request->cookie('csm_session_' . $validated['form_id'])) {
+                return back()->withErrors(['spam' => 'Your secure session has expired. Please scan the QR code at the counter again.']);
             }
         }
-        // 2. Identify selected services for Payload Splitting
-        $servicesAvailed = [];
-        // ... rest of your existing code
-        $serviceFieldId = null;
         
-        $fullForm = \App\Models\Form::getActiveForm($validated['form_id']);
-        
-        if ($fullForm) {
-            foreach ($fullForm->getFormattedSteps() as $step => $fields) {
-                foreach ($fields as $field) {
-                    $fieldId = is_object($field) ? $field->field_id : $field['field_id'];
-                    $fieldLabel = strtolower(is_object($field) ? $field->field_label : $field['field_label']);
-                    
-                    if (str_contains($fieldLabel, 'service availed')) {
-                        $serviceFieldId = $fieldId;
-                        break 2;
-                    }
-                }
-            }
-        }
+        // 2. Delegate all complex processing (Payload Splitting, AI Sentiment, Emails) to the Service
+        FeedbackSubmissionService::process($validated);
 
-        if ($serviceFieldId && isset($validated['answers'][$serviceFieldId])) {
-            $rawServices = $validated['answers'][$serviceFieldId];
-            if (is_array($rawServices)) {
-                $servicesAvailed = $rawServices;
-            } elseif (is_string($rawServices)) {
-                $decoded = json_decode($rawServices, true);
-                if (is_array($decoded)) {
-                    $servicesAvailed = $decoded;
-                } elseif (str_contains($rawServices, ',')) {
-                    $servicesAvailed = array_map('trim', explode(',', $rawServices));
-                } else {
-                    $servicesAvailed = [$rawServices];
-                }
-            }
-        }
-
-        if (empty($servicesAvailed)) {
-            $servicesAvailed = ['General Transaction'];
-        }
-
-        // 3. Extract qualitative text & Check for Harassment
-        $textAnswers = [];
-        $placeholders = ['n/a', 'na', 'none', 'wala', 'no', 'none so far', 'ok', 'okay', 'n / a', 'none po', 'nothing'];
-        $qualitativeFieldIds = [];
-        
-        $hasHarassment = false;
-        $harassmentDetails = 'No detailed narrative provided.';
-
-        if ($fullForm) {
-            foreach ($fullForm->getFormattedSteps() as $step => $fields) {
-                foreach ($fields as $field) {
-                    $fieldId = is_object($field) ? $field->field_id : $field['field_id'];
-                    $inputType = is_object($field) ? $field->input_type : $field['input_type'];
-                    $fieldLabel = strtolower(is_object($field) ? $field->field_label : $field['field_label']);
-                    
-                    $isHarassmentQuestion = str_contains($fieldLabel, 'harassment') && !str_contains($fieldLabel, 'detail');
-                    $isHarassmentDetailsField = str_contains($fieldLabel, 'if yes') || str_contains($fieldLabel, 'detail');
-                    $isSuggestion = str_contains($fieldLabel, 'suggestion') || str_contains($fieldLabel, 'comment') || str_contains($fieldLabel, 'remark');
-
-                    if ($inputType === 'text' && ($isSuggestion || $isHarassmentDetailsField)) {
-                        $qualitativeFieldIds[] = $fieldId;
-                    }
-
-                    // TRIGGER: Check if the user selected "Yes" for Harassment
-                    if ($isHarassmentQuestion && isset($validated['answers'][$fieldId])) {
-                        if (strtolower(trim($validated['answers'][$fieldId])) === 'yes') {
-                            $hasHarassment = true;
-                        }
-                    }
-
-                    // CAPTURE: Extract the harassment explanation for the email body
-                    if ($isHarassmentDetailsField && isset($validated['answers'][$fieldId])) {
-                        $detailsText = trim($validated['answers'][$fieldId]);
-                        if (!empty($detailsText) && !in_array(strtolower($detailsText), $placeholders)) {
-                            $harassmentDetails = $detailsText;
-                        }
-                    }
-                }
-            }
-        }
-
-        foreach ($validated['answers'] as $fieldId => $answer) {
-            if (in_array($fieldId, $qualitativeFieldIds) && is_string($answer)) {
-                $clean = trim(strtolower($answer));
-                if (!empty($clean) && !is_numeric($clean) && !in_array($clean, $placeholders) && strlen($clean) > 3) {
-                    $textAnswers[] = $answer;
-                }
-            }
-        }
-
-        // 4. Perform AI Analysis
-        if (!empty($textAnswers)) {
-            $feedbackText = implode(" | ", $textAnswers);
-            $aiAnalysis = GeminiSentimentService::analyze($feedbackText);
-
-            $validated['sentiment']       = $aiAnalysis['sentiment_category'] ?? 'Neutral';
-            $validated['ai_confidence']   = (int) ($aiAnalysis['confidence_score'] ?? 80);
-        } else {
-            $validated['sentiment']       = 'Neutral';
-            $validated['ai_confidence']   = 100;
-        }
-
-        // 5. SPLIT AND SAVE: Loop through each selected service and clone the submission
-        foreach ($servicesAvailed as $serviceName) {
-            $clonedPayload = $validated;
-            if ($serviceFieldId) {
-                $clonedPayload['answers'][$serviceFieldId] = $serviceName;
-            }
-            Feedback::processSubmission($clonedPayload);
-        }
-
-        // 6. URGENT ALERT: Send Harassment Email
-        if ($hasHarassment) {
-            $dept = Department::find($validated['department_id']);
-            $deptName = $dept ? $dept->department_name : 'General Office';
-            
-            // Get all Feedback Committee emails
-            $recipients = \App\Models\Account::where('role', 'LIKE', '%Feedback%Committee%')->pluck('email')->toArray();
-            
-            // Get Focal Person email
-            if ($dept && $dept->focal_person_id) {
-                $focalPerson = \App\Models\Account::where('user_id', $dept->focal_person_id)->first();
-                if ($focalPerson && !empty($focalPerson->email)) {
-                    $recipients[] = $focalPerson->email;
-                }
-            }
-
-            $recipients = array_unique(array_filter($recipients));
-
-            if (!empty($recipients)) {
-                $emailData = [
-                    'department_name'    => $deptName,
-                    'transaction_date'   => $validated['transaction_date'],
-                    'harassment_details' => $harassmentDetails,
-                ];
-                
-                try {
-                    Mail::to($recipients)->send(new HarassmentAlertMail($emailData));
-                } catch (\Exception $e) {
-                    // Log error but don't crash the form submission for the user!
-                    Log::error('Harassment Alert Email Failed: ' . $e->getMessage());
-                }
-            }
-        }
-
-        // 7. Return HTTP Response
+        // 3. Return HTTP Response
         return back()->with('success', 'Your feedback has been successfully submitted!');
     }
 }

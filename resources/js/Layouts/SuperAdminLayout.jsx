@@ -55,8 +55,26 @@ export default function SuperAdminLayout({ children, headerTitle }) {
             document.removeEventListener("keydown", handleKeyDown);
         };
     }, []);
-    // --- 2. ADDED: GLOBAL FLASH MESSAGE HANDLER ---
+
+
+  // --- 2. ADDED: GLOBAL FLASH MESSAGE HANDLER ---
     useEffect(() => {
+        // Trigger login popup from hidden backend flash message
+        if (flash?.login_success) {
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 3000,
+                timerProgressBar: true
+            });
+            Toast.fire({
+                icon: 'success',
+                title: 'Successfully logged in'
+            });
+            flash.login_success = null; 
+        }
+
         if (flash?.success) {
             Swal.fire({
                 title: 'Success!',
@@ -81,6 +99,61 @@ export default function SuperAdminLayout({ children, headerTitle }) {
             flash.error = null;
         }
     }, [flash]);
+
+    // --- BACKGROUND NOTIFICATION POLLING ---
+        // Automatically fetches new notifications every 15 seconds without refreshing the page
+        useEffect(() => {
+            const interval = setInterval(() => {
+                router.reload({ 
+                    only: ['pendingRequestsCount', 'recentNotifications'], 
+                    preserveState: true, 
+                    preserveScroll: true
+                });
+            }, 15000);
+            return () => clearInterval(interval);
+        }, []);
+
+       // --- NEW NOTIFICATION TOAST WATCHER (Persistent via SessionStorage) ---
+  
+        useEffect(() => {
+            if (recentNotifications && recentNotifications.length > 0) {
+                const currentLatest = recentNotifications[0];
+                 const storedLatestId = sessionStorage.getItem('latest_notif_id');
+                  // Combine ID and Status so updates to the SAME request trigger the toast
+                const currentId = `${currentLatest.request_id}_${currentLatest.status}`;
+                const isInitialized = sessionStorage.getItem('notifs_initialized');
+
+            // Only fire if the ID or Status is genuinely new, AND this isn't the very first page load after login
+            if (isInitialized && storedLatestId !== currentId) {
+                const Toast = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 5000,
+                    timerProgressBar: true,
+                    didOpen: (toast) => {
+                        toast.onmouseenter = Swal.stopTimer;
+                        toast.onmouseleave = Swal.resumeTimer;
+                    }
+                });
+
+                Toast.fire({
+                    icon: currentLatest.is_harassment ? 'warning' : 'info',
+                    title: currentLatest.is_harassment ? 'Urgent Alert!' : 'New Notification',
+                    text: currentLatest.is_harassment 
+                        ? 'A new harassment report requires your attention.' 
+                        : 'You have a new pending request or update.'
+                });
+            }
+            
+            // Update storage so we don't trigger it again for this exact notification
+            sessionStorage.setItem('latest_notif_id', currentId);
+            sessionStorage.setItem('notifs_initialized', 'true');
+        } else if (!recentNotifications || recentNotifications.length === 0) {
+            sessionStorage.removeItem('latest_notif_id');
+            sessionStorage.setItem('notifs_initialized', 'true'); 
+        }
+    }, [recentNotifications]);
 
    // --- BLAZING FAST NOTIFICATION CLEARING (Partial Reload) ---
     const handleClearNotification = (e, targetId) => {
@@ -126,7 +199,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
             confirmButtonColor: '#dc2626',
             cancelButtonColor: '#6b7280',
             confirmButtonText: '<i class="fa-solid fa-arrow-right-from-bracket"></i> Yes, Log Out!'
-        }).then((result) => {
+       }).then((result) => {
             if (result.isConfirmed) {
                 router.post(route('logout'));
             }

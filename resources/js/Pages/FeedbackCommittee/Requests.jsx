@@ -14,6 +14,12 @@ export default function Requests({ inboxRequests, myRequests, requests }) {
     // Fallbacks in case controller hasn't passed new variables yet
     const inboxData = inboxRequests || { data: [], total: 0 };
     const outboxData = myRequests || requests || { data: [], total: 0 };
+
+    // --- FORM STATE ---
+    const { data, setData, post, processing, errors, reset } = useForm({
+        request_type: '',
+        details: ''
+    });
     // --- SEARCH & FILTER STATE ---
     const queryParams = new URLSearchParams(window.location.search);
     const [searchQuery, setSearchQuery] = useState(queryParams.get('search') || '');
