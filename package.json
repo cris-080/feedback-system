@@ -27,6 +27,7 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "moment": "^2.31.0",
         "recharts": "^3.10.1",
         "sweetalert2": "^11.26.25"
     }

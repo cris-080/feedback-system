@@ -10,9 +10,17 @@ use App\Http\Controllers\FocalPerson\RequestController;
 Route::prefix('focal')->name('focalperson.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
-    // Reports Route
-    Route::get('/reports', function () { return inertia('FocalPerson/Reports'); })->name('reports.index');
+    // --- REPORTS ROUTES ---
+    Route::get('/reports', [App\Http\Controllers\FocalPerson\ReportController::class, 'index'])->name('reports.index');
+    Route::post('/reports/generate', [App\Http\Controllers\FocalPerson\ReportController::class, 'generate'])->name('reports.generate');
+    Route::post('/reports/{id}/submit', [App\Http\Controllers\FocalPerson\ReportController::class, 'submitToCommittee'])->name('reports.submit');
+    Route::delete('/reports/{id}', [App\Http\Controllers\FocalPerson\ReportController::class, 'destroy'])->name('reports.destroy');
     
+    // Share the SuperAdmin logic for downloading to avoid duplicating LibreOffice code
+    Route::get('/reports/{id}/docx', [App\Http\Controllers\SuperAdmin\ReportController::class, 'downloadDocx'])->name('reports.download.docx');
+    Route::get('/reports/{id}/pdf', [App\Http\Controllers\SuperAdmin\ReportController::class, 'downloadPdf'])->name('reports.download.pdf');
+    // ----------------------
+
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
     Route::get('/forms', [FormController::class, 'focalPersonIndex'])->name('forms.index');
     

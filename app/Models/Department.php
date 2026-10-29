@@ -19,13 +19,12 @@ class Department extends Model
     
     public $timestamps = false; 
 
-    protected $fillable = [
-        'department_name', 
-        'description', 
-        'classification',
-        'daily_pin', 
-        'focal_person_id'
-    ];
+   protected $fillable = [
+    'department_name', 
+    'description', 
+    'classification',
+    'focal_person_id'
+];
 
     // --- RELATIONSHIPS ---
 
@@ -134,7 +133,7 @@ class Department extends Model
             'description'     => trim($data['description'] ?? ''),
             'classification'  => $data['classification'] ?? 'CC',
             'focal_person_id' => $data['focal_person_id'] ?? null,
-            'daily_pin'       => str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT), 
+           
         ]);
 
         if ($department->focal_person_id) {
@@ -188,15 +187,13 @@ class Department extends Model
     }
 
     public function updateDepartment(array $data)
-    {
-        $this->update([
-            'department_name' => $data['department_name'],
-            'description'     => $data['description'] ?? '',
-            'classification'  => $data['classification'] ?? $this->classification,
-            'focal_person_id' => $data['focal_person_id'] ?? null,
-            // Let them optionally update the daily_pin from the request if it exists
-            'daily_pin'       => $data['daily_pin'] ?? $this->daily_pin,
-        ]);
+{
+    $this->update([
+        'department_name' => $data['department_name'],
+        'description'     => $data['description'] ?? '',
+        'classification'  => $data['classification'] ?? $this->classification,
+        'focal_person_id' => $data['focal_person_id'] ?? null,
+    ]);
 
         if ($this->focal_person_id) {
             Account::where('user_id', $this->focal_person_id)

@@ -552,99 +552,100 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
                             
                             {/* Line Chart */}
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 lg:col-span-3 transition duration-200 hover:shadow-md">
-                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
-                                    <div>
-                                        <h2 className="text-base font-bold text-gray-900 tracking-tight">Departmental Sentiment Trend</h2>
-                                        <p className="text-xs text-gray-500 mt-0.5">Sentiment metrics over the selected timeline</p>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        {/* Sentiment Totals Pill */}
-                                        <div className="flex items-center gap-2 sm:gap-3 bg-gray-50/80 px-3 py-1.5 rounded-lg border border-gray-200/60 text-xs">
-                                            <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-                                                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                                Positive: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Positive) || 0), 0)}
-                                            </span>
-                                            <span className="text-gray-300">|</span>
-                                            <span className="flex items-center gap-1.5 font-medium text-amber-700">
-                                                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                                                Neutral: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Neutral) || 0), 0)}
-                                            </span>
-                                            <span className="text-gray-300">|</span>
-                                            <span className="flex items-center gap-1.5 font-medium text-rose-700">
-                                                <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                                                Negative: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Negative) || 0), 0)}
-                                            </span>
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-4 sm:p-5 lg:col-span-3 transition duration-200 hover:shadow-md">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3.5 pb-3 border-b border-gray-100">
+                                        <div>
+                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Departmental Sentiment Trend</h2>
+                                            <p className="text-xs text-gray-500 mt-0.5">Sentiment metrics over the selected timeline</p>
                                         </div>
-                                        
-                                        {/* 7D / 30D / 90D Filter Tabs */}
-                                        {showLocalTabs && (
-                                            <div className="flex items-center bg-gray-100/90 p-1 rounded-lg border border-gray-200/60 shadow-inner">
-                                                {[
-                                                    { label: '7 Days', value: '7d' },
-                                                    { label: '30 Days', value: '30d' },
-                                                    { label: '90 Days', value: '90d' },
-                                                ].map((tab) => {
-                                                    const isSelected = timeRange === tab.value;
-                                                    return (
-                                                        <button
-                                                            key={tab.value}
-                                                            type="button"
-                                                            onClick={() => setTimeRange(tab.value)}
-                                                            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all duration-150 ${
-                                                                isSelected
-                                                                    ? 'bg-[#1E6031] text-white shadow-sm'
-                                                                    : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
-                                                            }`}
-                                                        >
-                                                            {tab.label}
-                                                        </button>
-                                                    );
-                                                })}
+
+                                        <div className="flex flex-wrap items-center gap-2.5">
+                                            {/* Sentiment Totals Pill */}
+                                            <div className="flex items-center gap-2 sm:gap-3 bg-gray-50/80 px-3 py-1.5 rounded-lg border border-gray-200/60 text-xs">
+                                                <span className="flex items-center gap-1.5 font-medium text-emerald-700">
+                                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                    Positive: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Positive) || 0), 0)}
+                                                </span>
+                                                <span className="text-gray-300">|</span>
+                                                <span className="flex items-center gap-1.5 font-medium text-amber-700">
+                                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                                    Neutral: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Neutral) || 0), 0)}
+                                                </span>
+                                                <span className="text-gray-300">|</span>
+                                                <span className="flex items-center gap-1.5 font-medium text-rose-700">
+                                                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                                    Negative: {filteredTrendData.reduce((acc, curr) => acc + (Number(curr.Negative) || 0), 0)}
+                                                </span>
                                             </div>
-                                        )}
+                                            
+                                            {/* 7D / 30D / 90D Filter Tabs */}
+                                            {showLocalTabs && (
+                                                <div className="flex items-center bg-gray-100/90 p-1 rounded-lg border border-gray-200/60 shadow-inner">
+                                                    {[
+                                                        { label: '7 Days', value: '7d' },
+                                                        { label: '30 Days', value: '30d' },
+                                                        { label: '90 Days', value: '90d' },
+                                                    ].map((tab) => {
+                                                        const isSelected = timeRange === tab.value;
+                                                        return (
+                                                            <button
+                                                                key={tab.value}
+                                                                type="button"
+                                                                onClick={() => setTimeRange(tab.value)}
+                                                                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all duration-150 ${
+                                                                    isSelected
+                                                                        ? 'bg-[#1E6031] text-white shadow-sm'
+                                                                        : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                                                                }`}
+                                                            >
+                                                                {tab.label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Scaled Chart Container */}
+                                    <div className="w-full h-60 sm:h-64">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={filteredTrendData} margin={{ top: 8, right: 20, left: -20, bottom: 0 }}>
+                                                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
+                                                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} dy={6} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, (dataMax) => (dataMax === 0 ? 5 : Math.ceil(dataMax * 1.25))]} />
+                                                <RechartsTooltip content={({ active, payload, label }) => {
+                                                    if (active && payload && payload.length) {
+                                                        return (
+                                                            <div className="bg-white/95 backdrop-blur-sm border border-gray-200/90 shadow-xl rounded-xl p-3 text-xs min-w-[150px]">
+                                                                <p className="font-bold text-gray-800 border-b border-gray-100 pb-1.5 mb-2 flex items-center justify-between">
+                                                                    <span>{label}</span>
+                                                                    <span className="text-[10px] text-gray-400 font-normal">Timeline</span>
+                                                                </p>
+                                                                <div className="space-y-1.5">
+                                                                    {payload.map((entry, index) => (
+                                                                        <div key={index} className="flex items-center justify-between">
+                                                                            <span className="flex items-center gap-1.5 text-gray-600 font-medium">
+                                                                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
+                                                                                {entry.name}
+                                                                            </span>
+                                                                            <span className="font-bold text-gray-900">{entry.value}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                }} />
+                                                <Legend verticalAlign="bottom" height={28} iconType="circle" iconSize={8} wrapperStyle={{ paddingTop: '8px', fontSize: '11px', fontWeight: 500, color: '#475569' }} />
+                                                <Line type="monotone" dataKey="Positive" name="Positive" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5, fill: '#ffffff', stroke: '#10b981', strokeWidth: 2 }} activeDot={{ r: 5.5, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }} />
+                                                <Line type="monotone" dataKey="Neutral" name="Neutral" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#ffffff', stroke: '#f59e0b', strokeWidth: 2 }} activeDot={{ r: 5.5, fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2 }} />
+                                                <Line type="monotone" dataKey="Negative" name="Negative" stroke="#f43f5e" strokeWidth={2.5} dot={{ r: 3.5, fill: '#ffffff', stroke: '#f43f5e', strokeWidth: 2 }} activeDot={{ r: 5.5, fill: '#f43f5e', stroke: '#ffffff', strokeWidth: 2 }} />
+                                            </LineChart>
+                                        </ResponsiveContainer>
                                     </div>
                                 </div>
-
-                                <div className="w-full h-80">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={filteredTrendData} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} dy={8} />
-                                            <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, (dataMax) => (dataMax === 0 ? 5 : Math.ceil(dataMax * 1.25))]} />
-                                            <RechartsTooltip content={({ active, payload, label }) => {
-                                                if (active && payload && payload.length) {
-                                                    return (
-                                                        <div className="bg-white/95 backdrop-blur-sm border border-gray-200/90 shadow-xl rounded-xl p-3 text-xs min-w-[150px]">
-                                                            <p className="font-bold text-gray-800 border-b border-gray-100 pb-1.5 mb-2 flex items-center justify-between">
-                                                                <span>{label}</span>
-                                                                <span className="text-[10px] text-gray-400 font-normal">Timeline</span>
-                                                            </p>
-                                                            <div className="space-y-1.5">
-                                                                {payload.map((entry, index) => (
-                                                                    <div key={index} className="flex items-center justify-between">
-                                                                        <span className="flex items-center gap-1.5 text-gray-600 font-medium">
-                                                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></span>
-                                                                            {entry.name}
-                                                                        </span>
-                                                                        <span className="font-bold text-gray-900">{entry.value}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
-                                            }} />
-                                            <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} wrapperStyle={{ paddingTop: '16px', fontSize: '12px', fontWeight: 500, color: '#475569' }} />
-                                            <Line type="monotone" dataKey="Positive" name="Positive" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5, fill: '#ffffff', stroke: '#10b981', strokeWidth: 2 }} activeDot={{ r: 5.5, fill: '#10b981', stroke: '#ffffff', strokeWidth: 2 }} />
-                                            <Line type="monotone" dataKey="Neutral" name="Neutral" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3.5, fill: '#ffffff', stroke: '#f59e0b', strokeWidth: 2 }} activeDot={{ r: 5.5, fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2 }} />
-                                            <Line type="monotone" dataKey="Negative" name="Negative" stroke="#f43f5e" strokeWidth={2.5} dot={{ r: 3.5, fill: '#ffffff', stroke: '#f43f5e', strokeWidth: 2 }} activeDot={{ r: 5.5, fill: '#f43f5e', stroke: '#ffffff', strokeWidth: 2 }} />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
 
                             {/* Department Performance Ranking - STRICTLY SUPERADMIN ONLY */}
                             {isSuperGroup && (

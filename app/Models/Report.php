@@ -43,20 +43,23 @@ class Report extends Model
     // --- FAT MODEL METHOD ---
     public static function generateSnapshot(array $validated): ?self
     {
-        // 1. Join Feedback to Forms to access 'department_id'
+       // 1. Join Feedback to Forms to access 'department_id'
         $query = DB::table('feedback')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
             ->whereBetween(DB::raw('DATE(feedback.submitted_at)'), [$validated['start_date'], $validated['end_date']])
             ->where('feedback.status', 'Valid');
 
-        if (!in_array($validated['department_id'], ['all', 'all_non_cc', 'all_cc'])) {
-            $query->where('forms.department_id', $validated['department_id']);
-        }
-        if ($validated['department_id'] === 'all_non_cc') {
-            $query->where('forms.form_type', 'Non-CC');
-        } elseif ($validated['department_id'] === 'all_cc') {
-            $query->where('forms.form_type', 'CC');
+       // Apply strict filters based on the exact selected target
+        $targetId = $validated['department_id'];
+        
+        if ($targetId === 'all_non_cc') {
+            $query->where('department.classification', 'Non-CC');
+        } elseif ($targetId === 'all_cc') {
+            $query->where('department.classification', 'CC');
+        } else {
+            // Strictly lock the query to the chosen local department (force integer cast to prevent string matching bugs)
+            $query->where('forms.department_id', (int) $targetId);
         }
 
         $validResponses = $query->select('feedback.response_id', 'department.department_name')->get();
@@ -159,8 +162,9 @@ class Report extends Model
             $table2Data[$transType][$dept][$service]++;
         }
 
-        $ccMetrics = [];
+       $ccMetrics = [];
         $ccFormulas = [];
+        
         if ($validated['report_type'] === 'cc') {
             $ccMetrics = [
                 'cc1' => self::calculateFrequencies($collection, 'cc1', $totalRespondents),
@@ -190,6 +194,19 @@ class Report extends Model
                 'cc3_helpful' => $cc3Valid > 0 ? round(($cc3Helpful / $cc3Valid) * 100, 2) : 0,
             ];
             $ccFormulas['overall'] = round(($ccFormulas['cc1_aware'] + $ccFormulas['cc2_visible'] + $ccFormulas['cc3_helpful']) / 3, 2);
+        } else {
+            // Explicitly zero out CC metrics so the Word template renderer deletes the placeholders
+            $ccMetrics = [
+                'cc1' => ['N/A' => ['count' => '0', 'percent' => '0']],
+                'cc2' => ['N/A' => ['count' => '0', 'percent' => '0']],
+                'cc3' => ['N/A' => ['count' => '0', 'percent' => '0']],
+            ];
+            $ccFormulas = [
+                'cc1_aware' => '0',
+                'cc2_visible' => '0',
+                'cc3_helpful' => '0',
+                'overall' => '0',
+            ];
         }
 
         $sqdQuestions = ['sqd0', 'sqd1', 'sqd2', 'sqd3', 'sqd4', 'sqd5', 'sqd6', 'sqd7', 'sqd8', 'overall_satisfaction'];
@@ -203,17 +220,15 @@ class Report extends Model
             $sqdMetrics['internal'][$sqd] = self::calculateSQD($internalCollection, $sqd);
             $sqdMetrics['external'][$sqd] = self::calculateSQD($externalCollection, $sqd);
         }
-
-        if ($validated['department_id'] === 'all') {
-            $departmentName = 'All Departments (Global)';
-        } elseif ($validated['department_id'] === 'all_non_cc') {
+        $targetId = $validated['department_id'];
+        
+        if ($targetId === 'all_non_cc') {
             $departmentName = 'University-Wide Summary (Non-CC)';
-        } elseif ($validated['department_id'] === 'all_cc') {
+        } elseif ($targetId === 'all_cc') {
             $departmentName = 'University-Wide Summary (With CC)';
         } else {
-            $departmentName = Department::where('department_id', $validated['department_id'])->value('department_name');
+            $departmentName = Department::where('department_id', (int) $targetId)->value('department_name') ?? 'Unknown Department';
         }
-
         $reportPayload = [
             'metadata' => [
                 'department'        => $departmentName,

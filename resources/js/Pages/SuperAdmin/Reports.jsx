@@ -15,22 +15,24 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
 
    const { data, setData, post, processing, errors } = useForm({
         report_name: '',
-        department_id: 'all_non_cc', // Match the visual default of the dropdown
+        department_id: '', // Force user to manually select a target
         start_date: '',
         end_date: '',
-        report_type: 'non-cc', // Global is always non-cc
+        report_type: 'cc',
         export_format: 'docx',
     });
 
-   // Auto-sync Template Type (CC vs Non-CC) when selecting a department
+  // Auto-sync Template Type (CC vs Non-CC) when selecting a department
     const handleDepartmentChange = (e) => {
         const deptId = e.target.value;
-        if (['all_non_cc', 'all_cc', 'all'].includes(deptId)) {
-            setData((prev) => ({
-                ...prev,
-                department_id: deptId,
-                report_type: deptId === 'all_non_cc' ? 'non-cc' : 'cc',
-            }));
+        
+        if (deptId === 'all_non_cc') {
+            setData('department_id', 'all_non_cc');
+            setData('report_type', 'non-cc');
+            return;
+        } else if (deptId === 'all_cc') {
+            setData('department_id', 'all_cc');
+            setData('report_type', 'cc');
             return;
         }
 
@@ -42,7 +44,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
             department_id: deptId,
             report_type: inferredType,
         }));
-    };;
+    };
 
     const formatDateYMD = (year, monthIndex, day) => {
         const y = String(year);
