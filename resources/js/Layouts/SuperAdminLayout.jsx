@@ -57,10 +57,19 @@ export default function SuperAdminLayout({ children, headerTitle }) {
     }, []);
 
 
-  // --- 2. ADDED: GLOBAL FLASH MESSAGE HANDLER ---
+ // --- 2. GLOBAL FLASH MESSAGE HANDLER ---
     useEffect(() => {
-        // Trigger login popup from hidden backend flash message
         if (flash?.login_success) {
+            // Baseline current notifications for this specific user on login so the watcher doesn't overwrite the login toast
+            const userKey = auth?.user?.id || 'guest';
+            if (recentNotifications && recentNotifications.length > 0) {
+                const currentLatest = recentNotifications[0];
+                sessionStorage.setItem(`latest_notif_id_${userKey}`, `${currentLatest.request_id}_${currentLatest.status}`);
+            } else {
+                sessionStorage.removeItem(`latest_notif_id_${userKey}`);
+            }
+            sessionStorage.setItem(`notifs_initialized_${userKey}`, 'true');
+
             const Toast = Swal.mixin({
                 toast: true,
                 position: 'top-end',
@@ -83,7 +92,6 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                 confirmButtonColor: '#1E6031',
                 confirmButtonText: 'Okay'
             });
-            // Destroy the flash message so the Back button doesn't replay it
             flash.success = null; 
         }
 
@@ -95,36 +103,35 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                 confirmButtonColor: '#dc2626',
                 confirmButtonText: 'Okay'
             });
-            // Destroy the flash error message
             flash.error = null;
         }
     }, [flash]);
 
     // --- BACKGROUND NOTIFICATION POLLING ---
-        // Automatically fetches new notifications every 15 seconds without refreshing the page
-        useEffect(() => {
-            const interval = setInterval(() => {
-                router.reload({ 
-                    only: ['pendingRequestsCount', 'recentNotifications'], 
-                    preserveState: true, 
-                    preserveScroll: true
-                });
-            }, 15000);
-            return () => clearInterval(interval);
-        }, []);
+    useEffect(() => {
+        const interval = setInterval(() => {
+            router.reload({ 
+                only: ['pendingRequestsCount', 'recentNotifications'], 
+                preserveState: true, 
+                preserveScroll: true
+            });
+        }, 15000);
+        return () => clearInterval(interval);
+    }, []);
 
-       // --- NEW NOTIFICATION TOAST WATCHER (Persistent via SessionStorage) ---
-  
-        useEffect(() => {
-            if (recentNotifications && recentNotifications.length > 0) {
-                const currentLatest = recentNotifications[0];
-                 const storedLatestId = sessionStorage.getItem('latest_notif_id');
-                  // Combine ID and Status so updates to the SAME request trigger the toast
-                const currentId = `${currentLatest.request_id}_${currentLatest.status}`;
-                const isInitialized = sessionStorage.getItem('notifs_initialized');
+    // --- NEW NOTIFICATION TOAST WATCHER (Scoped per User ID) ---
+    useEffect(() => {
+        const userKey = auth?.user?.id || 'guest';
+        const storageKeyId = `latest_notif_id_${userKey}`;
+        const storageKeyInit = `notifs_initialized_${userKey}`;
 
-            // Only fire if the ID or Status is genuinely new, AND this isn't the very first page load after login
-            if (isInitialized && storedLatestId !== currentId) {
+        if (recentNotifications && recentNotifications.length > 0) {
+            const currentLatest = recentNotifications[0];
+            const currentId = `${currentLatest.request_id}_${currentLatest.status}`;
+            const storedLatestId = sessionStorage.getItem(storageKeyId);
+            const isInitialized = sessionStorage.getItem(storageKeyInit);
+
+            if (isInitialized && storedLatestId !== currentId && !flash?.login_success) {
                 const Toast = Swal.mixin({
                     toast: true,
                     position: 'top-end',
@@ -146,29 +153,22 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                 });
             }
             
-            // Update storage so we don't trigger it again for this exact notification
-            sessionStorage.setItem('latest_notif_id', currentId);
-            sessionStorage.setItem('notifs_initialized', 'true');
-        } else if (!recentNotifications || recentNotifications.length === 0) {
-            sessionStorage.removeItem('latest_notif_id');
-            sessionStorage.setItem('notifs_initialized', 'true'); 
+            sessionStorage.setItem(storageKeyId, currentId);
+            sessionStorage.setItem(storageKeyInit, 'true');
+        } else {
+            sessionStorage.removeItem(storageKeyId);
+            sessionStorage.setItem(storageKeyInit, 'true'); 
         }
-    }, [recentNotifications]);
+    }, [recentNotifications, auth?.user?.id]);
 
-   // --- BLAZING FAST NOTIFICATION CLEARING (Partial Reload) ---
+    // --- BLAZING FAST NOTIFICATION CLEARING (Partial Reload) ---
     const handleClearNotification = (e, targetId) => {
         e.preventDefault();
         e.stopPropagation();
 
         const isClearAll = targetId === 'all';
-        
-        // TROJAN HORSE: If 'all' is clicked, borrow the ID of the first notification 
-        // to bypass Laravel's strict Route Model Binding 404 error!
-        const routeId = isClearAll && recentNotifications?.length > 0 
-            ? recentNotifications[0].request_id 
-            : targetId;
+        const routeId = isClearAll ? 0 : targetId;
 
-        // Route dynamically based on exact role
         let destroyRoute;
         if (isSuperAdmin) {
             destroyRoute = route('superadmin.requests.destroy', routeId);
@@ -181,14 +181,13 @@ export default function SuperAdminLayout({ children, headerTitle }) {
         router.delete(destroyRoute, {
             data: { 
                 clear_all: isClearAll,
-                from_notification: true // Tells the controller this came from the bell!
-            }, 
+                from_notification: true
+            },
             preserveScroll: true,
             preserveState: true,
             only: ['pendingRequestsCount', 'recentNotifications']
         });
     };
-
     // --- SWEETALERT2 ACTION HANDLERS ---
     const handleLogout = () => {
         Swal.fire({
@@ -469,10 +468,13 @@ return (
                                         </div>
                                     </div>
                                     
-                                    <div className="max-h-80 overflow-y-auto">
+                                   <div className="max-h-80 overflow-y-auto">
                                         {recentNotifications && recentNotifications.length > 0 ? (
-                                            recentNotifications.map((notif) => (
-                                                <div key={notif.request_id} className="group relative flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition">
+                                            recentNotifications.map((notif, index) => {
+                                                // Highly robust fallback to guarantee single-clicks work
+                                                const currentId = notif.id || notif.request_id || notif.admin_request_id || index + 1000;
+                                                return (
+                                                <div key={`notif-${currentId}`} className="group relative flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition">
                                                     
                                                    {/* Clickable Area (Goes to Requests Page) */}
                                                     <Link 
@@ -535,14 +537,14 @@ return (
 
                                                     {/* Fast Mark as Done / Clear Button */}
                                                     <button
-                                                        onClick={(e) => handleClearNotification(e, notif.request_id)}
+                                                        onClick={(e) => handleClearNotification(e, currentId)}
                                                         className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-gray-200 text-gray-500 hover:bg-emerald-100 hover:text-emerald-700 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 shadow-sm"
                                                         title="Mark as done & clear"
                                                     >
                                                         <i className="fa-solid fa-check text-sm"></i>
                                                     </button>
                                                 </div>
-                                            ))
+                                            )})
                                         ) : (
                                             <div className="px-4 py-8 text-center">
                                                 <i className="fa-regular fa-bell-slash text-gray-300 text-3xl mb-3"></i>

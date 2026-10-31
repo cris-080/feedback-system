@@ -217,7 +217,36 @@ class DashboardController extends Controller
         }
 
 
-        // 5. Assemble Metrics
+        // 5. Calculate Feedback Committee Specific Metrics (Only querying if SuperGroup)
+        $totalAuditedFeedback = 0;
+        $compliantDepartments = 0;
+        $pendingReports = 0;
+        $auditedHarassment = 0;
+
+        if ($isSuperGroup) {
+            // Count total feedback locked inside officially submitted/approved reports
+            $totalAuditedFeedback = DB::table('reports')
+                ->whereIn('status', ['Submitted', 'Approved'])
+                ->sum(DB::raw("CAST(JSON_UNQUOTE(JSON_EXTRACT(report_data, '$.metadata.total_respondents')) AS UNSIGNED)"));
+
+            // Count how many distinct departments have submitted a report
+            $compliantDepartments = DB::table('reports')
+                ->whereIn('status', ['Submitted', 'Approved'])
+                ->distinct('department_id')
+                ->count('department_id');
+
+            // Count pending committee reviews
+            $pendingReports = DB::table('reports')
+                ->where('status', 'Submitted')
+                ->count();
+
+            // Total harassment reports explicitly audited across all submissions
+            $auditedHarassment = DB::table('reports')
+                ->whereIn('status', ['Submitted', 'Approved'])
+                ->sum(DB::raw("CAST(JSON_UNQUOTE(JSON_EXTRACT(report_data, '$.harassment.Yes.count')) AS UNSIGNED)"));
+        }
+
+        // 6. Assemble Metrics
         $metrics = [
             'total_users'         => $isSuperAdmin ? Account::getTotalCount() : 0,
             'total_departments'   => $isSuperGroup ? $departments->count() : 1,
@@ -248,9 +277,14 @@ class DashboardController extends Controller
             'service_performance' => $servicePerformance,
             'provider_performance'=> $providerPerformance,
             
-            // NEW METRICS ADDED HERE
             'recommendation_data' => $recommendationData,
-            'harassment_words'    => $harassmentWords
+            'harassment_words'    => $harassmentWords,
+
+            // FEEDBACK COMMITTEE KPIs
+            'total_audited_feedback' => $totalAuditedFeedback,
+            'compliant_departments'  => $compliantDepartments,
+            'pending_reports'        => $pendingReports,
+            'audited_harassment'     => $auditedHarassment,
         ];
 
         // 6. Return View

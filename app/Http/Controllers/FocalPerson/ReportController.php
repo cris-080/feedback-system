@@ -50,7 +50,7 @@ class ReportController extends Controller
         ]);
     }
 
-    public function generate(Request $request)
+    public function generate(Request $request, \App\Services\ReportGenerationService $reportService)
     {
         $user = Auth::user();
         
@@ -63,9 +63,10 @@ class ReportController extends Controller
 
         // HARDCODED SECURITY: Force the department ID to the user's assigned department
         $validated['department_id'] = $user->department_id;
-        $validated['export_format'] = 'docx';
+        $validated['export_format'] = 'pdf';
 
-        $report = Report::generateSnapshot($validated);
+        // Use the official service to compute all SQD and CC math accurately
+        $report = $reportService->generateLocalSnapshot($validated);
 
         if (!$report) {
             return back()->with('error', 'No feedback data found for your department in this date range.');

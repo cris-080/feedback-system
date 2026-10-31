@@ -55,10 +55,21 @@ class AuditLogController extends Controller
         // Get unique modules for the dropdown
         $modules = AuditLog::select('module')->distinct()->orderBy('module')->pluck('module');
 
-        return Inertia::render('SuperAdmin/AuditLogs', [
+       return Inertia::render('SuperAdmin/AuditLogs', [
             'logs'    => $logs,
             'modules' => $modules,
             'filters' => $request->only(['search', 'role', 'module', 'date_from', 'date_to'])
         ]);
+    }
+
+    public function clear()
+    {
+        // Wipe the table entirely and reset auto-incrementing IDs
+        AuditLog::truncate();
+
+        // Immediately log the clearing action so the table isn't entirely empty
+        AuditLog::logAction('Deleted', 'System Administration', 'SuperAdmin permanently cleared all system audit logs.');
+
+        return redirect()->back()->with('success', 'All system audit logs have been successfully permanently deleted.');
     }
 }

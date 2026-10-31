@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Head, router } from '@inertiajs/react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Pagination from '@/Components/Pagination';
+import Swal from 'sweetalert2';
 
 export default function AuditLogs({ logs, modules = [], filters = {} }) {
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
@@ -63,6 +64,25 @@ export default function AuditLogs({ logs, modules = [], filters = {} }) {
             setDateFrom(formatDate(firstDay));
             setDateTo(formatDate(now));
         }
+    };
+
+    const handleClearLogs = () => {
+        Swal.fire({
+            title: 'Wipe All Audit Logs?',
+            text: "This will permanently erase ALL system audit logs from the database. This action cannot be undone!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fa-solid fa-triangle-exclamation"></i> Yes, Wipe Everything'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.delete(route('superadmin.audit-logs.clear'), {
+                    preserveScroll: true,
+                    preserveState: false, // Forces a full data refresh to clear the table UI
+                });
+            }
+        });
     };
 
     const hasActiveFilters = Boolean(searchQuery || roleFilter || moduleFilter || dateFrom || dateTo);
@@ -214,11 +234,18 @@ export default function AuditLogs({ logs, modules = [], filters = {} }) {
                                     This Month
                                 </button>
 
-                                 <div className="flex items-center gap-2 self-start md:self-auto">
-                            <div className="px-3.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600">
-                                Total Logged Events: <span className="text-gray-900 font-bold ml-1">{logs.total || logs.data.length}</span>
-                            </div>
-                        </div>
+                                 <div className="flex items-center gap-2 self-start md:self-auto ml-auto">
+                                    <div className="px-3.5 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-600">
+                                        Total Logged Events: <span className="text-gray-900 font-bold ml-1">{logs.total || logs.data.length}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleClearLogs}
+                                        className="px-3.5 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border border-red-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                                    >
+                                        <i className="fa-solid fa-trash-can"></i> Clear All Logs
+                                    </button>
+                                </div>
                             </div>
 
                             {hasActiveFilters && (

@@ -84,6 +84,7 @@ Route::prefix('superadmin')->name('superadmin.')->group(function () {
 
     // Audit Logs
     Route::get('/audit-logs', [AuditLogController::class, 'index'])->name('audit-logs.index');
+    Route::delete('/audit-logs/clear', [AuditLogController::class, 'clear'])->name('audit-logs.clear');
 
     // Central Archives System
     Route::get('/archives', [ArchiveController::class, 'index'])->name('archives.index');

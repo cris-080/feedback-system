@@ -49,10 +49,22 @@ class LoginRequest extends FormRequest
 
         // Attempt authentication using the determined field
         if (! Auth::attempt([$fieldType => $login, 'password' => $this->input('password')], $this->boolean('remember'))) {
-            RateLimiter::hit($this->throttleKey());
+            // Set cooldown to 300 seconds (5 minutes)
+            RateLimiter::hit($this->throttleKey(), 300);
+
+            $attempts = RateLimiter::attempts($this->throttleKey());
+            $maxAttempts = 15;
+            $attemptsLeft = $maxAttempts - $attempts;
+
+            $message = trans('auth.failed');
+
+            // Trigger the warning if they have failed 5 or more times
+            if ($attempts >= 5 && $attemptsLeft > 0) {
+                $message = "These credentials do not match our records. Warning: You only have {$attemptsLeft} login attempt" . ($attemptsLeft === 1 ? '' : 's') . " left before your account is locked for 5 minutes.";
+            }
 
             throw ValidationException::withMessages([
-                'login' => trans('auth.failed'),
+                'login' => $message,
             ]);
         }
 
@@ -64,9 +76,10 @@ class LoginRequest extends FormRequest
      *
      * @throws \Illuminate\Validation\ValidationException
      */
-    public function ensureIsNotRateLimited(): void
+   public function ensureIsNotRateLimited(): void
     {
-        if (!RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+        // Increase the hard limit to 15 attempts
+        if (!RateLimiter::tooManyAttempts($this->throttleKey(), 15)) {
             return;
         }
 

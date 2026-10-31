@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Report;
 use App\Models\Department;
+use App\Services\ReportGenerationService;
 use App\Models\AuditLog;
 use Symfony\Component\Process\Process;
 use Inertia\Inertia;
@@ -65,7 +66,7 @@ class ReportController extends Controller
             'filters'     => ['search' => $search],
         ]);
     }
-    public function generate(Request $request)
+    public function generate(Request $request, ReportGenerationService $reportService)
     {
         $validated = $request->validate([
             'report_name'   => 'nullable|string|max:255',
@@ -78,40 +79,22 @@ class ReportController extends Controller
 
         $validated['export_format'] = $validated['export_format'] ?? 'docx';
 
-        $report = Report::generateSnapshot($validated);
+        // Clean Request Routing
+        if (in_array($validated['department_id'], ['all_non_cc', 'all_cc'])) {
+            $report = $reportService->generateGlobalSnapshot($validated);
+        } else {
+            $report = $reportService->generateLocalSnapshot($validated);
+        }
 
         if (!$report) {
             return back()->with('error', 'No feedback data found for the selected department and date range.');
         }
 
-        $reportData = $report->report_data;
-        
-        // Force the correct display name and type for the Overall templates
-        if ($validated['department_id'] === 'all_non_cc') {
-            $reportData['metadata']['department'] = 'University-Wide Summary (Non-CC)';
-            $report->report_type = 'non-cc';
-            $reportData['metadata']['type'] = 'non-cc';
-        } elseif ($validated['department_id'] === 'all_cc') {
-            $reportData['metadata']['department'] = 'University-Wide Summary (With CC)';
-            $report->report_type = 'cc';
-            $reportData['metadata']['type'] = 'cc';
-        }
-        
-        $defaultName = ($reportData['metadata']['department'] ?? 'Department') . ' - ' . ($reportData['metadata']['period'] ?? '');
-        $customName = trim((string) ($validated['report_name'] ?? ''));
-        $reportData['metadata']['report_name'] = $customName !== '' ? $customName : $defaultName;
-
-       $report->report_data = $reportData;
-        if (Schema::hasColumn('reports', 'report_name')) {
-            $report->report_name = $reportData['metadata']['report_name'];
-        }
-        $report->save();
-
         // --- AUDIT TRAIL ---
-        AuditLog::logAction('Created', 'Reports', "Generated new report: {$reportData['metadata']['report_name']} (ID: {$report->id}).");
+        AuditLog::logAction('Created', 'Reports', "Generated new report: {$report->report_data['metadata']['report_name']} (ID: {$report->id}).");
 
         return redirect()->route('superadmin.reports.index')
-            ->with('success', 'Report "' . $reportData['metadata']['report_name'] . '" compiled and saved to archive.');
+            ->with('success', 'Report "' . $report->report_data['metadata']['report_name'] . '" compiled and saved to archive.');
     }
 
     /**

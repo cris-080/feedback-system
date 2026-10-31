@@ -3,9 +3,15 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Crypt;
 use App\Http\Controllers\FeedbackCommittee\FeedbackCommitteeRequestController;
 use App\Http\Controllers\SuperAdmin\FormController;
+use App\Http\Controllers\FeedbackCommittee\ReportController;
 
 Route::prefix('feedback-committee')->name('feedback_committee.')->group(function () {
-    Route::get('/reports', function () { return inertia('FeedbackCommittee/Reports'); })->name('reports.index');
+    
+    // Report Repository
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::patch('/reports/{id}/approve', [ReportController::class, 'approve'])->name('reports.approve');
+    Route::patch('/reports/{id}/return', [ReportController::class, 'returnToSender'])->name('reports.return');
+    Route::get('/reports/{id}/pdf', [ReportController::class, 'downloadPdf'])->name('reports.download.pdf');
     
     // Forms & Preview
     Route::get('/forms', [FormController::class, 'index'])->name('forms.index');

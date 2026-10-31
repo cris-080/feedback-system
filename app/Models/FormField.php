@@ -85,13 +85,13 @@ class FormField extends Model
           
 
 
-            [
+           [
                 'field_id' => 'temp_4',
                 'step_number' => 1,
                 'field_label' => 'Sex',
                 'input_type' => 'radio',
                 'is_required' => true,
-                'options' => ['Male', 'Female',]
+                'options' => ['Male', 'Female', 'Prefer not to say']
             ],
 
             [
