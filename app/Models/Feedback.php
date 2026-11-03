@@ -6,11 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
-class Feedback extends Model
+    class Feedback extends Model
 {
     protected $table = 'feedback';
     protected $primaryKey = 'response_id';
     public $timestamps = false; 
+
+    // GLOBALLY SCOPE FC DASHBOARD TO AUDITED IDs
+    public static $auditedIdsOverride = null;
 
     // Allow mass assignment for transaction_date along with existing fields
     protected $fillable = [
@@ -90,11 +93,15 @@ class Feedback extends Model
     |--------------------------------------------------------------------------
     */
 
-    /**
+   /**
      * Apply date range filtering to a query builder instance.
      */
     public static function applyDateFilter($query, $column, $range)
     {
+        if (self::$auditedIdsOverride !== null) {
+            return $query->whereIn('feedback.response_id', self::$auditedIdsOverride);
+        }
+
         $now = Carbon::now();
         switch ($range) {
             case 'today':
@@ -247,8 +254,10 @@ class Feedback extends Model
             $query->where('forms.department_id', $departmentId);
         }
 
-        // 3. Apply Date Filtering Logic
-        if ($range === '90_days') {
+       // 3. Apply Date Filtering Logic
+        if (self::$auditedIdsOverride !== null) {
+            $query->whereIn('feedback.response_id', self::$auditedIdsOverride);
+        } elseif ($range === '90_days') {
             // Custom filter override to grab exactly the last 90 days
             $query->where('feedback.submitted_at', '>=', Carbon::now()->subDays(89)->startOfDay());
         } else {

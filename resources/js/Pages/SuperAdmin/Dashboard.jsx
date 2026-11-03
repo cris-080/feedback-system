@@ -19,10 +19,11 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         const specificMonth = metrics?.specific_month || '';
         
         // Count active filters (SuperGroup checks if dept !== overall)
+        const isAutoFallback = !!metrics?.fallback_message;
         const activeFilterCount = (isSuperGroup && currentDept !== 'overall' ? 1 : 0) + 
-            (currentRange !== 'month' ? 1 : 0) +
-            (specificDate ? 1 : 0) + 
-            (specificMonth ? 1 : 0);
+            (!isAutoFallback && currentRange !== 'month' ? 1 : 0) +
+            (!isAutoFallback && specificDate ? 1 : 0) + 
+            (!isAutoFallback && specificMonth ? 1 : 0);
 
         // Local draft states
         const [filterOpen, setFilterOpen] = useState(false);
@@ -48,10 +49,10 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
 
         useEffect(() => {
             setTempDept(currentDept);
-            setTempRange(currentRange);
-            setTempDate(specificDate);
-            setTempMonth(specificMonth);
-        }, [currentDept, currentRange, specificDate, specificMonth]);
+            setTempRange(metrics?.fallback_message ? 'month' : currentRange);
+            setTempDate(metrics?.fallback_message ? '' : specificDate);
+            setTempMonth(metrics?.fallback_message ? '' : specificMonth);
+        }, [currentDept, currentRange, specificDate, specificMonth, metrics?.fallback_message]);
 
         // Live Chart Data from Backend Metrics
         const trendData = metrics?.trendData || [];
@@ -137,27 +138,43 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                 ? "Feedback Committee Dashboard" 
                 : `${focalDeptName} Dashboard`;
 
-        // Determine if we should show the 7D/30D/90D tabs
-        const showLocalTabs = currentRange === 'month' || currentRange === 'all';
+        // Determine if we should show the 7D/30D/90D tabs (including auto-fallback custom months)
+        const showLocalTabs = currentRange === 'month' || currentRange === 'all' || currentRange === 'custom_month';
 
         const filteredTrendData = useMemo(() => {
             if (!trendData || trendData.length === 0) return [];
             if (!showLocalTabs) return trendData;
             
             const sliceCount = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-            return trendData.slice(-sliceCount);
-        }, [trendData, timeRange, showLocalTabs]);
+            
+            if (sliceCount >= trendData.length) return trendData;
+            
+            // 1. Find the last day in the timeline that actually has recorded feedback
+            let lastActiveIndex = trendData.length - 1;
+            for (let i = trendData.length - 1; i >= 0; i--) {
+                if (trendData[i].Positive > 0 || trendData[i].Neutral > 0 || trendData[i].Negative > 0) {
+                    lastActiveIndex = i;
+                    break;
+                }
+            }
+            
+            // 2. Smart Slice: Anchor the chart to the most recent data point
+            // instead of blindly grabbing empty future dates.
+            const endIndex = Math.max(sliceCount - 1, lastActiveIndex);
+            const startIndex = Math.max(0, endIndex - sliceCount + 1);
+            
+            return trendData.slice(startIndex, endIndex + 1);
+        }, [trendData, timeRange, showLocalTabs])
 
         // WIDGET VISIBILITY LOGIC
         let showCC = false;
-        if (isFeedbackCommittee) {
-            showCC = false; // FC never sees this
-        } else if (currentDept === 'overall') {
-            showCC = true; // SuperAdmin viewing all departments
+        if (currentDept === 'overall') {
+            showCC = true; // SuperAdmin and Feedback Committee viewing all departments
         } else {
             // View specific department or Focal Person view
             const activeDept = deptArray.find(d => String(d.department_id) === String(currentDept)) || deptArray[0];
-            showCC = activeDept?.classification !== 'Non-CC';
+            const type = activeDept?.classification?.toLowerCase() || '';
+            showCC = type === 'cc' || type === 'frontline' || type !== 'non-cc';
         }
 
     return (
@@ -310,7 +327,15 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                             </>
                         )}
                     </div>
-                </div>
+              </div>
+
+                {/* Auto-Fallback Notification Banner */}
+                {metrics?.fallback_message && (
+                    <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg flex items-start sm:items-center gap-3 shadow-sm transition animate-fade-in-down mb-1">
+                        <i className="fa-solid fa-circle-info text-blue-500 mt-0.5 sm:mt-0"></i>
+                        <p className="text-sm font-medium">{metrics.fallback_message}</p>
+                    </div>
+                )}
 
                 {/* Primary KPI Metrics Grid */}
                 <div className={`grid grid-cols-1 md:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-3 xl:grid-cols-6' : isFeedbackCommittee ? 'lg:grid-cols-5' : 'lg:grid-cols-2'} gap-4`}>

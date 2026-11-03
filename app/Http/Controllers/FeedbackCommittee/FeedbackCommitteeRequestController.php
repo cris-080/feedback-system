@@ -74,9 +74,34 @@ class FeedbackCommitteeRequestController extends Controller
         return back()->with('success', $message);
     }
 
-    public function destroy($id)
+   public function destroy(Request $request, $id)
     {
+        $role = strtolower(trim(auth()->user()->role ?? ''));
+
+        // 1. Bulk "Mark all as done" from notification bell
+        if ($id == 0 || $request->input('clear_all')) {
+            AdminRequest::clearAllNotifications($role, auth()->id());
+            \App\Models\Feedback::clearAllHarassmentNotifications($role);
+            return back();
+        }
+
+        // 2. Catch Harassment Alerts from notification bell
+        if (str_starts_with($id, 'harassment_')) {
+            $responseId = str_replace('harassment_', '', $id);
+            \Illuminate\Support\Facades\DB::table('feedback')
+                ->where('response_id', $responseId)
+                ->update(['is_notified_committee' => true]);
+            return back();
+        }
+
         $adminReq = AdminRequest::findOrFail($id);
+
+        // 3. Clear specific notification from bell without clearing from inbox
+        if ($request->input('from_notification')) {
+            $adminReq->is_notified_committee = true;
+            $adminReq->save();
+            return back();
+        }
 
         // Scenario 1: FC is cancelling a pending ticket they sent to SuperAdmin
         if ($adminReq->admin_id === auth()->id()) {
@@ -102,5 +127,6 @@ class FeedbackCommitteeRequestController extends Controller
             return back()->with('success', 'Record cleared from your inbox.');
         }
 
+        return back();
     }
 }

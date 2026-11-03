@@ -55,6 +55,7 @@ class HandleInertiaRequests extends Middleware
                 if (!$request->user()) return 0;
                 $role = strtolower(trim($request->user()->role ?? ''));
                 $userId = $request->user()->user_id;
+                $deptId = $request->user()->department_id;
                 $count = 0;
 
                 if ($role === 'superadmin') {
@@ -65,10 +66,18 @@ class HandleInertiaRequests extends Middleware
                         ->where('feedback.is_notified_superadmin', false)->count();
                 } elseif (str_contains($role, 'feedback') || str_contains($role, 'focal')) {
                     $count += AdminRequest::whereIn('status', ['Approved', 'Rejected'])->where('is_notified_committee', false)->where('admin_id', $userId)->count();
-                    $count += Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
+                    
+                    $harassmentQuery = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
                         ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+                        ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
                         ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
-                        ->where('feedback.is_notified_committee', false)->count();
+                        ->where('feedback.is_notified_committee', false);
+                    
+                    // Strictly isolate harassment alerts to the logged-in user's department unless they are FC acting globally
+                    if (str_contains($role, 'focal') && $deptId) {
+                        $harassmentQuery->where('forms.department_id', $deptId);
+                    }
+                    $count += $harassmentQuery->count();
                 }
                 return $count;
             },
@@ -77,6 +86,7 @@ class HandleInertiaRequests extends Middleware
                 if (!$request->user()) return [];
                 $role = strtolower(trim($request->user()->role ?? ''));
                 $userId = $request->user()->user_id;
+                $deptId = $request->user()->department_id;
                 $notifications = collect();
 
                 if ($role === 'superadmin') {
@@ -89,12 +99,19 @@ class HandleInertiaRequests extends Middleware
                         ->orderBy('feedback.submitted_at', 'desc')->take(5)->get();
                 } elseif (str_contains($role, 'feedback') || str_contains($role, 'focal')) {
                     $adminReqs = AdminRequest::whereIn('status', ['Approved', 'Rejected'])->where('is_notified_committee', false)->where('admin_id', $userId)->orderBy('created_at', 'desc')->take(5)->get();
-                    $harassments = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
+                    
+                    $harassmentQuery = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
                         ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+                        ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
                         ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
                         ->where('feedback.is_notified_committee', false)
-                        ->select('feedback.response_id', 'feedback.submitted_at', 'feedback.control_number')
-                        ->orderBy('feedback.submitted_at', 'desc')->take(5)->get();
+                        ->select('feedback.response_id', 'feedback.submitted_at', 'feedback.control_number');
+                        
+                    // Limit visible harassment alerts for focal persons to their specific department
+                    if (str_contains($role, 'focal') && $deptId) {
+                        $harassmentQuery->where('forms.department_id', $deptId);
+                    }
+                    $harassments = $harassmentQuery->orderBy('feedback.submitted_at', 'desc')->take(5)->get();
                 } else {
                     return [];
                 }
