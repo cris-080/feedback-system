@@ -42,6 +42,9 @@ class FeedbackCommitteeRequestController extends Controller
         // --- AUDIT TRAIL ---
         AuditLog::logAction('Created', 'Admin Requests', "Submitted a {$validated['request_type']} ticket to SuperAdmin (ID: {$adminReq->id}).");
 
+        // REAL-TIME TRIGGER: Instantly light up the SuperAdmin's notification bell
+        event(new \App\Events\SystemDataUpdated('superadmin'));
+
         return back()->with('success', 'Your ticket has been successfully sent to the SuperAdmin.');
     }
 
@@ -69,6 +72,9 @@ class FeedbackCommitteeRequestController extends Controller
         $actionWord = $request->status;
         $remarksLog = $request->filled('remarks') ? " Remarks: {$request->remarks}" : "";
         AuditLog::logAction($actionWord, 'Admin Requests', "{$actionWord} focal person request (ID: {$id}).{$remarksLog}");
+
+        // REAL-TIME TRIGGER: Instantly alert the Focal Person that their request was processed
+        event(new \App\Events\SystemDataUpdated('focalperson'));
 
         $message = $request->status === 'Approved' ? 'Request approved successfully.' : 'Request rejected.';
         return back()->with('success', $message);

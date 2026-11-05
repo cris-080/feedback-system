@@ -48,6 +48,9 @@ $adminReq->save();
             "{$request->status} {$adminReq->request_type} request (ID: {$reqId}).{$remarksNote}"
         );
 
+        // REAL-TIME TRIGGER: Instantly push the approval/rejection to the requester's notification bell
+        event(new \App\Events\SystemDataUpdated('all'));
+
         // Dynamic success message based on the status
         $message = $request->status === 'Approved' 
             ? 'Request has been approved successfully.' 

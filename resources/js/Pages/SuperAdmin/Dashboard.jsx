@@ -35,8 +35,22 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         const [isRefreshing, setIsRefreshing] = useState(false);
         const [timeRange, setTimeRange] = useState('30d');
         
-        // NEW: Tab state for text analysis
-      const [complaintTab, setComplaintTab] = useState('complaints'); // 'complaints' | 'harassment'
+       // NEW: Tab state for text analysis
+        const [complaintTab, setComplaintTab] = useState('complaints'); // 'complaints' | 'harassment'
+
+        // --- REAL-TIME VISUAL PULSE STATE ---
+        const prevFeedbackCount = useRef(metrics?.total_feedback || 0);
+        const [isPulsing, setIsPulsing] = useState(false);
+
+        useEffect(() => {
+            // If the total feedback count increases, trigger a brief highlight animation
+            if (metrics?.total_feedback > prevFeedbackCount.current) {
+                setIsPulsing(true);
+                const timer = setTimeout(() => setIsPulsing(false), 2000);
+                prevFeedbackCount.current = metrics?.total_feedback;
+                return () => clearTimeout(timer);
+            }
+        }, [metrics?.total_feedback]);
 
        // Instantly clean URL, allowing notification to trigger first
         useEffect(() => {
@@ -431,13 +445,21 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                     {!isFeedbackCommittee && (
                         <>
                             {/* 1. Total Feedback */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
+                            <div className={`p-4 rounded-lg border flex flex-col justify-between transition-all duration-700 ${
+                                isPulsing 
+                                    ? 'bg-emerald-50 border-emerald-400 shadow-emerald-100 scale-[1.02]' 
+                                    : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
+                            }`}>
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Feedback</p>
-                                        <p className="text-2xl font-bold text-gray-900 mt-0.5">{metrics?.total_feedback || 0}</p>
+                                        <p className={`text-xs font-semibold uppercase tracking-wide transition-colors duration-700 ${isPulsing ? 'text-emerald-700' : 'text-gray-500'}`}>
+                                            Total Feedback {isPulsing && <span className="ml-1 text-[9px] animate-pulse">● Live update</span>}
+                                        </p>
+                                        <p className={`text-2xl font-bold mt-0.5 transition-colors duration-700 ${isPulsing ? 'text-emerald-900' : 'text-gray-900'}`}>
+                                            {metrics?.total_feedback || 0}
+                                        </p>
                                     </div>
-                                    <div className="bg-orange-100 p-2 rounded-lg text-orange-600 text-base">
+                                    <div className={`p-2 rounded-lg text-base transition-colors duration-700 ${isPulsing ? 'bg-emerald-200 text-emerald-800' : 'bg-orange-100 text-orange-600'}`}>
                                         <i className="fa-solid fa-comments"></i>
                                     </div>
                                 </div>

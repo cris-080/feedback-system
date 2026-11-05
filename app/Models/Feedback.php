@@ -80,6 +80,9 @@ use Carbon\Carbon;
                 DB::table('feedback_answers')->insert($answersToInsert);
             }
         });
+
+        // REAL-TIME TRIGGER: Instantly update charts and notification bells for relevant roles
+        event(new \App\Events\SystemDataUpdated('all', $validated['department_id'] ?? null));
     }
 
     public static function getTotalCount()

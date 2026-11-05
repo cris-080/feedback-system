@@ -107,17 +107,36 @@ export default function SuperAdminLayout({ children, headerTitle }) {
         }
     }, [flash]);
 
-    // --- BACKGROUND NOTIFICATION POLLING ---
+    // --- REAL-TIME WEBSOCKET LISTENER (LARAVEL REVERB) ---
     useEffect(() => {
-        const interval = setInterval(() => {
-            router.reload({ 
-                only: ['pendingRequestsCount', 'recentNotifications'], 
-                preserveState: true, 
-                preserveScroll: true
-            });
-        }, 15000);
-        return () => clearInterval(interval);
-    }, []);
+        if (window.Echo) {
+            window.Echo.private('fms-updates')
+                .listen('SystemDataUpdated', (e) => {
+                    
+                    const userRole = rawRole.toLowerCase().replace(' ', '');
+                    const isTargetRole = e.targetRole === 'all' || e.targetRole === userRole || (e.targetRole === 'superadmin' && isSuperAdmin);
+                    
+                    // CRITICAL FIX: SuperGroup bypasses department locks. 
+                    // Focal Persons ONLY bypass if the feedback belongs to their specific department!
+                    const isTargetDept = isSuperGroup || !e.departmentId || String(e.departmentId) === String(auth?.user?.department_id);
+
+                    // If the event is meant for this user, instantly reload metrics and notifications behind the scenes!
+                    if (isTargetRole && isTargetDept) {
+                        router.reload({
+                            only: ['metrics', 'pendingRequestsCount', 'recentNotifications', 'recentAccounts', 'recentForms'],
+                            preserveState: true,
+                            preserveScroll: true
+                        });
+                    }
+                });
+        }
+
+        return () => {
+            if (window.Echo) {
+                window.Echo.leave('fms-updates');
+            }
+        };
+    }, [rawRole, auth?.user?.department_id, isSuperAdmin, isSuperGroup]);
 
     // --- NEW NOTIFICATION TOAST WATCHER (Scoped per User ID) ---
     useEffect(() => {
