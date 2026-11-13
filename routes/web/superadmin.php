@@ -98,4 +98,6 @@ Route::prefix('superadmin')->name('superadmin.')->group(function () {
     Route::delete('/departments/{id}/force-delete', [DepartmentController::class, 'forceDelete'])->name('departments.force-delete');
     Route::put('/users/{id}/restore', [AccountController::class, 'restore'])->name('users.restore');
     Route::delete('/users/{id}/force-delete', [AccountController::class, 'forceDelete'])->name('users.force-delete');
+    Route::put('/reports/{id}/restore', [ReportController::class, 'restore'])->name('reports.restore');
+    Route::delete('/reports/{id}/force-delete', [ReportController::class, 'forceDelete'])->name('reports.force-delete');
 });

@@ -72,7 +72,7 @@ export default function Login({ status, canResetPassword }) {
 
     return (
         <div className="min-h-screen w-screen flex flex-col lg:flex-row font-sans overflow-x-hidden bg-white">
-            <Head title="Institutional Portal Log In" />
+            <Head title=" Log In" />
 
             {/* Left Panel: Full-height Institutional Brand & Showcase */}
             <div className="w-full lg:w-1/2 min-h-[360px] lg:min-h-screen bg-gradient-to-br from-[#1E6031] via-[#1b552c] to-[#0f381c] p-8 sm:p-12 lg:p-16 text-white flex flex-col justify-between relative overflow-hidden">
@@ -246,10 +246,8 @@ export default function Login({ status, canResetPassword }) {
 
                     {/* Policy Notice */}
                     <div className="pt-8 border-t border-gray-200 flex items-start gap-3 text-xs text-gray-500 leading-relaxed">
-                        <i className="fa-solid fa-shield-halved text-gray-400 mt-0.5 text-sm"></i>
-                        <span>
-                            Protected university system. All access attempts are logged for security and governance compliance. Unauthorized access is strictly prohibited.
-                        </span>
+                        
+                        
                     </div>
                 </div>
             </div>

@@ -75,10 +75,27 @@ class ArchiveController extends Controller
             });
         }
 
+        // 4. Fetch Archived Reports via JSON metadata flag
+        $reportsQuery = \App\Models\Report::with('department')
+            ->where('report_data->metadata->is_deleted', true);
+
+        if (!empty($search)) {
+            $like = '%' . trim($search) . '%';
+            $reportsQuery->where(function ($q) use ($like) {
+                $q->where('report_name', 'LIKE', $like)
+                  ->orWhere('report_type', 'LIKE', $like)
+                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(report_data, '$.metadata.deleted_at')) LIKE ?", [$like])
+                  ->orWhereHas('department', function ($dq) use ($like) {
+                      $dq->where('department_name', 'LIKE', $like);
+                  });
+            });
+        }
+
         return inertia('SuperAdmin/Archives', [
             'archivedForms'       => $activeTab === 'forms' ? $formsQuery->orderBy('forms.deleted_at', 'desc')->paginate(10)->withQueryString() : [],
             'archivedDepartments' => $activeTab === 'departments' ? $departmentsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString() : [],
             'archivedAccounts'    => $activeTab === 'accounts' ? $accountsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString() : [],
+            'archivedReports'     => $activeTab === 'reports' ? $reportsQuery->orderBy('updated_at', 'desc')->paginate(10)->withQueryString() : [],
             'uniqueDepartments'   => Department::withTrashed()->orderBy('department_name', 'asc')->pluck('department_name'),
             'filters'             => $request->only(['search', 'department', 'tab'])
         ]);

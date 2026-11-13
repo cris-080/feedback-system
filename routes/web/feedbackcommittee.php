@@ -9,6 +9,7 @@ Route::prefix('feedback-committee')->name('feedback_committee.')->group(function
     
     // Report Repository
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('/reports/generate', [ReportController::class, 'generate'])->name('reports.generate');
     Route::patch('/reports/{id}/approve', [ReportController::class, 'approve'])->name('reports.approve');
     Route::patch('/reports/{id}/return', [ReportController::class, 'returnToSender'])->name('reports.return');
     Route::get('/reports/{id}/pdf', [ReportController::class, 'downloadPdf'])->name('reports.download.pdf');

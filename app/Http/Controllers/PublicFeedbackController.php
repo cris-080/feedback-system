@@ -118,12 +118,16 @@ class PublicFeedbackController extends Controller
             }
         }
 
-       // 5. Drop the 2-Hour Cookie (120 minutes) for mobile scanners
+       // 5. Drop the 2-Hour Session Cookie for mobile scanners
         if (!$isKiosk) {
             \Illuminate\Support\Facades\Cookie::queue('csm_session_' . $formId, 'valid', 120);
         }
 
+        // 6. Check if this specific user has ALREADY submitted feedback in this session
+        $hasAlreadySubmitted = $request->cookie('csm_completed_' . $formId) ? true : false;
+
         return Inertia::render('Feedback/Index', [
+            'already_submitted' => $hasAlreadySubmitted,
             'form'             => $fullForm,
             'departmentName'   => $department ? $department->department_name : 'General',
             'serviceProviders' => $department ? $department->service_providers : [],
@@ -162,7 +166,13 @@ class PublicFeedbackController extends Controller
         // 2. Delegate all complex processing (Payload Splitting, AI Sentiment, Emails) to the Service
         FeedbackSubmissionService::process($validated);
 
-        // 3. Return HTTP Response
+        // 3. Drop a "Completed" cookie to prevent duplicate submissions on refresh
+        if (!$validated['is_kiosk']) {
+            // Lock out the mobile browser for 2 hours (120 mins) so they can't answer it again
+            \Illuminate\Support\Facades\Cookie::queue('csm_completed_' . $validated['form_id'], 'true', 120);
+        }
+
+        // 4. Return HTTP Response
         return back()->with('success', 'Your feedback has been successfully submitted!');
     }
 }

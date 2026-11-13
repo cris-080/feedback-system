@@ -5,8 +5,8 @@ import Swal from 'sweetalert2';
 import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
-export default function Archives({ archivedForms, archivedDepartments, archivedAccounts, uniqueDepartments, filters }) {
-    const { flash } = usePage().props;
+export default function Archives({ archivedForms, archivedDepartments, archivedAccounts, archivedReports, uniqueDepartments, filters }) {
+    const { flash } = usePage().props;;
 
     // --- STATE MANAGEMENT ---
     const queryParams = new URLSearchParams(window.location.search);
@@ -42,10 +42,11 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
     }, [searchQuery, departmentFilter, activeTab]);
 
     // Safely fallback arrays
-   const safeDepartments = uniqueDepartments || [];
+    const safeDepartments = uniqueDepartments || [];
     const formList = archivedForms?.data || archivedForms || [];
     const deptList = archivedDepartments?.data || archivedDepartments || [];
     const accountList = archivedAccounts?.data || archivedAccounts || [];
+    const reportList = archivedReports?.data || archivedReports || [];
 
     // --- SWEETALERT2 TOAST NOTIFICATIONS ---
     useEffect(() => {
@@ -166,6 +167,39 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
         });
     };
 
+    // --- REPORT ACTION HANDLERS ---
+    const handleRestoreReport = (reportId, reportName) => {
+        Swal.fire({
+            title: 'Restore Report?',
+            text: `Are you sure you want to return "${reportName}" to the active dashboard?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#10b981', 
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fa-solid fa-undo"></i> Yes, Restore!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.put(route('superadmin.reports.restore', reportId), {}, { preserveScroll: true });
+            }
+        });
+    };
+
+    const handleDeleteReport = (reportId, reportName) => {
+        Swal.fire({
+            title: 'Permanently Delete Report?',
+            text: `CRITICAL WARNING: "${reportName}" and its generated PDF/DOCX files will be permanently erased. This cannot be undone.`,
+            icon: 'error',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fa-solid fa-skull"></i> Force Delete'
+       }).then((result) => {
+            if (result.isConfirmed) {
+                router.delete(route('superadmin.reports.force-delete', reportId), { preserveScroll: true });
+            }
+        });
+    };
+
     return (
         <SuperAdminLayout headerTitle="System Archives">
             <Head title="System Archives" />
@@ -198,6 +232,14 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
                             }`}
                         >
                             <i className="fa-solid fa-users-slash mr-2"></i> Archived Accounts
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('reports')}
+                            className={`flex-1 py-2.5 px-2 text-sm font-bold rounded-md transition-all whitespace-nowrap ${
+                                activeTab === 'reports' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <i className="fa-solid fa-file-pdf mr-2"></i> Archived Reports
                         </button>
                     </div>
 
@@ -350,14 +392,56 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
                                     </tbody>
                                 </table>
                             )}
+
+                            {/* REPORTS TABLE */}
+                            {activeTab === 'reports' && (
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-[#009639] text-white">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Report Name</th>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Department / Scope</th>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Template</th>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Date Archived</th>
+                                            <th className="px-6 py-4 text-center font-semibold uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {reportList.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                                                    <i className="fa-solid fa-file-circle-xmark text-4xl mb-4 block text-gray-300"></i>
+                                                    <p className="text-base font-semibold">No archived reports found</p>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            reportList.map((rep) => {
+                                                const title = rep.report_name || rep.report_data?.metadata?.report_name || `Report #${rep.id}`;
+                                                const scope = rep.department?.department_name || rep.report_data?.metadata?.department || 'Global / All Departments';
+                                                return (
+                                                    <tr key={rep.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 font-semibold text-gray-800 line-clamp-1 max-w-[250px]" title={title}>{title}</td>
+                                                        <td className="px-6 py-4 text-gray-600">{scope}</td>
+                                                        <td className="px-6 py-4 text-gray-600 uppercase font-bold text-[10px]">{rep.report_type === 'cc' ? 'With CC' : 'Non-CC'}</td>
+                                                        <td className="px-6 py-4 text-gray-500">{formatDate(rep.report_data?.metadata?.deleted_at || rep.updated_at)}</td>
+                                                        <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
+                                                            <button onClick={() => handleRestoreReport(rep.id, title)} className="w-8 h-8 bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded transition tooltip" title="Restore"><i className="fa-solid fa-undo"></i></button>
+                                                            <button onClick={() => handleDeleteReport(rep.id, title)} className="w-8 h-8 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white rounded transition tooltip" title="Force Delete (Removes PDF)"><i className="fa-solid fa-trash"></i></button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
 
                         {/* Pagination wrapper pass the raw object */}
-                        {/* Pagination wrapper */}
                         <Pagination 
                             dataObject={
                                 activeTab === 'forms' ? archivedForms : 
                                 activeTab === 'departments' ? archivedDepartments : 
+                                activeTab === 'reports' ? archivedReports : 
                                 archivedAccounts
                             } 
                         />

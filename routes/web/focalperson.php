@@ -15,6 +15,7 @@ Route::prefix('focal')->name('focalperson.')->group(function () {
     Route::post('/reports/generate', [App\Http\Controllers\FocalPerson\ReportController::class, 'generate'])->name('reports.generate');
     Route::post('/reports/{id}/submit', [App\Http\Controllers\FocalPerson\ReportController::class, 'submitToCommittee'])->name('reports.submit');
     Route::delete('/reports/{id}', [App\Http\Controllers\FocalPerson\ReportController::class, 'destroy'])->name('reports.destroy');
+    Route::post('/reports/{id}/recall', [App\Http\Controllers\FocalPerson\ReportController::class, 'recall'])->name('reports.recall');
     
     // Share the SuperAdmin logic for downloading to avoid duplicating LibreOffice code
     Route::get('/reports/{id}/docx', [App\Http\Controllers\SuperAdmin\ReportController::class, 'downloadDocx'])->name('reports.download.docx');

@@ -20,9 +20,17 @@ class ReportController extends Controller
     {
         $departments = $this->getDepartmentsWithTemplateType();
         $search = trim((string) $request->query('search', ''));
+        $deptFilter = $request->query('department', 'all');
 
         $query = Report::with(['department', 'generator'])
             ->orderBy('created_at', 'desc');
+
+        // Apply Scope / Department Filter
+        if ($deptFilter === 'global') {
+            $query->whereNull('department_id');
+        } elseif ($deptFilter !== 'all' && $deptFilter !== '') {
+            $query->where('department_id', $deptFilter);
+        }
 
         if (Schema::hasColumn('reports', 'deleted_at')) {
             $query->whereNull('deleted_at');
@@ -63,7 +71,7 @@ class ReportController extends Controller
         return Inertia::render('SuperAdmin/Reports', [
             'departments' => $departments,
             'reports'     => $reports,
-            'filters'     => ['search' => $search],
+            'filters'     => ['search' => $search, 'department' => $deptFilter],
         ]);
     }
     public function generate(Request $request, ReportGenerationService $reportService)
@@ -90,13 +98,73 @@ class ReportController extends Controller
             return back()->with('error', 'No feedback data found for the selected department and date range.');
         }
 
+        // --- PRE-COMPILE DOCUMENTS ---
+        try {
+            $reportDir = storage_path('app/reports');
+            \Illuminate\Support\Facades\File::ensureDirectoryExists($reportDir);
+
+            // 1. Generate DOCX
+            $tempDocx = $this->generateFilledDocx($report);
+            if ($tempDocx) {
+                $finalDocx = $reportDir . DIRECTORY_SEPARATOR . $report->id . '.docx';
+                rename($tempDocx, $finalDocx);
+
+                // 2. Generate PDF via LibreOffice
+                $binary = $this->resolveLibreOfficeBinary();
+                if ($binary) {
+                    $outDirArg = str_replace('\\', '/', $reportDir);
+                    $docPathArg = str_replace('\\', '/', $finalDocx);
+                    
+                    $env = [
+                        'SystemRoot'  => getenv('SystemRoot') ?: 'C:\\Windows',
+                        'TEMP'        => sys_get_temp_dir(),
+                        'TMP'         => sys_get_temp_dir(),
+                        'APPDATA'     => getenv('APPDATA') ?: sys_get_temp_dir(),
+                        'LOCALAPPDATA'=> getenv('LOCALAPPDATA') ?: sys_get_temp_dir(),
+                        'USERPROFILE' => getenv('USERPROFILE') ?: sys_get_temp_dir(),
+                        'PATH'        => getenv('PATH') ?: '',
+                    ];
+
+                    $process = new \Symfony\Component\Process\Process([
+                        $binary, '--headless', '--nologo', '--nofirststartwizard',
+                        '--norestore', '--nolockcheck', '--convert-to', 'pdf',
+                        '--outdir', $outDirArg, $docPathArg
+                    ], null, $env);
+                    $process->setTimeout(120);
+                    $process->run();
+                    
+                    // Fallback to isolated profile if standard conversion failed
+                    $generatedPdf = preg_replace('/\.docx$/i', '.pdf', $finalDocx);
+                    if (!file_exists($generatedPdf) || filesize($generatedPdf) === 0) {
+                        $loProfileDir = str_replace('\\', '/', sys_get_temp_dir()) . '/clsu_lo_profile';
+                        \Illuminate\Support\Facades\File::ensureDirectoryExists($loProfileDir);
+                        
+                        $fallbackProcess = new \Symfony\Component\Process\Process([
+                            $binary, '-env:UserInstallation=file:///' . ltrim($loProfileDir, '/'), 
+                            '--headless', '--nologo', '--nofirststartwizard',
+                            '--norestore', '--nolockcheck', '--convert-to', 'pdf',
+                            '--outdir', $outDirArg, $docPathArg
+                        ], null, $env);
+                        $fallbackProcess->setTimeout(120);
+                        $fallbackProcess->run();
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Document pre-compile failed for Report {$report->id}: " . $e->getMessage());
+        }
+
         // --- AUDIT TRAIL ---
         AuditLog::logAction('Created', 'Reports', "Generated new report: {$report->report_data['metadata']['report_name']} (ID: {$report->id}).");
+
+        // REAL-TIME TRIGGER: Instantly update the Feedback Committee & SuperAdmin dashboards 
+        // with the newly generated report data.
+        event(new \App\Events\SystemDataUpdated('superadmin', $validated['department_id']));
+        event(new \App\Events\SystemDataUpdated('feedbackcommittee', $validated['department_id']));
 
         return redirect()->route('superadmin.reports.index')
             ->with('success', 'Report "' . $report->report_data['metadata']['report_name'] . '" compiled and saved to archive.');
     }
-
     /**
      * Soft-delete a generated report
      */
@@ -123,6 +191,58 @@ class ReportController extends Controller
         return back()->with('success', 'Report removed from active archive.');
     }
 
+    /**
+     * Restore a soft-deleted report from the System Archive.
+     */
+   public function restore($id)
+    {
+        $report = Report::findOrFail($id);
+        
+        // Update the JSON metadata flag
+        $reportData = $report->report_data;
+        $reportData['metadata']['is_deleted'] = false;
+        unset($reportData['metadata']['deleted_at']);
+        $report->report_data = $reportData;
+        
+        if (Schema::hasColumn('reports', 'deleted_at')) {
+            $report->deleted_at = null;
+        }
+
+        $report->save();
+
+        $reportName = $report->report_name ?? ($report->report_data['metadata']['report_name'] ?? 'Unnamed Report');
+        AuditLog::logAction('Restored', 'Reports', "Restored report from archive: {$reportName} (ID: {$id}).");
+
+        return back()->with('success', 'Report successfully restored to active dashboards.');
+    }
+
+    /**
+     * Permanently force-delete a report and instantly wipe its PDF/DOCX files.
+     */
+    public function forceDelete($id)
+    {
+        $report = Report::findOrFail($id);
+        $reportName = $report->report_name ?? ($report->report_data['metadata']['report_name'] ?? 'Unnamed Report');
+
+        // 1. Permanently delete the physical files from server storage
+        $pdfPath = storage_path("app/reports/{$report->id}.pdf");
+        $docxPath = storage_path("app/reports/{$report->id}.docx");
+
+        if (\Illuminate\Support\Facades\File::exists($pdfPath)) {
+            \Illuminate\Support\Facades\File::delete($pdfPath);
+        }
+        if (\Illuminate\Support\Facades\File::exists($docxPath)) {
+            \Illuminate\Support\Facades\File::delete($docxPath);
+        }
+
+        // 2. Permanently delete the database record (standard delete acts as force delete here)
+        $report->delete();
+
+        AuditLog::logAction('Permanently Deleted', 'Reports', "Force-deleted report and removed physical files: {$reportName} (ID: {$id}).");
+
+        return back()->with('success', 'Report and all associated files permanently erased.');
+    }
+
     public function show($id)
     {
         return redirect()->route('superadmin.reports.index');
@@ -131,127 +251,43 @@ class ReportController extends Controller
     /**
      * Download the snapshot as a filled Word Document Template (.docx).
      */
-    public function downloadDocx(Request $request, $id)
+  public function downloadDocx(Request $request, $id)
     {
         $report = Report::findOrFail($id);
-        $tempDocx = $this->generateFilledDocx($report);
+        $docxPath = storage_path('app/reports/' . $report->id . '.docx');
 
-        if (!$tempDocx) {
-            return back()->with('error', 'Word template missing from storage/app/templates directory.');
+        if (!file_exists($docxPath)) {
+            // Fallback generation for older reports that missed the pre-compile
+            $docxPath = $this->generateFilledDocx($report);
+            if (!$docxPath) {
+                return back()->with('error', 'Word template missing from storage directory.');
+            }
         }
 
         $baseTitle = $report->report_data['metadata']['report_name']
             ?? "CSM_Report_{$report->report_data['metadata']['department']}_{$report->report_data['metadata']['period']}";
         $fileName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $baseTitle) . '.docx';
 
-        return response()->download($tempDocx, $fileName)->deleteFileAfterSend(true);
+        return response()->download($docxPath, $fileName);
     }
 
     /**
-     * Convert the filled Word template to a 1:1 PDF via headless LibreOffice.
-     * Automatically falls back to a print-ready HTML document when ?preview=1 is requested and LibreOffice is unavailable.
+     * Instantly download the pre-compiled PDF.
      */
     public function downloadPdf(Request $request, $id)
     {
         $report = Report::findOrFail($id);
-        $workDir = storage_path('app/temp');
-        File::ensureDirectoryExists($workDir);
+        $pdfPath = storage_path('app/reports/' . $report->id . '.pdf');
 
-        $cachedPdfPath = $workDir . DIRECTORY_SEPARATOR . "cached_report_{$report->id}_{$report->report_type}.pdf";
-
-        if (!file_exists($cachedPdfPath) || filesize($cachedPdfPath) === 0) {
-            @unlink($cachedPdfPath);
-
-            $binary = $this->resolveLibreOfficeBinary();
-
-            // If LibreOffice is not installed on the server, return an error
-            if (!$binary) {
-                return back()->with('error', 'LibreOffice is not installed on this server. Please download as DOCX.');
-            }
-
-            $tempDocx = $this->generateFilledDocx($report);
-
-            if (!$tempDocx) {
-                return back()->with('error', 'Word template missing from storage/app/templates directory.');
-            }
-
-           $generatedPdf = preg_replace('/\.docx$/i', '.pdf', $tempDocx);
-
-            // Normalize paths to forward slashes for LibreOffice CLI compatibility on Windows
-            $outDirArg = str_replace('\\', '/', $workDir);
-            $docPathArg = str_replace('\\', '/', $tempDocx);
-
-            // Preserve Windows system environment variables required by soffice.bin when LibreOffice is closed
-            $env = [
-                'SystemRoot'  => getenv('SystemRoot') ?: 'C:\\Windows',
-                'TEMP'        => sys_get_temp_dir(),
-                'TMP'         => sys_get_temp_dir(),
-                'APPDATA'     => getenv('APPDATA') ?: sys_get_temp_dir(),
-                'LOCALAPPDATA'=> getenv('LOCALAPPDATA') ?: sys_get_temp_dir(),
-                'USERPROFILE' => getenv('USERPROFILE') ?: sys_get_temp_dir(),
-                'PATH'        => getenv('PATH') ?: '',
-            ];
-
-            try {
-                // Attempt 1: Use default user profile with full Windows environment (works whether LibreOffice is open or closed)
-                $process = new Process([
-                    $binary,
-                    '--headless',
-                    '--nologo',
-                    '--nofirststartwizard',
-                    '--norestore',
-                    '--nolockcheck',
-                    '--convert-to',
-                    'pdf',
-                    '--outdir',
-                    $outDirArg,
-                    $docPathArg,
-                ], null, $env);
-                $process->setTimeout(120);
-                $process->run();
-
-                // Attempt 2: Isolated profile in sys_get_temp_dir() (guaranteed no spaces in folder name)
-                if (!file_exists($generatedPdf) || filesize($generatedPdf) === 0) {
-                    $loProfileDir = str_replace('\\', '/', sys_get_temp_dir()) . '/clsu_lo_profile';
-                    File::ensureDirectoryExists($loProfileDir);
-                    $userInstallationArg = '-env:UserInstallation=file:///' . ltrim($loProfileDir, '/');
-
-                    $fallbackProcess = new Process([
-                        $binary,
-                        $userInstallationArg,
-                        '--headless',
-                        '--nologo',
-                        '--nofirststartwizard',
-                        '--norestore',
-                        '--nolockcheck',
-                        '--convert-to',
-                        'pdf',
-                        '--outdir',
-                        $outDirArg,
-                        $docPathArg,
-                    ], null, $env);
-                    $fallbackProcess->setTimeout(120);
-                    $fallbackProcess->run();
-                }
-            } catch (\Throwable $e) {
-                // Process execution disabled or failed on restricted hosting
-            }
-
-            @unlink($tempDocx);
-
-            // If PDF conversion failed, return an error
-            if (!file_exists($generatedPdf) || filesize($generatedPdf) === 0) {
-                return back()->with('error', 'PDF conversion unavailable on this server. Please download as DOCX instead.');
-            }
-
-            @rename($generatedPdf, $cachedPdfPath);
+        if (!file_exists($pdfPath) || filesize($pdfPath) === 0) {
+            return back()->with('error', 'PDF not found. Please try generating the report again or download the DOCX version.');
         }
 
         $baseTitle = $report->report_data['metadata']['report_name']
             ?? "CSM_Report_{$report->report_data['metadata']['department']}_{$report->report_data['metadata']['period']}";
         $fileName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $baseTitle) . '.pdf';
 
-        return response()->download($cachedPdfPath, $fileName);
+        return response()->download($pdfPath, $fileName);
     }
 
     /**

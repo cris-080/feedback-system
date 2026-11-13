@@ -4,8 +4,9 @@ import Swal from 'sweetalert2';
 import LandingPage from './Partials/LandingPage';
 import { StepOne, StepTwo, StepThree, StepFour } from './Partials/FormSteps';
 
-export default function FeedbackIndex({ form, departmentName, serviceProviders = [], isCC, steps, qr_id, ph_regions, qr_data }) {
-    const [status, setStatus] = useState('active');
+export default function FeedbackIndex({ form, departmentName, serviceProviders = [], isCC, steps, qr_id, ph_regions, qr_data, already_submitted }) {
+    // If the backend says they already submitted, instantly show the Thank You page
+    const [status, setStatus] = useState(already_submitted ? 'submitted' : 'active');
     const [timeLeft, setTimeLeft] = useState(3600); 
     const [hasStarted, setHasStarted] = useState(false);
 
@@ -55,12 +56,8 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders =
     useEffect(() => {
         if (!isQR) return; 
         if (status === 'submitted') {
-            // Auto-close the Thank You page after 2 minutes (120,000 milliseconds)
-            const exitTimer = setTimeout(() => {
-                window.close();
-                window.location.replace('https://clsu.edu.ph'); 
-            }, 120000);
-            return () => clearTimeout(exitTimer);
+            // Redirect removed as requested. User will simply see the Thank You page
+            // and can close the tab manually.
         }
     }, [status, isQR]);
 
@@ -248,9 +245,9 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders =
                         Your feedback has been successfully submitted. It will help us improve our services at {departmentName}.
                     </p>
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-center gap-3">
-                        <i className="fa-solid fa-shield-halved text-gray-400"></i>
+                        <i className="fa-solid fa-shield-halved text-emerald-600"></i>
                         <p className="text-xs text-gray-500 font-semibold text-left">
-                            For your privacy, this page will automatically close in 2 minutes. You may also close this tab now.
+                            Your secure session is now locked to prevent duplicate submissions. You may safely close this tab.
                         </p>
                     </div>
                 </div>

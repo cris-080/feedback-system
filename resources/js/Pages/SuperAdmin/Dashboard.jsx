@@ -68,6 +68,12 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
             setTempMonth(metrics?.fallback_message ? '' : specificMonth);
         }, [currentDept, currentRange, specificDate, specificMonth, metrics?.fallback_message]);
 
+        // Auto-snap the local chart tab back to 30 days if they leave the 'All Time' view
+        useEffect(() => {
+            if (currentRange !== 'all' && timeRange === '90d') {
+                setTimeRange('30d');
+            }
+        }, [currentRange, timeRange]);
         // Live Chart Data from Backend Metrics
         const trendData = metrics?.trendData || [];
         const sqdData = metrics?.sqd_data || [];
@@ -598,8 +604,8 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                     <>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
                             
-                            {/* Line Chart */}
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-4 sm:p-5 lg:col-span-3 transition duration-200 hover:shadow-md">
+                         {/* Line Chart */}
+                                <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-4 sm:p-5 lg:col-span-2 transition duration-200 hover:shadow-md">
                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-3.5 pb-3 border-b border-gray-100">
                                         <div>
                                             <h2 className="text-base font-bold text-gray-900 tracking-tight">Departmental Sentiment Trend</h2>
@@ -631,7 +637,8 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                                     {[
                                                         { label: '7 Days', value: '7d' },
                                                         { label: '30 Days', value: '30d' },
-                                                        { label: '90 Days', value: '90d' },
+                                                        // Only show 90 Days if the global filter allows for it
+                                                        ...(currentRange === 'all' ? [{ label: '90 Days', value: '90d' }] : []),
                                                     ].map((tab) => {
                                                         const isSelected = timeRange === tab.value;
                                                         return (
@@ -694,6 +701,82 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                     </div>
                                 </div>
 
+                            {/* --- TEXT ANALYSIS & ISSUES TABS (MOVED TO TOP) --- */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 flex flex-col justify-between transition duration-200 hover:shadow-md lg:col-span-1">
+                                <div>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <i className="fa-solid fa-triangle-exclamation text-rose-500 text-sm"></i>
+                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Issues & Alerts</h2>
+                                        </div>
+                                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                            Text Analysis
+                                        </span>
+                                    </div>
+
+                                    <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
+                                        <button 
+                                            onClick={() => setComplaintTab('complaints')} 
+                                            className={`flex-1 text-[11px] font-bold py-1.5 rounded-md transition ${complaintTab === 'complaints' ? 'bg-white text-rose-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                        >
+                                            Recurring Complaints
+                                        </button>
+                                        <button 
+                                            onClick={() => setComplaintTab('harassment')} 
+                                            className={`flex-1 text-[11px] font-bold py-1.5 rounded-md transition ${complaintTab === 'harassment' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                        >
+                                            Harassment Words
+                                        </button>
+                                    </div>
+
+                                    <p className="text-xs text-gray-500 mb-5">
+                                        {complaintTab === 'complaints' 
+                                            ? 'Most frequent pain points in negative & constructive feedback' 
+                                            : 'Keywords flagged from qualitative harassment reports'}
+                                    </p>
+
+                                    {(complaintTab === 'complaints' ? topWords : harassmentWords).length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-6 text-gray-400">
+                                            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+                                                <i className="fa-solid fa-check-double text-emerald-500 text-base"></i>
+                                            </div>
+                                            <p className="text-xs font-medium text-gray-600">No keywords detected</p>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-2 pt-1 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                            {(complaintTab === 'complaints' ? topWords : harassmentWords).map((item, idx) => {
+                                                const feedbackRoute = isSuperGroup ? 'superadmin.feedbacks.index' : 'focalperson.feedbacks.index';
+                                                const isComplaint = complaintTab === 'complaints';
+                                                
+                                                return (
+                                                    <Link 
+                                                        key={idx} 
+                                                        href={route(feedbackRoute, { search: item.word })}
+                                                        className={`inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg border shadow-xs transition cursor-pointer hover:scale-105 active:scale-95 ${
+                                                            isComplaint 
+                                                                ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
+                                                                : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                                                        }`}
+                                                        title={`View feedback containing "${item.word}"`}
+                                                    >
+                                                        <i className={`fa-regular fa-circle-dot mr-1.5 text-[8px] ${isComplaint ? 'text-rose-500' : 'text-red-500'}`}></i>
+                                                        {item.word}
+                                                        <span className={`ml-2 px-1.5 py-0.5 text-[10px] bg-white rounded-md font-bold shadow-xs border ${isComplaint ? 'text-rose-800 border-rose-100' : 'text-red-800 border-red-100'}`}>
+                                                            {item.count}
+                                                        </span>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <p className="text-[11px] text-gray-400 mt-4 border-t border-gray-100 pt-3 flex items-center justify-between">
+                                    <span>Filtered from {complaintTab === 'complaints' ? 'Negative remarks' : 'Harassment reports'}</span>
+                                    <i className="fa-solid fa-shield-halved text-gray-300"></i>
+                                </p>
+                            </div>
+
                             {/* Department Performance Ranking - STRICTLY SUPERADMIN ONLY */}
                             {isSuperGroup && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 lg:col-span-3 transition duration-200 hover:shadow-md">
@@ -704,42 +787,53 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                         </div>
                                     </div>
 
-                                    <div className="w-full h-72">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={departmentData} margin={{ top: 15, right: 10, left: -20, bottom: 5 }} barSize={36}>
-                                                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#475569', fontWeight: 500 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} dy={6} />
-                                                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} unit="%" />
-                                                <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload }) => {
-                                                    if (active && payload && payload.length) {
-                                                        const data = payload[0].payload;
-                                                        return (
-                                                            <div className="bg-white/95 backdrop-blur-sm border border-gray-200 shadow-lg rounded-xl p-3 text-xs min-w-[170px]">
-                                                                <p className="font-bold text-gray-900 border-b border-gray-100 pb-1.5 mb-2">{data.full_name || data.name}</p>
-                                                                <div className="space-y-1">
-                                                                    <div className="flex justify-between items-center">
-                                                                        <span className="text-gray-500 font-medium">Performance Score:</span>
-                                                                        <span className={`font-bold ${data.score >= 80 ? 'text-emerald-600' : data.score >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>{data.score}%</span>
-                                                                    </div>
-                                                                    <div className="flex justify-between items-center text-gray-500">
-                                                                        <span>Responses Recorded:</span>
-                                                                        <span className="font-semibold text-gray-800">{data.total}</span>
+                                   {/* Check if any department has actual responses, not just if the departments exist */}
+                                    {departmentData.filter(d => (Number(d.total) || 0) > 0).length === 0 ? (
+                                        <div className="w-full h-72 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-xl bg-gray-50/50">
+                                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 border border-gray-100">
+                                                <i className="fa-solid fa-chart-bar text-gray-300 text-xl"></i>
+                                            </div>
+                                            <p className="text-sm font-bold text-gray-400">No performance data yet</p>
+                                            <p className="text-xs text-gray-400 mt-1 max-w-xs text-center">Offices will be ranked here once client feedback is collected.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="w-full h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                                            <ResponsiveContainer width="100%" height={Math.max(350, departmentData.length * 45)}>
+                                                <BarChart data={departmentData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }} barSize={24}>
+                                                    <CartesianGrid strokeDasharray="4 4" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} unit="%" />
+                                                    <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#334155', fontWeight: 500 }} axisLine={false} tickLine={false} width={130} />
+                                                    <RechartsTooltip cursor={{ fill: '#f8fafc' }} content={({ active, payload }) => {
+                                                        if (active && payload && payload.length) {
+                                                            const data = payload[0].payload;
+                                                            return (
+                                                                <div className="bg-white/95 backdrop-blur-sm border border-gray-200 shadow-lg rounded-xl p-3 text-xs min-w-[200px]">
+                                                                    <p className="font-bold text-gray-900 border-b border-gray-100 pb-1.5 mb-2">{data.full_name || data.name}</p>
+                                                                    <div className="space-y-1">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <span className="text-gray-500 font-medium">Performance Score:</span>
+                                                                            <span className={`font-bold ${data.score >= 80 ? 'text-emerald-600' : data.score >= 60 ? 'text-amber-600' : 'text-rose-600'}`}>{data.score}%</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center text-gray-500">
+                                                                            <span>Responses Recorded:</span>
+                                                                            <span className="font-semibold text-gray-800">{data.total}</span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                        );
-                                                    }
-                                                    return null;
-                                                }} />
-                                                <Bar dataKey="score" radius={[6, 6, 0, 0]}>
-                                                    {departmentData.map((entry, index) => {
-                                                        const barColor = entry.score >= 80 ? '#10b981' : entry.score >= 60 ? '#f59e0b' : '#f43f5e';
-                                                        return <Cell key={`dept-cell-${index}`} fill={barColor} />;
-                                                    })}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }} />
+                                                    <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                                                        {departmentData.map((entry, index) => {
+                                                            const barColor = entry.score >= 80 ? '#10b981' : entry.score >= 60 ? '#f59e0b' : '#f43f5e';
+                                                            return <Cell key={`dept-cell-${index}`} fill={barColor} />;
+                                                        })}
+                                                    </Bar>
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -747,6 +841,17 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 lg:col-span-2 flex flex-col">
                                 <h2 className="text-lg font-bold text-gray-800 mb-1">Service Quality Dimensions (SQD)</h2>
                                 <p className="text-sm text-gray-500 mb-4">Proportional breakdown of client ratings per dimension (1 = Lowest, 5 = Highest)</p>
+                                
+                                {/* Check if the sum of all 1-5 ratings across all dimensions is greater than 0 */}
+                                {sqdData.filter(d => (Number(d['1'])||0) + (Number(d['2'])||0) + (Number(d['3'])||0) + (Number(d['4'])||0) + (Number(d['5'])||0) > 0).length === 0 ? (
+                                    <div className="w-full flex-1 min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-gray-100 rounded-xl bg-gray-50/50 mt-2">
+                                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 border border-gray-100">
+                                            <i className="fa-solid fa-list-check text-gray-300 text-xl"></i>
+                                        </div>
+                                        <p className="text-sm font-bold text-gray-400">SQD metrics are empty</p>
+                                        <p className="text-xs text-gray-400 mt-1 max-w-xs text-center px-4">Client ratings across the standard dimensions will populate here.</p>
+                                    </div>
+                                ) : (
                                 <div className="w-full flex-1 min-h-[320px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={sqdData} layout="vertical" margin={{ top: 5, right: 30, left: 30, bottom: 5 }}>
@@ -763,6 +868,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>
+                                )}
                             </div>
                                 
                             {/* Demographic Profile Segmentation */}
@@ -1159,12 +1265,10 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                             </div>
 
                         </div>
-                        {/* --- Citizen's Charter Compliance & Qualitative Keyword Trends --- */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            
-                            {/* ONLY SuperAdmin (or FocalPerson with responses) sees this. Feedback Committee NEVER sees this. */}
-                            {showCC && (
-                                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 lg:col-span-2 flex flex-col justify-between">
+                       {/* --- Citizen's Charter Compliance --- */}
+                        {showCC && (
+                            <div className="grid grid-cols-1 gap-6">
+                                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex flex-col justify-between">
                                     <div>
                                         <div className="flex justify-between items-center mb-1">
                                             <h2 className="text-lg font-bold text-gray-800">Citizen's Charter (CC) Compliance & Visibility</h2>
@@ -1212,88 +1316,8 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                         <span className="font-semibold text-gray-700">{ccMetrics.total_responses || 0} Total CC Responses</span>
                                     </div>
                                 </div>
-                            )}
-
-                            {/* --- TEXT ANALYSIS & ISSUES TABS --- */}
-                            <div className={`bg-white rounded-xl shadow-sm border border-gray-200/80 p-6 flex flex-col justify-between transition duration-200 hover:shadow-md ${showCC ? '' : 'lg:col-span-3'}`}>
-                                <div>
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <i className="fa-solid fa-triangle-exclamation text-rose-500 text-sm"></i>
-                                            <h2 className="text-base font-bold text-gray-900 tracking-tight">Issues & Alerts</h2>
-                                        </div>
-                                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                                            Text Analysis
-                                        </span>
-                                    </div>
-
-                                    {/* NEW: Toggles for Complaints / Harassment */}
-                                    <div className="flex bg-gray-100 p-1 rounded-lg mb-4">
-                                        <button 
-                                            onClick={() => setComplaintTab('complaints')} 
-                                            className={`flex-1 text-[11px] font-bold py-1.5 rounded-md transition ${complaintTab === 'complaints' ? 'bg-white text-rose-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                                        >
-                                            Recurring Complaints
-                                        </button>
-                                        <button 
-                                            onClick={() => setComplaintTab('harassment')} 
-                                            className={`flex-1 text-[11px] font-bold py-1.5 rounded-md transition ${complaintTab === 'harassment' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                                        >
-                                            Harassment Words
-                                        </button>
-                                    </div>
-
-                                    <p className="text-xs text-gray-500 mb-5">
-                                        {complaintTab === 'complaints' 
-                                            ? 'Most frequent pain points in negative & constructive feedback' 
-                                            : 'Keywords flagged from qualitative harassment reports'}
-                                    </p>
-
-                                    {/* Dynamic rendering based on selected tab */}
-                                    {(complaintTab === 'complaints' ? topWords : harassmentWords).length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-6 text-gray-400">
-                                            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
-                                                <i className="fa-solid fa-check-double text-emerald-500 text-base"></i>
-                                            </div>
-                                            <p className="text-xs font-medium text-gray-600">No keywords detected</p>
-                                        </div>
-                                    ) : (
-                                        <div className="flex flex-wrap gap-2 pt-1">
-                                            {(complaintTab === 'complaints' ? topWords : harassmentWords).map((item, idx) => {
-                                                const feedbackRoute = isSuperGroup ? 'superadmin.feedbacks.index' : 'focalperson.feedbacks.index';
-                                                
-                                                // Dynamic styles based on active tab
-                                                const isComplaint = complaintTab === 'complaints';
-                                                
-                                                return (
-                                                    <Link 
-                                                        key={idx} 
-                                                        href={route(feedbackRoute, { search: item.word })}
-                                                        className={`inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-lg border shadow-xs transition cursor-pointer hover:scale-105 active:scale-95 ${
-                                                            isComplaint 
-                                                                ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' 
-                                                                : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                                                        }`}
-                                                        title={`View feedback containing "${item.word}"`}
-                                                    >
-                                                        <i className={`fa-regular fa-circle-dot mr-1.5 text-[8px] ${isComplaint ? 'text-rose-500' : 'text-red-500'}`}></i>
-                                                        {item.word}
-                                                        <span className={`ml-2 px-1.5 py-0.5 text-[10px] bg-white rounded-md font-bold shadow-xs border ${isComplaint ? 'text-rose-800 border-rose-100' : 'text-red-800 border-red-100'}`}>
-                                                            {item.count}
-                                                        </span>
-                                                    </Link>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <p className="text-[11px] text-gray-400 mt-4 border-t border-gray-100 pt-3 flex items-center justify-between">
-                                    <span>Filtered from {complaintTab === 'complaints' ? 'Negative remarks' : 'Harassment reports'}</span>
-                                    <i className="fa-solid fa-shield-halved text-gray-300"></i>
-                                </p>
                             </div>
-                        </div>
+                        )}
                     </>
                 )}
             </div>

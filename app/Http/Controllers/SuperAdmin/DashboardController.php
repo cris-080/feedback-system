@@ -579,6 +579,40 @@ class DashboardController extends Controller
             $fcHarassmentWords = [];
 
             if ($hasReports && !empty($auditedIds)) {
+                
+                // --- EXTRACT HARASSMENT WORDS FOR THE FC DASHBOARD ---
+                $harassmentQueryFC = DB::table('feedback_answers as fa')
+                    ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                    ->whereIn('fa.response_id', $auditedIds)
+                    ->where(function($q) {
+                        $q->where('ff.field_label', 'LIKE', '%detail the harassment%')
+                          ->orWhere('ff.field_label', 'LIKE', '%specify%')
+                          ->orWhere('ff.field_label', 'LIKE', '%experienced%');
+                    })
+                    ->whereNotNull('fa.answer_text')
+                    ->where('fa.answer_text', '!=', '')
+                    ->whereNotIn(DB::raw('LOWER(TRIM(fa.answer_text))'), ['yes', 'no', 'n/a', 'none', 'na']);
+
+                $fcHarassmentTexts = $harassmentQueryFC->pluck('fa.answer_text')->toArray();
+                
+                $fcWordCounts = [];
+                foreach ($fcHarassmentTexts as $text) {
+                    $words = str_word_count(strtolower($text), 1);
+                    foreach ($words as $word) {
+                        if (strlen($word) > 3 && !in_array($word, $stopWords)) {
+                            $fcWordCounts[$word] = ($fcWordCounts[$word] ?? 0) + 1;
+                        }
+                    }
+                }
+                
+                arsort($fcWordCounts);
+                $count = 0;
+                foreach ($fcWordCounts as $word => $freq) {
+                    if ($count++ >= 10) break;
+                    $fcHarassmentWords[] = ['word' => $word, 'count' => $freq];
+                }
+                // -----------------------------------------------------
+
                 $fcServices = DB::table('feedback_answers as fa')
                     ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
                     ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
+import { Head, useForm, router, usePage } from '@inertiajs/react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
+import SearchFilter from '@/Components/SearchFilter';
+import Pagination from '@/Components/Pagination';
 
 export default function Reports({ departments = [], reports = { data: [] }, filters = {} }) {
     const { flash } = usePage().props;
@@ -9,9 +11,24 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(String(currentYear));
     const [selectedPreset, setSelectedPreset] = useState('');
-   const [archiveSearch, setArchiveSearch] = useState(filters?.search || '');
+    const [archiveSearch, setArchiveSearch] = useState(filters?.search || '');
+    const [deptFilter, setDeptFilter] = useState(filters?.department || 'all');
     const [activeDropdown, setActiveDropdown] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [animateModal, setAnimateModal] = useState(false);
     const isInitialMount = useRef(true);
+
+    const hasActiveFilters = Boolean(deptFilter && deptFilter !== 'all');
+
+    const openModal = () => {
+        setIsModalOpen(true);
+        setTimeout(() => setAnimateModal(true), 10);
+    };
+
+    const closeModal = () => {
+        setAnimateModal(false);
+        setTimeout(() => setIsModalOpen(false), 300);
+    };
 
    const { data, setData, post, processing, errors } = useForm({
         report_name: '',
@@ -116,11 +133,41 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
 
    const handleCompile = (e) => {
         e.preventDefault();
+        
+        // Show a blocking loading screen that cannot be closed
+        Swal.fire({
+            title: 'Compiling Report Data...',
+            html: 'Aggregating metrics and exporting official DOCX & PDF documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
         post('/superadmin/reports/generate', {
             preserveScroll: true,
             onSuccess: () => {
                 setData('report_name', '');
+                closeModal(); // Smoothly close the modal on success
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Report Generated!',
+                    text: 'The report and its PDF files are now instantly available for download.',
+                    timer: 3000,
+                    showConfirmButton: false
+                });
             },
+            onError: (err) => {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Generation Failed',
+                    text: err.error || 'Please check your inputs and try again.',
+                    confirmButtonColor: '#009639'
+                });
+            }
         });
     };
 
@@ -139,6 +186,20 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
         setActiveDropdown(activeDropdown === id ? null : id);
     };
 
+
+    // Status Badge Formatter for Overseer View
+    const getStatusBadge = (status, deptId) => {
+        // If it has no department, it's a University-Wide global report
+        if (!deptId) {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200"><i className="fa-solid fa-globe"></i> GLOBAL</span>;
+        }
+        
+        if (status === 'Submitted') return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"><span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> SUBMITTED</span>;
+        if (status === 'Approved') return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> APPROVED</span>;
+        if (status === 'Returned') return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"><span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> RETURNED</span>;
+        
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> DRAFT</span>;
+    };
 
     // Soft Delete confirmation
     const handleSoftDelete = (rep) => {
@@ -172,9 +233,14 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
 
         const delayDebounce = setTimeout(() => {
             const trimmed = archiveSearch.trim();
+            const params = {};
+            
+            if (trimmed) params.search = trimmed;
+            if (deptFilter !== 'all') params.department = deptFilter;
+
             router.get(
                 '/superadmin/reports',
-                trimmed ? { search: trimmed } : {},
+                params,
                 {
                     preserveState: true,
                     preserveScroll: true,
@@ -184,7 +250,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
         }, 300);
 
         return () => clearTimeout(delayDebounce);
-    }, [archiveSearch]);
+    }, [archiveSearch, deptFilter]);
 
     const filteredArchive = reports?.data || [];
 
@@ -209,12 +275,191 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
                     </div>
                 )}
 
-                {/* --- Split-Screen Workspace --- */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* ================= FULL WIDTH WORKSPACE: SAVED ARCHIVE ================= */}
 
-                    {/* ================= LEFT PANEL: COMPILE NEW REPORT (4 COLS) ================= */}
-                    <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden lg:sticky lg:top-6">
-                        <div className="px-5 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                
+               {/* Saved Archive Toolbar */}
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-gray-50 px-6 py-4 border-b border-gray-200 gap-4">
+                    
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-wrap md:flex-nowrap">
+                        
+                        <div className="flex items-center gap-2.5 mr-2">
+                            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 whitespace-nowrap">
+                                <i className="fa-solid fa-clock-rotate-left text-[#009639]"></i> Archive
+                            </h3>
+                            <span className="bg-green-100 text-[#1E6031] px-2.5 py-0.5 rounded-full text-xs font-bold">
+                                {reports?.total ?? filteredArchive.length}
+                            </span>
+                        </div>
+
+                        {/* Combined Search & Filter Component */}
+                        <SearchFilter 
+                            searchValue={archiveSearch}
+                            onSearchChange={setArchiveSearch}
+                            searchPlaceholder="Search report name or period..."
+                            hasActiveFilters={hasActiveFilters}
+                            onFilterReset={() => setDeptFilter('all')}
+                            filterTitle="Filter Reports"
+                        >
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1">By Scope / Department</label>
+                                <select 
+                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-xs focus:ring-[#009639] focus:border-[#009639] bg-white" 
+                                    value={deptFilter} 
+                                    onChange={(e) => setDeptFilter(e.target.value)}
+                                >
+                                    <option value="all">All Reports</option>
+                                    <option value="global">Global / University-Wide Only</option>
+                                    <optgroup label="Specific Departments">
+                                        {departments.map((d) => (
+                                            <option key={d.department_id} value={d.department_id}>{d.department_name}</option>
+                                        ))}
+                                    </optgroup>
+                                </select>
+                            </div>
+                        </SearchFilter>
+                    </div>
+
+                    <button
+                        onClick={openModal}
+                        className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2 rounded-md text-sm font-semibold transition shadow-sm w-full xl:w-auto flex items-center justify-center gap-2"
+                    >
+                        <i className="fa-solid fa-file-circle-plus"></i> Compile New Report
+                    </button>
+                </div>
+
+                        {/* Saved Archive Table */}
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-left text-sm divide-y divide-gray-200">
+                                <thead className="bg-gray-100 text-gray-600">
+                                    <tr>
+                                        <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider">Report Name</th>
+                                        <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider">Department & Period</th>
+                                        <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider text-center">Template</th>
+                                        <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider text-center">Pipeline Status</th>
+                                        <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 bg-white">
+                                    {filteredArchive.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-16 text-center text-gray-400">
+                                                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400 text-lg">
+                                                    <i className="fa-solid fa-folder-open"></i>
+                                                </div>
+                                                <p className="font-semibold text-gray-600 text-sm">No Saved Reports Found</p>
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    Use the Compile New Report panel on the left to generate a report.
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredArchive.map((rep) => {
+                                            const deptName = rep.report_data?.metadata?.department ?? rep.department?.department_name ?? 'All Departments';
+                                            const periodText = rep.report_data?.metadata?.period ?? `${rep.start_date} to ${rep.end_date}`;
+                                            const customTitle = rep.report_data?.metadata?.report_name || `${deptName} — ${periodText}`;
+                                            const respondentsCount = rep.report_data?.metadata?.total_respondents ?? 0;
+
+                                            return (
+                                                <tr key={rep.id} className="hover:bg-gray-50/80 transition">
+                                                    {/* Report Name & Meta */}
+                                                    <td className="px-5 py-4">
+                                                        <div className="font-bold text-gray-900 text-sm line-clamp-1">
+                                                            {customTitle}
+                                                        </div>
+                                                        <div className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-2">
+                                                            <span>#{rep.id}</span>
+                                                            <span>•</span>
+                                                            <span><i className="fa-solid fa-users mr-1"></i>{respondentsCount} raters</span>
+                                                            <span>•</span>
+                                                            <span>{new Date(rep.created_at).toLocaleDateString()}</span>
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Department & Period */}
+                                                    <td className="px-5 py-4">
+                                                        <div className="text-xs font-semibold text-gray-800 line-clamp-1">
+                                                            {deptName}
+                                                        </div>
+                                                        <div className="text-[11px] text-gray-500 mt-0.5">
+                                                            {periodText}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Template Badge */}
+                                                    <td className="px-4 py-4 text-center whitespace-nowrap">
+                                                        <span
+                                                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                                                rep.report_type === 'cc'
+                                                                    ? 'bg-green-100 text-green-800'
+                                                                    : 'bg-gray-100 text-gray-700'
+                                                            }`}
+                                                        >
+                                                            {rep.report_type === 'cc' ? 'With CC' : 'Non-CC'}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Pipeline Status */}
+                                                    <td className="px-4 py-4 text-center whitespace-nowrap">
+                                                        {getStatusBadge(rep.status, rep.department_id)}
+                                                    </td>
+
+                                                    {/* Action Dropdown (Overseer strictly Views/Deletes) */}
+                                                    <td className="px-5 py-4 text-right whitespace-nowrap relative action-dropdown-container">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleDropdown(rep.id)}
+                                                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition"
+                                                        >
+                                                            <i className="fa-solid fa-ellipsis-vertical text-sm px-2"></i>
+                                                        </button>
+                                                        
+                                                        {activeDropdown === rep.id && (
+                                                            <div className="absolute right-6 top-10 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 flex flex-col">
+                                                                <a
+                                                                    href={`/superadmin/reports/${rep.id}/pdf`}
+                                                                    className="px-4 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                                                >
+                                                                    <i className="fa-solid fa-file-pdf text-red-500 w-4"></i> Download as PDF
+                                                                </a>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setActiveDropdown(null);
+                                                                        handleSoftDelete(rep);
+                                                                    }}
+                                                                    className="px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                                                                >
+                                                                    <i className="fa-solid fa-trash-can w-4"></i> Delete    
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Component-Based Pagination */}
+                        <Pagination dataObject={reports} />
+                    </div>
+                </div>
+
+            {/* --- MODAL: COMPILE NEW REPORT --- */}
+            {isModalOpen && (
+                <div
+                    className={`fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm p-4 transition-opacity duration-300 ease-out ${animateModal ? 'opacity-100' : 'opacity-0'}`}
+                    onClick={closeModal}
+                >
+                    <div
+                        className={`bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden transition-all duration-300 ease-out flex flex-col max-h-[90vh] ${animateModal ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-6 scale-95'}`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-5 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between shrink-0">
                             <div>
                                 <h2 className="text-sm font-bold text-[#1E6031] flex items-center gap-2">
                                     <i className="fa-solid fa-sliders"></i> Compile New Report
@@ -223,10 +468,12 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
                                     Configure parameters and save to archive
                                 </p>
                             </div>
+                            <button type="button" onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition p-1">
+                                <i className="fa-solid fa-xmark text-lg"></i>
+                            </button>
                         </div>
 
-                        <form onSubmit={handleCompile} className="p-5 space-y-4">
-                            
+                        <form onSubmit={handleCompile} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
                             {/* 1. Custom Report Name */}
                             <div>
                                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1.5">
@@ -381,182 +628,8 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
                             </div>
                         </form>
                     </div>
-
-                    {/* ================= RIGHT PANEL: SAVED ARCHIVE (8 COLS) ================= */}
-                    <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        
-                       {/* Saved Archive Toolbar */}
-                        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex items-center gap-2.5">
-                                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                    <i className="fa-solid fa-clock-rotate-left text-[#009639]"></i> Saved Archive
-                                </h3>
-                                <span className="bg-green-100 text-[#1E6031] px-2.5 py-0.5 rounded-full text-xs font-bold">
-                                    {reports?.total ?? filteredArchive.length}
-                                </span>
-                            </div>
-
-                            {/* Search Bar */}
-                            <div className="relative w-full sm:w-72">
-                                <i className="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
-                                <input
-                                    type="text"
-                                    placeholder="Search report name, office, or period..."
-                                    value={archiveSearch}
-                                    onChange={(e) => setArchiveSearch(e.target.value)}
-                                    className="w-full pl-8 pr-7 py-1.5 border-gray-300 rounded-lg text-xs focus:ring-[#009639] focus:border-[#009639] bg-white"
-                                />
-                                {archiveSearch && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setArchiveSearch('')}
-                                        className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 text-xs"
-                                    >
-                                        <i className="fa-solid fa-xmark"></i>
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Saved Archive Table */}
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full text-left text-sm divide-y divide-gray-200">
-                                <thead className="bg-gray-100 text-gray-600">
-                                    <tr>
-                                        <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider">Report Name</th>
-                                        <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider">Department & Period</th>
-                                        <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider text-center">Template</th>
-                                        <th className="px-5 py-3 font-bold uppercase text-[11px] tracking-wider text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 bg-white">
-                                    {filteredArchive.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={4} className="px-6 py-16 text-center text-gray-400">
-                                                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400 text-lg">
-                                                    <i className="fa-solid fa-folder-open"></i>
-                                                </div>
-                                                <p className="font-semibold text-gray-600 text-sm">No Saved Reports Found</p>
-                                                <p className="text-xs text-gray-400 mt-1">
-                                                    Use the Compile New Report panel on the left to generate a report.
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredArchive.map((rep) => {
-                                            const deptName = rep.report_data?.metadata?.department ?? rep.department?.department_name ?? 'All Departments';
-                                            const periodText = rep.report_data?.metadata?.period ?? `${rep.start_date} to ${rep.end_date}`;
-                                            const customTitle = rep.report_data?.metadata?.report_name || `${deptName} — ${periodText}`;
-                                            const respondentsCount = rep.report_data?.metadata?.total_respondents ?? 0;
-
-                                            return (
-                                                <tr key={rep.id} className="hover:bg-gray-50/80 transition">
-                                                    {/* Report Name & Meta */}
-                                                    <td className="px-5 py-4">
-                                                        <div className="font-bold text-gray-900 text-sm line-clamp-1">
-                                                            {customTitle}
-                                                        </div>
-                                                        <div className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-2">
-                                                            <span>#{rep.id}</span>
-                                                            <span>•</span>
-                                                            <span><i className="fa-solid fa-users mr-1"></i>{respondentsCount} raters</span>
-                                                            <span>•</span>
-                                                            <span>{new Date(rep.created_at).toLocaleDateString()}</span>
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Department & Period */}
-                                                    <td className="px-5 py-4">
-                                                        <div className="text-xs font-semibold text-gray-800 line-clamp-1">
-                                                            {deptName}
-                                                        </div>
-                                                        <div className="text-[11px] text-gray-500 mt-0.5">
-                                                            {periodText}
-                                                        </div>
-                                                    </td>
-
-                                                    {/* Template Badge */}
-                                                    <td className="px-4 py-4 text-center whitespace-nowrap">
-                                                        <span
-                                                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
-                                                                rep.report_type === 'cc'
-                                                                    ? 'bg-green-100 text-green-800'
-                                                                    : 'bg-gray-100 text-gray-700'
-                                                            }`}
-                                                        >
-                                                            {rep.report_type === 'cc' ? 'With CC' : 'Non-CC'}
-                                                        </span>
-                                                    </td>
-
-                                                    {/* Action Dropdown */}
-                                                    <td className="px-5 py-4 text-right whitespace-nowrap relative action-dropdown-container">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleDropdown(rep.id)}
-                                                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition"
-                                                        >
-                                                            <i className="fa-solid fa-ellipsis-vertical text-sm px-2"></i>
-                                                        </button>
-                                                        
-                                                        {activeDropdown === rep.id && (
-                                                            <div className="absolute right-6 top-10 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 flex flex-col">
-                                                                <a
-                                                                    href={`/superadmin/reports/${rep.id}/pdf`}
-                                                                    className="px-4 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                                                >
-                                                                    <i className="fa-solid fa-file-pdf text-red-500 w-4"></i> Download as PDF
-                                                                </a>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setActiveDropdown(null);
-                                                                        handleSoftDelete(rep);
-                                                                    }}
-                                                                    className="px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-gray-100 mt-1"
-                                                                >
-                                                                    <i className="fa-solid fa-trash-can w-4"></i> Delete Report
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Pagination Footer */}
-                        {reports?.links?.length > 3 && (
-                            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-end gap-1">
-                                {reports.links.map((link, idx) =>
-                                    link.url ? (
-                                        <Link
-                                            key={idx}
-                                            href={link.url}
-                                            preserveScroll
-                                            className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
-                                                link.active
-                                                    ? 'bg-[#009639] text-white'
-                                                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
-                                            }`}
-                                            dangerouslySetInnerHTML={{ __html: link.label }}
-                                        />
-                                    ) : (
-                                        <span
-                                            key={idx}
-                                            className="px-2.5 py-1 text-xs text-gray-400"
-                                            dangerouslySetInnerHTML={{ __html: link.label }}
-                                        />
-                                    )
-                                )}
-                            </div>
-                        )}
-                    </div>
-
                 </div>
-            </div>
+            )}
         </SuperAdminLayout>
     );
 }

@@ -170,6 +170,36 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                         ? 'A new harassment report requires your attention.' 
                         : 'You have a new pending request or update.'
                 });
+
+                // --- REAL-TIME AUDIO ALERT FOR HARASSMENT ---
+                if (currentLatest.is_harassment) {
+                    try {
+                        // Generate a professional zero-dependency double-chime using AudioContext
+                        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        const oscillator = audioCtx.createOscillator();
+                        const gainNode = audioCtx.createGain();
+                        
+                        oscillator.connect(gainNode);
+                        gainNode.connect(audioCtx.destination);
+                        
+                        // Frequencies for a clean alert (C5 to E5)
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+                        oscillator.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.15); 
+                        
+                        // Volume envelope (smooth fade in and out to prevent clicking)
+                        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+                        gainNode.gain.linearRampToValueAtTime(0.4, audioCtx.currentTime + 0.05);
+                        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
+                        gainNode.gain.linearRampToValueAtTime(0.4, audioCtx.currentTime + 0.2);
+                        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+                        
+                        oscillator.start(audioCtx.currentTime);
+                        oscillator.stop(audioCtx.currentTime + 0.6);
+                    } catch (e) {
+                        console.error('Audio alert failed:', e);
+                    }
+                }
             }
             
             sessionStorage.setItem(storageKeyId, currentId);
