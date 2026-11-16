@@ -84,4 +84,103 @@ class Report extends Model
         // Create the new report instance
         return self::create($insertData);
     }
+
+   /**
+     * Local scope to handle Focal Person report searching.
+     */
+    public function scopeFilter($query, $search)
+    {
+        $query->when($search ?? null, function ($query, $search) {
+            $like = '%' . $search . '%';
+            $query->where(function ($q) use ($like) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('reports', 'report_name')) {
+                    $q->where('report_name', 'LIKE', $like);
+                }
+                $q->orWhere('report_type', 'LIKE', $like)
+                  ->orWhere('start_date', 'LIKE', $like)
+                  ->orWhere('end_date', 'LIKE', $like)
+                  ->orWhere('status', 'LIKE', $like);
+            });
+        });
+    }
+
+    /**
+     * Local scope to handle the complex tab filtering for the Feedback Committee.
+     */
+    public function scopeFilterCommittee($query, array $filters)
+    {
+        $tab = $filters['tab'] ?? 'submissions';
+
+        if ($tab === 'global') {
+            $query->whereNull('department_id')
+                  ->whereHas('generator', function ($q) {
+                      $q->where('role', 'Feedback Committee');
+                  });
+            $query->when($filters['report_type'] ?? null, function ($q, $type) {
+                $q->where('report_type', $type);
+            });
+        } else {
+            $query->whereNotNull('department_id')
+                  ->whereIn('status', ['Submitted', 'Approved', 'Returned']);
+                  
+            $query->when($filters['department_id'] ?? null, function ($q, $dept) {
+                $q->where('department_id', $dept);
+            });
+            $query->when($filters['status'] ?? null, function ($q, $status) {
+                $q->where('status', $status);
+            });
+        }
+
+        $query->when($filters['search'] ?? null, function ($query, $search) use ($tab) {
+            $like = '%' . $search . '%';
+            $query->where(function ($q) use ($like, $tab) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('reports', 'report_name')) {
+                    $q->where('report_name', 'LIKE', $like);
+                }
+                $q->orWhere('report_type', 'LIKE', $like)
+                  ->orWhere('start_date', 'LIKE', $like)
+                  ->orWhere('end_date', 'LIKE', $like);
+
+                if ($tab !== 'global') {
+                    $q->orWhereHas('department', function ($dq) use ($like) {
+                        $dq->where('department_name', 'LIKE', $like);
+                    });
+                }
+            });
+        });
+    }
+
+    /**
+     * Soft-deletes the report and updates its JSON metadata.
+     */
+    public function archiveReport()
+    {
+        $reportData = $this->report_data;
+        $reportData['metadata']['is_deleted'] = true;
+        $reportData['metadata']['deleted_at'] = now()->toDateTimeString();
+        $this->report_data = $reportData;
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('reports', 'deleted_at')) {
+            $this->deleted_at = now();
+        }
+
+        return $this->save();
+    }
+
+    /**
+     * Restores the report from the archive and cleans its JSON metadata.
+     */
+    public function restoreFromArchive()
+    {
+        $reportData = $this->report_data;
+        $reportData['metadata']['is_deleted'] = false;
+        unset($reportData['metadata']['deleted_at']);
+        $this->report_data = $reportData;
+        
+        if (\Illuminate\Support\Facades\Schema::hasColumn('reports', 'deleted_at')) {
+            $this->deleted_at = null;
+        }
+
+        return $this->save();
+    }
 }

@@ -259,6 +259,33 @@ export default function CommitteeReports() {
         });
     };
 
+    const handleDeleteReport = (id, name) => {
+        Swal.fire({
+            title: 'Delete Overall Report?',
+            text: `Are you sure you want to remove "${name}"? It will be safely moved to the SuperAdmin archives.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, Delete Report'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.delete(route('feedback_committee.reports.destroy', id), {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Deleted!',
+                            text: 'The report has been successfully archived.',
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    }
+                });
+            }
+        });
+    };
+
     const formatDate = (dateString) => {
         return new Date(dateString).toLocaleDateString('en-US', {
             year: 'numeric', month: 'short', day: 'numeric'
@@ -376,7 +403,9 @@ export default function CommitteeReports() {
 
                         <button
                             onClick={openModal}
-                            className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2 rounded-md text-sm font-semibold transition shadow-sm w-full xl:w-auto flex items-center justify-center gap-2 whitespace-nowrap"
+                            disabled={reports?.total === 0 && !hasActiveFilters}
+                            title={reports?.total === 0 && !hasActiveFilters ? "No data available to compile" : "Compile Overall Report"}
+                            className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2 rounded-md text-sm font-semibold transition shadow-sm w-full xl:w-auto flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <i className="fa-solid fa-file-circle-plus"></i> Compile Overall Report
                         </button>
@@ -507,6 +536,19 @@ export default function CommitteeReports() {
                                                                         <i className="fa-solid fa-rotate-left w-4 text-amber-600"></i> Return to Sender
                                                                     </button>
                                                                 </>
+                                                            )}
+                                                            
+                                                            {activeTab === 'global' && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setActiveDropdown(null);
+                                                                        handleDeleteReport(report.id, customTitle);
+                                                                    }}
+                                                                    className="px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                                                                >
+                                                                    <i className="fa-solid fa-trash-can w-4 text-rose-500"></i> Delete Report
+                                                                </button>
                                                             )}
                                                         </div>
                                                     )}

@@ -395,6 +395,18 @@ return (
                                 text="Support & Requests" 
                                 active={route().current('focalperson.requests.*')} 
                             />
+                            <NavLink 
+                                href={route('focalperson.archives.index')} 
+                                icon="fa-solid fa-box-archive" 
+                                text="Archive" 
+                                active={route().current('focalperson.archives.*')} 
+                            />
+                            <NavLink 
+                                href={route('focalperson.audit-logs.index')} 
+                                icon="fa-solid fa-clipboard-list" 
+                                text="Audit Logs" 
+                                active={route().current('focalperson.audit-logs.*')} 
+                            />
                         </div>
                     )}
 
@@ -418,38 +430,32 @@ return (
                                 text={"Forms"} 
                                 active={route().current('superadmin.forms.*')} 
                             />
-                            
-                            {isSuperAdmin && (
-                                <NavLink 
-                                    href={route('superadmin.users.index')} 
-                                    icon="fa-solid fa-users-gear" 
-                                    text="Accounts" 
-                                    active={route().current('superadmin.users.*')} 
-                                />
-                            )}
                         </div>
                     )}
 
-                    {isSuperAdmin && (
+                    {isSuperGroup && (
                         <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
                             {!isCollapsed && (
                                 <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
-                                    Administration
+                                    {isSuperAdmin ? 'Administration' : 'Data Management'}
                                 </div>
                             )}
 
                             <NavLink 
-                                href={route('superadmin.archives.index')} 
+                                href={isSuperAdmin ? route('superadmin.archives.index') : route('feedback_committee.archives.index')} 
                                 icon="fa-solid fa-box-archive" 
                                 text="System Archives" 
-                                active={route().current('superadmin.archives.*')} 
+                                active={route().current('superadmin.archives.*') || route().current('feedback_committee.archives.*')} 
                             />
-                            <NavLink 
-                                href={route('superadmin.audit-logs.index')} 
-                                icon="fa-solid fa-clipboard-list" 
-                                text="Audit Logs" 
-                                active={route().current('superadmin.audit-logs.*')} 
-                            />
+                            
+                            {isSuperAdmin && (
+                                <NavLink 
+                                    href={route('superadmin.audit-logs.index')} 
+                                    icon="fa-solid fa-clipboard-list" 
+                                    text="Audit Logs" 
+                                    active={route().current('superadmin.audit-logs.*')} 
+                                />
+                            )}
                         </div>
                     )}
                 </nav>

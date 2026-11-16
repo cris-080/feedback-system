@@ -6,20 +6,22 @@ use App\Http\Controllers\SuperAdmin\FeedbackController;
 use App\Http\Controllers\SuperAdmin\FormController;
 use App\Http\Controllers\FocalPerson\FocalDepartmentController;
 use App\Http\Controllers\FocalPerson\RequestController;
+use App\Http\Controllers\FocalPerson\ArchiveController;
+use App\Http\Controllers\FocalPerson\ReportController;
 
 Route::prefix('focal')->name('focalperson.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
     // --- REPORTS ROUTES ---
-    Route::get('/reports', [App\Http\Controllers\FocalPerson\ReportController::class, 'index'])->name('reports.index');
-    Route::post('/reports/generate', [App\Http\Controllers\FocalPerson\ReportController::class, 'generate'])->name('reports.generate');
-    Route::post('/reports/{id}/submit', [App\Http\Controllers\FocalPerson\ReportController::class, 'submitToCommittee'])->name('reports.submit');
-    Route::delete('/reports/{id}', [App\Http\Controllers\FocalPerson\ReportController::class, 'destroy'])->name('reports.destroy');
-    Route::post('/reports/{id}/recall', [App\Http\Controllers\FocalPerson\ReportController::class, 'recall'])->name('reports.recall');
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('/reports/generate', [ReportController::class, 'generate'])->name('reports.generate');
+    Route::post('/reports/{id}/submit', [ReportController::class, 'submitToCommittee'])->name('reports.submit');
+    Route::delete('/reports/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
+    Route::post('/reports/{id}/recall', [ReportController::class, 'recall'])->name('reports.recall');
     
-    // Share the SuperAdmin logic for downloading to avoid duplicating LibreOffice code
-    Route::get('/reports/{id}/docx', [App\Http\Controllers\SuperAdmin\ReportController::class, 'downloadDocx'])->name('reports.download.docx');
-    Route::get('/reports/{id}/pdf', [App\Http\Controllers\SuperAdmin\ReportController::class, 'downloadPdf'])->name('reports.download.pdf');
+    // Download Routes
+    Route::get('/reports/{id}/docx', [ReportController::class, 'downloadDocx'])->name('reports.download.docx');
+    Route::get('/reports/{id}/pdf', [ReportController::class, 'downloadPdf'])->name('reports.download.pdf');
     // ----------------------
 
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
@@ -38,4 +40,12 @@ Route::prefix('focal')->name('focalperson.')->group(function () {
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
     Route::delete('/requests/{id}', [RequestController::class, 'destroy'])->name('requests.destroy');
+
+    // Archive System
+    Route::get('/archives', [ArchiveController::class, 'index'])->name('archives.index');
+    Route::put('/archives/reports/{id}/restore', [ArchiveController::class, 'restore'])->name('archives.reports.restore');
+    Route::delete('/archives/reports/{id}/force-delete', [ArchiveController::class, 'forceDelete'])->name('archives.reports.force-delete');
+// Audit Logs
+    Route::get('/audit-logs', [App\Http\Controllers\FocalPerson\AuditLogController::class, 'index'])->name('audit-logs.index');
 });
+
