@@ -18,16 +18,16 @@ use Inertia\Inertia;;
 
 class DepartmentController extends Controller
 {    
-    public function index(Request $request)
+   public function index(Request $request)
     {
         $userRole = strtolower(trim(auth()->user()->role ?? ''));
         $isSuperAdmin = $userRole === 'superadmin';
+        // Allow Feedback Committee to safely render this page
+        $isFeedbackCommittee = $userRole === 'feedback committee' || $userRole === 'feedbackcommittee';
 
-        $query = Department::query();
-
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where('department_name', 'like', "%{$search}%");
+        // Fail-safe block to ensure Focal Persons can never access this route
+        if (!$isSuperAdmin && !$isFeedbackCommittee) {
+            abort(403, 'Unauthorized access.');
         }
 
         return inertia('SuperAdmin/Departments', [

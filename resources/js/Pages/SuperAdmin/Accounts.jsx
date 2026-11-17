@@ -124,16 +124,10 @@ export default function Accounts({ accounts, departments, roles, filters }) {
     const [showRoleModal, setShowRoleModal] = useState(false);
     const [editingRole, setEditingRole] = useState(null);
 
-    const { data: roleData, setData: setRoleData, post: postRole, put: putRole, reset: resetRole, errors: roleErrors, processing: roleProcessing } = useForm({
+    const { data: roleData, setData: setRoleData, put: putRole, errors: roleErrors, processing: roleProcessing } = useForm({
         role_name: '',
         description: '',
     });
-
-    const openCreateRoleModal = () => {
-        setEditingRole(null);
-        resetRole();
-        setShowRoleModal(true);
-    };
 
     const openEditRoleModal = (role) => {
         setEditingRole(role);
@@ -148,40 +142,13 @@ export default function Accounts({ accounts, departments, roles, filters }) {
         e.preventDefault();
         if (editingRole) {
             putRole(route('superadmin.roles.update', editingRole.role_id), {
+                preserveScroll: true,
                 onSuccess: () => {
                     setShowRoleModal(false);
-                    Swal.fire({ title: 'Role Updated!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-                }
-            });
-        } else {
-            postRole(route('superadmin.roles.store'), {
-                onSuccess: () => {
-                    setShowRoleModal(false);
-                    Swal.fire({ title: 'Role Created!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
+                    Swal.fire({ title: 'Role Description Updated!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
                 }
             });
         }
-    };
-
-    const handleRoleDelete = (role) => {
-        Swal.fire({
-            title: `Delete ${role.role_name}?`,
-            text: "This action cannot be undone.",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#dc2626',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: 'Yes, Delete Role'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                router.delete(route('superadmin.roles.destroy', role.role_id), {
-                    preserveScroll: true,
-                    onSuccess: () => {
-                        Swal.fire({ title: 'Role Deleted!', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
-                    }
-                });
-            }
-        });
     };
 
   // --- ACTION HANDLERS ---
@@ -356,7 +323,6 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                                     onChange={(e) => setRoleFilter(e.target.value)}
                                                 >
                                                     <option value="">All Roles</option>
-                                                    <option value="SuperAdmin">SuperAdmin</option>
                                                     <option value="Feedback Committee">Feedback Committee</option>
                                                     <option value="Focal Person">Focal Person</option>
                                                 </select>
@@ -510,7 +476,7 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                         <div className="space-y-6">
                             
                             {/* Roles Header Banner */}
-                            <div className="flex justify-between items-center bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-6 rounded-lg shadow-sm border border-gray-200 gap-4">
                                 <div className="flex items-center space-x-4">
                                     <div className="bg-gray-100 rounded-lg p-1 flex space-x-1 border border-gray-200">
                                         <button
@@ -531,18 +497,12 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                     </div>
 
                                     <div>
-                                        <h2 className="text-lg font-bold text-[#1E6031]">System & Custom Roles</h2>
-                                        <p className="text-xs text-gray-500">Configure account access levels for current and future system modules.</p>
+                                        <h2 className="text-lg font-bold text-[#1E6031]">Institutional Access Roles</h2>
+                                    
                                     </div>
                                 </div>
 
-                                <button 
-                                    type="button"
-                                    onClick={openCreateRoleModal}
-                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-xs hover:bg-blue-700 transition shadow-sm flex items-center"
-                                >
-                                    <i className="fa-solid fa-plus mr-2"></i> Add New Role
-                                </button>
+                            
                             </div>
 
                             {/* Roles Grid */}
@@ -552,25 +512,24 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                         <div>
                                             <div className="flex justify-between items-start mb-2">
                                                 <h3 className="text-lg font-bold text-gray-900">{role.role_name}</h3>
-                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
-                                                    role.is_system ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
-                                                }`}>
-                                                    {role.is_system ? 'System Core' : 'Custom'}
+                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800">
+                                                    System Core
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-mono text-gray-400 mb-3">Key: {role.role_key}</p>
+                                            <p className="text-xs font-mono text-gray-400 mb-3">Key: {role.role_key}</p>
                                             <p className="text-sm text-gray-600 mb-4">{role.description || 'No description provided.'}</p>
                                         </div>
 
                                         <div className="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                                            <span><strong>{role.accounts_count || 0}</strong> Active Users</span>
+                                            <span><strong>{role.accounts_count || 0}</strong> Assigned Users</span>
                                             
-                                            <div className="space-x-3">
-                                                <button type="button" onClick={() => openEditRoleModal(role)} className="text-blue-600 hover:text-blue-800 font-bold">Edit</button>
-                                                {!role.is_system && (
-                                                    <button type="button" onClick={() => handleRoleDelete(role)} className="text-red-600 hover:text-red-800 font-bold">Delete</button>
-                                                )}
-                                            </div>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => openEditRoleModal(role)} 
+                                                className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1"
+                                            >
+                                                <i className="fa-solid fa-pen-to-square"></i> Edit Description
+                                            </button>
                                         </div>
                                     </div>
                                 ))}
@@ -734,11 +693,13 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                 required
                             >
                                 <option value="" disabled>-- Select a Role --</option>
-                                {roles.map((role) => (
-                                    <option key={role.role_id} value={role.role_name}>
-                                        {role.role_name}
-                                    </option>
-                                ))}
+                                {roles
+                                    .filter((role) => role.role_name !== 'SuperAdmin')
+                                    .map((role) => (
+                                        <option key={role.role_id} value={role.role_name}>
+                                            {role.role_name}
+                                        </option>
+                                    ))}
                             </select>
                             {errors.role && <div className="text-red-500 text-xs mt-1 font-semibold">{errors.role}</div>}
                         </div>
@@ -789,36 +750,37 @@ export default function Accounts({ accounts, departments, roles, filters }) {
     </div>
 )}
 
-            {/* Modal for Creating & Editing Roles */}
+           {/* Modal for Editing Core Role Description */}
             {showRoleModal && (
                 <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-xl">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">
-                            {editingRole ? (editingRole.is_system ? 'Edit System Role Details' : 'Edit Custom Role') : 'Create Custom Role'}
+                        <h3 className="text-lg font-bold text-gray-900 mb-1">
+                            Edit Role Description
                         </h3>
+                        <p className="text-xs text-gray-500 mb-4">
+                            Core system role names are locked to protect institutional routing and permissions.
+                        </p>
                         <form onSubmit={handleRoleSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Role Display Name</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">System Role (Locked)</label>
                                 <input 
                                     type="text" 
                                     value={roleData.role_name}
-                                    onChange={e => setRoleData('role_name', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-[#009639] focus:border-[#009639]"
-                                    placeholder="e.g. Quality Assurance Officer"
-                                    required 
+                                    disabled
+                                    className="w-full border-gray-200 bg-gray-100 text-gray-500 rounded-md shadow-sm cursor-not-allowed text-sm font-semibold"
                                 />
-                                {roleErrors.role_name && <p className="text-red-500 text-xs mt-1">{roleErrors.role_name}</p>}
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Role Description</label>
                                 <textarea 
                                     value={roleData.description}
                                     onChange={e => setRoleData('description', e.target.value)}
-                                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-[#009639] focus:border-[#009639]"
+                                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-[#009639] focus:border-[#009639] text-sm"
                                     rows="3"
-                                    placeholder="Briefly describe what this role does..."
+                                    placeholder="Briefly describe the responsibilities and scope of this role..."
                                 />
+                                {roleErrors.description && <p className="text-red-500 text-xs mt-1">{roleErrors.description}</p>}
                             </div>
 
                             <div className="flex justify-end space-x-3 pt-4 border-t">
@@ -832,9 +794,9 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                 <button 
                                     type="submit" 
                                     disabled={roleProcessing}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-md font-bold hover:bg-blue-600 text-sm"
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md font-bold hover:bg-blue-700 text-sm"
                                 >
-                                    {editingRole ? 'Update Role' : 'Save Role'}
+                                    {roleProcessing ? 'Saving...' : 'Update Description'}
                                 </button>
                             </div>
                         </form>

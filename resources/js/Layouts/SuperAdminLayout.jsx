@@ -16,7 +16,13 @@ export default function SuperAdminLayout({ children, headerTitle }) {
     
     const isSuperGroup = isSuperAdmin || isFeedbackCommittee;
     
-    const rolePrefix = isSuperGroup ? 'superadmin' : 'focalperson';
+    // Explicitly map the role to the exact route prefix defined in web.php
+    let rolePrefix = 'focalperson';
+    if (isSuperAdmin) {
+        rolePrefix = 'superadmin';
+    } else if (isFeedbackCommittee) {
+        rolePrefix = 'feedback_committee';
+    }
 
    const [isCollapsed, setIsCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -418,25 +424,39 @@ return (
                                 </div>
                             )}
 
+                            {/* Both SuperAdmin and Feedback Committee can view Departments and Forms */}
                             <NavLink 
-                                href={route('superadmin.departments.index')} 
+                                href={route(`${rolePrefix}.departments.index`)} 
                                 icon="fa-solid fa-building-flag" 
                                 text={"Departments"} 
-                                active={route().current('superadmin.departments.*')} 
+                                active={route().current(`${rolePrefix}.departments.*`)} 
                             />
                             <NavLink 
-                                href={route('superadmin.forms.index')} 
+                                href={route(`${rolePrefix}.forms.index`)} 
                                 icon="fa-solid fa-file-signature" 
                                 text={"Forms"} 
-                                active={route().current('superadmin.forms.*')} 
+                                active={route().current(`${rolePrefix}.forms.*`)} 
                             />
 
-                            <NavLink 
-                                href={route('superadmin.users.index')} 
-                                icon="fa-solid fa-users-gear" 
-                                text={"Accounts"} 
-                                active={route().current('superadmin.users.*')} 
-                            />
+                            {/* Only SuperAdmin manages System Accounts */}
+                            {isSuperAdmin && (
+                                <NavLink 
+                                    href={route('superadmin.users.index')} 
+                                    icon="fa-solid fa-users-gear" 
+                                    text={"System Accounts"} 
+                                    active={route().current('superadmin.users.*')} 
+                                />
+                            )}
+
+                            {/* Feedback Committee gets the read-only Focal Person Directory instead of System Accounts */}
+                            {isFeedbackCommittee && (
+                                <NavLink 
+                                    href={route('feedback_committee.directory.index')} 
+                                    icon="fa-solid fa-address-book" 
+                                    text={"Focal Persons"} 
+                                    active={route().current('feedback_committee.directory.*')} 
+                                />
+                            )}
                         </div>
                     )}
 

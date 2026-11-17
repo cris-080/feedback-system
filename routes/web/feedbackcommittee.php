@@ -3,10 +3,23 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Crypt;
 use App\Http\Controllers\FeedbackCommittee\FeedbackCommitteeRequestController;
 use App\Http\Controllers\SuperAdmin\FormController;
+use App\Http\Controllers\SuperAdmin\DepartmentController;
 use App\Http\Controllers\FeedbackCommittee\ReportController;
+use App\Http\Controllers\FeedbackCommittee\DashboardController;
 use App\Http\Controllers\FeedbackCommittee\ArchiveController;
+use App\Http\Controllers\FeedbackCommittee\DirectoryController;
+use App\Http\Controllers\SuperAdmin\FeedbackController;
 
 Route::prefix('feedback-committee')->name('feedback_committee.')->group(function () {
+    
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    
+    // Focal Person Directory
+    Route::get('/directory', [DirectoryController::class, 'index'])->name('directory.index');
+    
+    // Feedback Datastore (Shared SuperAdmin Controller)
+    Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
     
     // Report Repository
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
@@ -16,6 +29,9 @@ Route::prefix('feedback-committee')->name('feedback_committee.')->group(function
     Route::get('/reports/{id}/pdf', [ReportController::class, 'downloadPdf'])->name('reports.download.pdf');
     Route::delete('/reports/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
     
+    /// Departments (Shared SuperAdmin Controller - View Only)
+    Route::get('/departments', [DepartmentController::class, 'index'])->name('departments.index');
+
     // Forms & Preview
     Route::get('/forms', [FormController::class, 'index'])->name('forms.index');
     Route::get('/forms/{id}/preview', function ($id) {

@@ -41,7 +41,7 @@ class AccountController extends Controller
             'lastname'      => 'required|string|max:50',
             'username'      => 'required|string|max:50|unique:account,username',
             'email'         => 'required|email|max:100|unique:account,email',
-            'role'          => 'required|string',
+            'role'          => 'required|string|in:Feedback Committee,Focal Person',
             'role_id'       => 'nullable|integer|exists:roles,role_id',
             'department_id' => 'nullable|integer|exists:department,department_id',
         ]);
@@ -90,12 +90,12 @@ class AccountController extends Controller
     {
         $user = Account::findOrFail($id);
 
-        $validated = $request->validate([
+       $validated = $request->validate([
             'firstname'     => 'required|string|max:50',
             'lastname'      => 'required|string|max:50',
             'username'      => 'required|string|max:50|unique:account,username,' . $user->user_id . ',user_id',
             'email'         => 'required|email|max:100|unique:account,email,' . $user->user_id . ',user_id',
-            'role'          => 'required|string',
+            'role'          => 'required|string|in:Feedback Committee,Focal Person',
             'role_id'       => 'nullable|integer|exists:roles,role_id',
             'department_id' => 'nullable|integer|exists:department,department_id',
             'password'      => 'nullable|string|min:8',

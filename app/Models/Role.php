@@ -53,4 +53,14 @@ class Role extends Model
                 ->orderBy('roles.role_name', 'asc')
                 ->get();
         }
+
+    /**
+     * Safely update only the description of a core role so role_name and role_key remain intact.
+     */
+    public function updateDescription(?string $description): bool
+    {
+        return $this->update([
+            'description' => $description,
+        ]);
+    }
 }

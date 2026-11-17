@@ -386,17 +386,19 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                         </div>
 
                         <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
-                            <button onClick={openBulkModal} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md font-semibold transition shadow-sm whitespace-nowrap w-full sm:w-auto flex items-center justify-center">
-                                <i className="fa-solid fa-layer-group mr-2"></i> Bulk Add Position
-                            </button>
-                            
                             {isSuperAdmin && (
-                            <button 
-                                onClick={() => openModal()} 
-                                className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2.5 rounded-md font-semibold text-sm transition shadow-sm flex items-center"
-                            >
-                                <i className="fa-solid fa-plus mr-2"></i> Add Department
-                            </button>
+                                <>
+                                    <button onClick={openBulkModal} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md font-semibold transition shadow-sm whitespace-nowrap w-full sm:w-auto flex items-center justify-center">
+                                        <i className="fa-solid fa-layer-group mr-2"></i> Bulk Add Position
+                                    </button>
+                                    
+                                    <button 
+                                        onClick={() => openModal()} 
+                                        className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2.5 rounded-md font-semibold text-sm transition shadow-sm flex items-center"
+                                    >
+                                        <i className="fa-solid fa-plus mr-2"></i> Add Department
+                                    </button>
+                                </>
                             )}
                         </div>
                     </div>

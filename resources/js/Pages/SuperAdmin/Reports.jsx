@@ -208,13 +208,13 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
         const title = rep.report_data?.metadata?.report_name || `${deptName} (${periodText})`;
 
         Swal.fire({
-            title: 'Remove from Saved Archive?',
-            text: `"${title}" will be soft-deleted.`,
+            title: 'Archive this report?',
+            text: `"${title}" will be archived.`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc2626',
             cancelButtonColor: '#6b7280',
-            confirmButtonText: 'Yes, Soft Delete',
+            confirmButtonText: 'Yes, Archive',
             cancelButtonText: 'Cancel',
         }).then((result) => {
             if (result.isConfirmed) {
@@ -431,7 +431,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
                                                                     }}
                                                                     className="px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-gray-100 mt-1"
                                                                 >
-                                                                    <i className="fa-solid fa-trash-can w-4"></i> Delete    
+                                                                    <i className="fa-solid fa-box-archive w-4"></i> Archive    
                                                                 </button>
                                                             </div>
                                                         )}

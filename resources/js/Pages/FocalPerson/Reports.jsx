@@ -192,25 +192,30 @@ export default function Reports() {
         });
     };
 
-    // Handle deleting a draft
-    const handleDelete = (id, name) => {
+   // Handle deleting a draft
+    const handleDelete = (report) => {
+        const deptName = department?.department_name || 'My Department';
+        const periodText = `${formatDate(report.start_date)} to ${formatDate(report.end_date)}`;
+        const customTitle = report.report_name || `${deptName} - ${periodText}`;
+
         Swal.fire({
-            title: 'Discard Draft Report?',
-            text: `Permanently remove "${name}" from your records? This action cannot be undone.`,
+            title: 'Archive this report?',
+            text: `"${customTitle}" will be archived.`,
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc2626',
             cancelButtonColor: '#6b7280',
-            confirmButtonText: '<i class="fa-solid fa-trash-can mr-1.5"></i> Delete Draft'
+            confirmButtonText: 'Yes, Archive',
+            cancelButtonText: 'Cancel',
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('focalperson.reports.destroy', id), {
+                router.delete(route('focalperson.reports.destroy', report.id), {
                     preserveScroll: true,
                     onSuccess: () => {
                         Swal.fire({
                             icon: 'success',
-                            title: 'Removed!',
-                            text: 'Draft report was successfully deleted.',
+                            title: 'Archived!',
+                            text: 'Report was successfully archived.',
                             timer: 2000,
                             showConfirmButton: false
                         });
@@ -397,11 +402,11 @@ export default function Reports() {
                                                                     type="button"
                                                                     onClick={() => {
                                                                         setActiveDropdown(null);
-                                                                        handleDelete(report.id, report.report_name);
+                                                                        handleDelete(report);
                                                                     }}
                                                                     className="px-4 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-gray-100 mt-1"
                                                                 >
-                                                                    <i className="fa-solid fa-trash-can w-4"></i> Delete Draft
+                                                                    <i className="fa-solid fa-box-archive w-4"></i> Archive 
                                                                 </button>
                                                             </>
                                                         )}
