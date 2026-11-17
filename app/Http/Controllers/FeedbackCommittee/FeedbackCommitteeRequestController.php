@@ -5,7 +5,9 @@ namespace App\Http\Controllers\FeedbackCommittee;
 use App\Http\Controllers\Controller;
 use App\Models\AdminRequest;
 use Illuminate\Http\Request;
+use App\Events\SystemDataUpdated;
 use App\Models\AuditLog;
+use App\Models\Feedback;
 use Inertia\Inertia;
 
 class FeedbackCommitteeRequestController extends Controller
@@ -43,7 +45,7 @@ class FeedbackCommitteeRequestController extends Controller
         AuditLog::logAction('Created', 'Admin Requests', "Submitted a {$validated['request_type']} ticket to SuperAdmin (ID: {$adminReq->id}).");
 
         // REAL-TIME TRIGGER: Instantly light up the SuperAdmin's notification bell
-        event(new \App\Events\SystemDataUpdated('superadmin'));
+        event(new  SystemDataUpdated('superadmin'));
 
         return back()->with('success', 'Your ticket has been successfully sent to the SuperAdmin.');
     }
@@ -74,7 +76,7 @@ class FeedbackCommitteeRequestController extends Controller
         AuditLog::logAction($actionWord, 'Admin Requests', "{$actionWord} focal person request (ID: {$id}).{$remarksLog}");
 
         // REAL-TIME TRIGGER: Instantly alert the Focal Person that their request was processed
-        event(new \App\Events\SystemDataUpdated('focalperson'));
+        event(new  SystemDataUpdated('focalperson'));
 
         $message = $request->status === 'Approved' ? 'Request approved successfully.' : 'Request rejected.';
         return back()->with('success', $message);
@@ -87,7 +89,7 @@ class FeedbackCommitteeRequestController extends Controller
         // 1. Bulk "Mark all as done" from notification bell
         if ($id == 0 || $request->input('clear_all')) {
             AdminRequest::clearAllNotifications($role, auth()->id());
-            \App\Models\Feedback::clearAllHarassmentNotifications($role);
+             Feedback::clearAllHarassmentNotifications($role);
             return back();
         }
 

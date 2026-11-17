@@ -8,7 +8,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Report;
 use App\Models\Department;
+use App\Events\SystemDataUpdated;
 use App\Services\ReportGenerationService;
+use Illuminate\Support\Facades\File;
 use App\Services\DocumentGenerationService;
 use App\Models\AuditLog;
 use Inertia\Inertia;
@@ -109,8 +111,8 @@ class ReportController extends Controller
         }
 
         AuditLog::logAction('Created', 'Reports', "Generated new report: {$report->report_data['metadata']['report_name']} (ID: {$report->id}).");
-        event(new \App\Events\SystemDataUpdated('superadmin', $validated['department_id']));
-        event(new \App\Events\SystemDataUpdated('feedbackcommittee', $validated['department_id']));
+        event(new SystemDataUpdated('superadmin', $validated['department_id']));
+        event(new SystemDataUpdated('feedbackcommittee', $validated['department_id']));
 
         return redirect()->route('superadmin.reports.index')
             ->with('success', 'Report "' . $report->report_data['metadata']['report_name'] . '" compiled and saved to archive.');
@@ -142,11 +144,11 @@ class ReportController extends Controller
         $report = Report::findOrFail($id);
         $reportName = $report->report_name ?? ($report->report_data['metadata']['report_name'] ?? 'Unnamed Report');
 
-        if (\Illuminate\Support\Facades\File::exists(storage_path("app/reports/{$report->id}.pdf"))) {
-            \Illuminate\Support\Facades\File::delete(storage_path("app/reports/{$report->id}.pdf"));
+        if (File::exists(storage_path("app/reports/{$report->id}.pdf"))) {
+            File::delete(storage_path("app/reports/{$report->id}.pdf"));
         }
-        if (\Illuminate\Support\Facades\File::exists(storage_path("app/reports/{$report->id}.docx"))) {
-            \Illuminate\Support\Facades\File::delete(storage_path("app/reports/{$report->id}.docx"));
+        if (File::exists(storage_path("app/reports/{$report->id}.docx"))) {
+            File::delete(storage_path("app/reports/{$report->id}.docx"));
         }
 
         $report->delete();

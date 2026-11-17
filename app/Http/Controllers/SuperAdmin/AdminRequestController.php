@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\AdminRequest;
 use Illuminate\Http\Request;
+use App\Events\SystemDataUpdated;
 use Illuminate\Support\Facades\DB;
 use \App\Models\Feedback;
 use App\Models\AuditLog;
@@ -49,7 +50,7 @@ $adminReq->save();
         );
 
         // REAL-TIME TRIGGER: Instantly push the approval/rejection to the requester's notification bell
-        event(new \App\Events\SystemDataUpdated('all'));
+        event(new SystemDataUpdated('all'));
 
         // Dynamic success message based on the status
         $message = $request->status === 'Approved' 

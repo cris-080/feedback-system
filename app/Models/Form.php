@@ -86,6 +86,39 @@ class Form extends Model
         }
     }
 
+    /**
+     * Local scope to handle archived form filtering.
+     */
+    public function scopeArchivedFiltered($query, array $filters)
+    {
+        $query->withTrashed()
+            ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
+            ->select('forms.*', 'department.department_name')
+            ->where(function($q) {
+                $q->where('forms.status', 'Archived')->orWhereNotNull('forms.deleted_at');
+            });
+
+        $query->when($filters['search'] ?? null, function ($q, $search) {
+            $like = '%' . trim($search) . '%';
+            $q->where(function ($sq) use ($like) {
+                $sq->where('forms.title', 'LIKE', $like)
+                  ->orWhere('forms.form_id', 'LIKE', $like)
+                  ->orWhere('department.department_name', 'LIKE', $like)
+                  ->orWhere('forms.deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(forms.deleted_at, '%b %e, %Y') LIKE ?", [$like])
+                  ->orWhereRaw("DATE_FORMAT(forms.created_at, '%b %e, %Y') LIKE ?", [$like]);
+            });
+        });
+
+        $query->when($filters['department'] ?? null, function ($q, $dept) {
+            if (strtolower($dept) === 'general') {
+                $q->whereNull('forms.department_id');
+            } else {
+                $q->where('department.department_name', $dept);
+            }
+        });
+    }
+
     // ==========================================================
     // FAT MODEL METHODS (For FormController)
     // ==========================================================
@@ -129,6 +162,17 @@ public static function getPaginatedActiveForms($filters, $perPage = 10)
         return self::with(['fields' => function($query) {
             $query->orderBy('step_number', 'asc')->orderBy('display_order', 'asc')->with('options');
         }])->findOrFail($id);
+    }
+
+    public function getDeploymentData(): array
+    {
+        $secureToken = \Illuminate\Support\Facades\Crypt::encryptString($this->form_id);
+        $baseUrl = url('/feedback?token=' . $secureToken);
+        
+        return [
+            'kiosk_link' => $baseUrl . '&kiosk=true',
+            'qr_image_url' => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2'
+        ];
     }
 
     public function getFormattedFields()

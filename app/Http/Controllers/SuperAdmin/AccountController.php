@@ -76,7 +76,7 @@ class AccountController extends Controller
                 }
             );
         } catch (\Exception $e) {
-            // Fallback for local testing if Mailtrap isn't running
+           
             return back()->with('success', "User created! (Email failed. Temp Password: {$temporaryPassword})");
         }
 
@@ -136,30 +136,19 @@ class AccountController extends Controller
         
         return back()->with('success', 'Account successfully archived.');
     }
-    /**
+   /**
      * SUSPEND / RESTORE ACCESS
      */
    public function suspend(Request $request, $id)
     {
         $user = Account::findOrFail($id);
         
-        if ($user->status === 'Suspended') {
-            $user->status = 'Active';
-            $user->suspension_reason = null; // Clear reason on restore
-        } else {
-            $user->status = 'Suspended';
-            $user->suspension_reason = $request->input('reason', 'Violation of system policies.');
-        }
-        
-        $user->save();
+        $action = $user->toggleSuspension($request->input('reason'));
 
-        // --- AUDIT TRAIL ---
-        $action = $user->status === 'Suspended' ? 'Suspended' : 'Restored';
-        $reasonLog = $user->status === 'Suspended' ? " Reason: {$user->suspension_reason}" : "";
+        $reasonLog = $action === 'Suspended' ? " Reason: {$user->suspension_reason}" : "";
         AuditLog::logAction($action, 'Accounts', "{$action} account access for {$user->email}.{$reasonLog}");
 
-        $actionWord = strtolower($action);
-        return redirect()->back()->with('success', "User access has been {$actionWord}.");
+        return redirect()->back()->with('success', "User access has been " . strtolower($action) . ".");
     }
 
     /**
@@ -169,13 +158,8 @@ class AccountController extends Controller
     {
         $user = Account::findOrFail($id);
         
-        // Set a secure, standard default password for the university system
-        $defaultPassword = 'Password123!';
-        
-        $user->password_hash = Hash::make($defaultPassword);
-        $user->save();
+        $user->resetToDefaultPassword();
 
-        // --- AUDIT TRAIL ---
         AuditLog::logAction('Updated', 'Accounts', "Force-reset password to default for {$user->email}.");
 
         return redirect()->back()->with('success', "Password successfully reset to the default system password.");
@@ -240,7 +224,7 @@ class AccountController extends Controller
         $request->validate(['password' => 'required|string|min:8|confirmed']);
 
         $user = Account::findOrFail($id);
-        $user->password_hash = \Illuminate\Support\Facades\Hash::make($request->password);
+        $user->password_hash = Hash::make($request->password);
         $user->save();
 
         return redirect()->route('login')->with('status', 'Password set successfully! You may now log in.');

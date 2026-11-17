@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\FeedbackCommittee;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\SuperAdmin\ReportController as SuperAdminReportController;
+use Illuminate\Support\Facades\Schema;
+use App\Services\ReportGenerationService;
+use App\Events\SystemDataUpdated;
 use Illuminate\Http\Request;
 use App\Models\Report;
 use App\Models\Department;
@@ -23,7 +27,7 @@ class ReportController extends Controller
 
         $query = Report::with(['department', 'generator']);
 
-        if (\Illuminate\Support\Facades\Schema::hasColumn('reports', 'deleted_at')) {
+        if (Schema::hasColumn('reports', 'deleted_at')) {
             $query->whereNull('deleted_at');
         }
 
@@ -67,9 +71,9 @@ class ReportController extends Controller
             'export_format' => 'pdf',
         ]);
 
-        app(\App\Http\Controllers\SuperAdmin\ReportController::class)->generate(
+        app(SuperAdminReportController::class)->generate(
             $request,
-            app(\App\Services\ReportGenerationService::class)
+            app(ReportGenerationService::class)
         );
 
         return redirect()->route('feedback_committee.reports.index', ['tab' => 'global'])
@@ -85,8 +89,8 @@ class ReportController extends Controller
 
         AuditLog::logAction('Approved', 'Committee Reports', "Approved departmental report: {$report->report_name}");
 
-        event(new \App\Events\SystemDataUpdated('focalperson', $report->department_id));
-        event(new \App\Events\SystemDataUpdated('superadmin', $report->department_id));
+        event(new SystemDataUpdated('focalperson', $report->department_id));
+        event(new SystemDataUpdated('superadmin', $report->department_id));
 
         return back()->with('success', 'Report has been officially approved.');
     }
@@ -106,7 +110,7 @@ class ReportController extends Controller
         $report->save();
 
         AuditLog::logAction('Returned', 'Committee Reports', "Returned report '{$report->report_name}' to Focal Person for revisions.");
-        event(new \App\Events\SystemDataUpdated('focalperson', $report->department_id));
+        event(new SystemDataUpdated('focalperson', $report->department_id));
 
         return back()->with('success', 'Report returned to Focal Person successfully.');
     }
@@ -131,6 +135,6 @@ class ReportController extends Controller
               ->orWhereIn('status', ['Submitted', 'Approved', 'Returned']);
         })->firstOrFail();
 
-        return app(\App\Http\Controllers\SuperAdmin\ReportController::class)->downloadPdf($request, $id);
+        return app(SuperAdminReportController::class)->downloadPdf($request, $id);
     }
 }

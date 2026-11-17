@@ -665,4 +665,167 @@ use Carbon\Carbon;
             DB::table('feedback')->whereIn('response_id', $ids)->update(['is_notified_committee' => true]);
         }
     }
+
+   /**
+     * Get paginated feedback datastore, handling search, sentiment filtering, 
+     * preset filters, department filtering, RBAC scoping, and JSON answer mapping.
+     */
+    public static function getPaginatedDatastore($user, array $filters, $perPage = 10)
+    {
+        $isSuperAdmin = $user->role === 'SuperAdmin';
+        $keyword = $filters['search'] ?? null;
+        $sentiment = $filters['sentiment'] ?? null;
+        $preset = $filters['preset'] ?? null;
+        $department = $filters['department'] ?? null;
+
+        $query = DB::table('feedback')
+            ->leftJoin('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
+            ->leftJoin('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
+            ->select(
+                'feedback.*',
+                DB::raw('COALESCE(department.department_name, "Unknown/Deleted Office") as department_name'),
+                'sentiment_analysis.sentiment',
+                'sentiment_analysis.confidence_score as sentiment_score'
+            );
+
+        if (!$isSuperAdmin) {
+            $query->where('forms.department_id', $user->department_id);
+        } elseif (!empty($department)) {
+            $query->where('department.department_name', $department);
+        }
+
+        if (!empty($keyword)) {
+            $trimmedKeyword = trim($keyword);
+            $like = '%' . $trimmedKeyword . '%';
+            $kwLower = strtolower($trimmedKeyword);
+
+            $query->where(function ($q) use ($like, $kwLower) {
+                $q->where('feedback.control_number', 'LIKE', $like)
+                  ->orWhere('feedback.response_id', 'LIKE', $like)
+                  ->orWhere('department.department_name', 'LIKE', $like)
+                  ->orWhere('feedback.submitted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(feedback.submitted_at, '%b %e, %Y %h:%i %p') LIKE ?", [$like])
+                  ->orWhereRaw("DATE_FORMAT(feedback.submitted_at, '%b %d, %Y') LIKE ?", [$like])
+                  ->orWhereRaw("DATE_FORMAT(feedback.submitted_at, '%M %e, %Y') LIKE ?", [$like])
+                  ->orWhere('sentiment_analysis.sentiment', 'LIKE', $like)
+                  ->orWhere('sentiment_analysis.confidence_score', 'LIKE', $like)
+                  ->orWhereExists(function ($sub) use ($like) {
+                      $sub->select(DB::raw(1))
+                          ->from('feedback_answers')
+                          ->whereColumn('feedback_answers.response_id', 'feedback.response_id')
+                          ->where('feedback_answers.answer_text', 'LIKE', $like);
+                  });
+
+                if (str_contains('pending analysis', $kwLower)) {
+                    $q->orWhereNull('sentiment_analysis.sentiment');
+                }
+
+                if (str_contains('reported', $kwLower) || str_contains('harassment', $kwLower)) {
+                    $q->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where('ff.field_label', 'LIKE', '%harassment%')
+                            ->where('ff.field_label', 'NOT LIKE', '%detail%')
+                            ->where('ff.field_label', 'NOT LIKE', '%if yes%')
+                            ->whereRaw("LOWER(TRIM(fa.answer_text)) = 'yes'");
+                    });
+                }
+
+                if ($kwLower === 'none') {
+                    $q->orWhereNotExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where('ff.field_label', 'LIKE', '%harassment%')
+                            ->where('ff.field_label', 'NOT LIKE', '%detail%')
+                            ->where('ff.field_label', 'NOT LIKE', '%if yes%')
+                            ->whereRaw("LOWER(TRIM(fa.answer_text)) = 'yes'");
+                    });
+                }
+            });
+        }
+
+        if (!empty($sentiment)) {
+            $query->where('sentiment_analysis.sentiment', $sentiment);
+        }
+
+        // Apply One-Click Preset Filters
+        if (!empty($preset)) {
+            switch ($preset) {
+                case 'harassment':
+                    $query->whereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where('ff.field_label', 'LIKE', '%harassment%')
+                            ->where('ff.field_label', 'NOT LIKE', '%detail%')
+                            ->where('ff.field_label', 'NOT LIKE', '%if yes%')
+                            ->whereRaw("LOWER(TRIM(fa.answer_text)) = 'yes'");
+                    });
+                    break;
+
+                case 'needs_attention':
+                    $query->whereIn('sentiment_analysis.sentiment', ['Negative', 'Mixed']);
+                    break;
+
+                case 'with_remarks':
+                    $query->whereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where(function ($q) {
+                                $q->where('ff.field_label', 'LIKE', '%Suggestions%')
+                                  ->orWhere('ff.field_label', 'LIKE', '%Comments%')
+                                  ->orWhere('ff.field_label', 'LIKE', '%Remarks%');
+                            })
+                            ->whereNotNull('fa.answer_text')
+                            ->whereRaw("TRIM(fa.answer_text) != ''")
+                            ->whereRaw("LOWER(TRIM(fa.answer_text)) NOT IN ('n/a', 'none', 'wala', 'no', '-')");
+                    });
+                    break;
+
+                case 'low_sqd':
+                    $query->whereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('feedback_answers as fa')
+                            ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
+                            ->whereColumn('fa.response_id', 'feedback.response_id')
+                            ->where('ff.field_label', 'LIKE', '%SQD%')
+                            ->where(function ($sq) {
+                                $sq->whereIn(DB::raw("LOWER(TRIM(fa.answer_text))"), ['1', '2', 'strongly disagree', 'disagree'])
+                                   ->orWhere('fa.answer_text', 'LIKE', '1%')
+                                   ->orWhere('fa.answer_text', 'LIKE', '2%');
+                            });
+                    });
+                    break;
+
+                case 'today':
+                    $query->whereDate('feedback.submitted_at', Carbon::today()->toDateString());
+                    break;
+            }
+        }
+
+        $feedbacks = $query->orderBy('feedback.submitted_at', 'desc')
+                           ->paginate($perPage)
+                           ->withQueryString();
+
+        $feedbacks->getCollection()->transform(function ($feedback) {
+            $answers = DB::table('feedback_answers')
+                ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+                ->where('feedback_answers.response_id', $feedback->response_id)
+                ->pluck('feedback_answers.answer_text', 'form_fields.field_label')
+                ->toArray();
+            
+            $feedback->answers = (object) $answers; 
+            return $feedback;
+        });
+
+        return $feedbacks;
+    }
 }

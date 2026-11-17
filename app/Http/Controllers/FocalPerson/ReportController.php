@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
+use App\Http\Controllers\SuperAdmin\ReportController as SuperAdminReportController;
+use App\Events\SystemDataUpdated;
 use App\Models\Report;
 use App\Models\Department;
 use App\Models\AuditLog;
 use App\Services\ReportGenerationService;
+use Illuminate\Support\Facades\Log;
 use App\Services\DocumentGenerationService;
 use Inertia\Inertia;
 
@@ -104,7 +107,7 @@ class ReportController extends Controller
             // Outsource document generation to the service!
             $this->documentService->compileDocuments($report);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error("Document pre-compile failed for Report {$report->id}: " . $e->getMessage());
+            Log::error("Document pre-compile failed for Report {$report->id}: " . $e->getMessage());
         }
 
         AuditLog::logAction('Created', 'Local Reports', "Generated new departmental report: {$report->report_data['metadata']['report_name']}");
@@ -126,8 +129,8 @@ class ReportController extends Controller
 
         AuditLog::logAction('Submitted', 'Local Reports', "Submitted report ID {$report->id} to the Feedback Committee.");
 
-        event(new \App\Events\SystemDataUpdated('feedbackcommittee', $report->department_id));
-        event(new \App\Events\SystemDataUpdated('superadmin', $report->department_id));
+        event(new SystemDataUpdated('feedbackcommittee', $report->department_id));
+        event(new SystemDataUpdated('superadmin', $report->department_id));
 
         return back()->with('success', 'Report successfully submitted to the Feedback Committee for review.');
     }
@@ -146,8 +149,8 @@ class ReportController extends Controller
 
         AuditLog::logAction('Recalled', 'Local Reports', "Recalled report ID {$report->id} from the Feedback Committee.");
 
-        event(new \App\Events\SystemDataUpdated('feedbackcommittee', $report->department_id));
-        event(new \App\Events\SystemDataUpdated('superadmin', $report->department_id));
+        event(new SystemDataUpdated('feedbackcommittee', $report->department_id));
+        event(new SystemDataUpdated('superadmin', $report->department_id));
 
         return back()->with('success', 'Report successfully recalled and reverted to a Draft.');
     }
@@ -174,7 +177,7 @@ class ReportController extends Controller
         $user = Auth::user();
         Report::where('id', $id)->where('department_id', $user->department_id)->firstOrFail();
         
-        return app(\App\Http\Controllers\SuperAdmin\ReportController::class)->downloadDocx($request, $id);
+        return app(SuperAdminReportController::class)->downloadDocx($request, $id);
     }
 
     public function downloadPdf(Request $request, $id)
@@ -182,6 +185,6 @@ class ReportController extends Controller
         $user = Auth::user();
         Report::where('id', $id)->where('department_id', $user->department_id)->firstOrFail();
         
-        return app(\App\Http\Controllers\SuperAdmin\ReportController::class)->downloadPdf($request, $id);
+        return app(SuperAdminReportController::class)->downloadPdf($request, $id);
     }
 }

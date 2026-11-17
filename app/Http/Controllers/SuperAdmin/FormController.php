@@ -74,32 +74,14 @@ class FormController extends Controller
 
     public function publish(Request $request, $id)
     {
-        $request->validate([
-            'department_id' => 'nullable|integer|exists:department,department_id'
-        ]);
+        $request->validate(['department_id' => 'nullable|integer|exists:department,department_id']);
         
         $form = Form::findOrFail($id);
         $targetDepartmentId = $request->input('department_id') ?? $form->department_id;
         
-        // Pass department ID to the publish handler
         $this->formService->publishForm($form, $targetDepartmentId);
 
-        // ENSURE INITIAL QR CODE EXISTS FOR THE DEPARTMENT
-        if ($targetDepartmentId) {
-            $existingQr = \App\Models\QrCode::where('department_id', $targetDepartmentId)->first();
-            if (!$existingQr) {
-                \App\Models\QrCode::create([
-                    'department_id' => $targetDepartmentId,
-                    'qr_token' => \Illuminate\Support\Str::random(40),
-                    'label' => 'Default Kiosk QR',
-                    'is_active' => 1,
-                    'expires_at' => now()->addMinutes(15)
-                ]);
-            }
-        }
-
-        // --- AUDIT TRAIL ---
-       AuditLog::logAction('Published', 'Forms', "Published {$form->form_type} form (ID: {$id}) and archived the previously active version.");
+        AuditLog::logAction('Published', 'Forms', "Published {$form->form_type} form (ID: {$id}) and archived the previously active version.");
 
         return back()->with('success', "Form published successfully! Previous active {$form->form_type} form for this department has been archived.");
     }
@@ -208,24 +190,10 @@ class FormController extends Controller
      */
     public function focalPersonIndex()
     {
-        $user = auth()->user();
-        $departmentId = $user->department_id;
+        $activeForm = Form::getActiveFormByDepartment(auth()->user()->department_id);
         
-        $activeForm = Form::getActiveFormByDepartment($departmentId);
-        $deploymentData = null;
-        
-        if ($activeForm) {
-            $secureToken =  Crypt::encryptString($activeForm->form_id);
-            $baseUrl = url('/feedback?token=' . $secureToken);
-            
-            $deploymentData = [
-                'kiosk_link' => $baseUrl . '&kiosk=true',
-                'qr_image_url' => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2'
-            ];
-        }
-
         return inertia('FocalPerson/FocalPersonForms', [
-            'deploymentData' => $deploymentData
+            'deploymentData' => $activeForm ? $activeForm->getDeploymentData() : null
         ]);
     }
 }

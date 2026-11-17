@@ -102,6 +102,25 @@ class Department extends Model
         }
     }
 
+    /**
+     * Local scope to handle archived department filtering.
+     */
+    public function scopeArchivedFiltered($query, array $filters)
+    {
+        $query->onlyTrashed();
+        
+        $query->when($filters['search'] ?? null, function ($q, $search) {
+            $like = '%' . trim($search) . '%';
+            $q->where(function ($sq) use ($like) {
+                $sq->where('department_name', 'LIKE', $like)
+                  ->orWhere('department_id', 'LIKE', $like)
+                  ->orWhere('deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(deleted_at, '%b %e, %Y') LIKE ?", [$like]);
+            });
+        });
+    }
+    
+
     // --- FAT MODEL METHODS (For Thin Controllers) ---
 
     /**

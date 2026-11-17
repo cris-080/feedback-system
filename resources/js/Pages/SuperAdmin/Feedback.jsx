@@ -4,7 +4,7 @@ import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
-export default function Feedback({ feedbacks, isSuperAdmin }) {
+export default function Feedback({ feedbacks, isSuperAdmin, uniqueDepartments = [] }) {
     // --- MODAL STATE ---
     const [selectedFeedback, setSelectedFeedback] = useState(null);
     const [animateModal, setAnimateModal] = useState(false);
@@ -13,8 +13,19 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
     const queryParams = new URLSearchParams(window.location.search);
     const [searchQuery, setSearchQuery] = useState(queryParams.get('search') || '');
     const [sentimentFilter, setSentimentFilter] = useState(queryParams.get('sentiment') || '');
+    const [presetFilter, setPresetFilter] = useState(queryParams.get('preset') || '');
+    const [departmentFilter, setDepartmentFilter] = useState(queryParams.get('department') || '');
     const isInitialRender = useRef(true);
-    const hasActiveFilters = !!sentimentFilter;
+    const hasActiveFilters = Boolean(sentimentFilter || departmentFilter);
+
+    const presetOptions = [
+        { id: '', label: 'All Feedback', icon: 'fa-solid fa-layer-group', activeClass: 'bg-[#1E6031] text-white border-[#1E6031] shadow-sm' },
+        { id: 'harassment', label: 'Harassment Alerts', icon: 'fa-solid fa-triangle-exclamation', activeClass: 'bg-red-600 text-white border-red-600 shadow-sm' },
+        { id: 'needs_attention', label: 'Needs Attention', icon: 'fa-solid fa-circle-exclamation', activeClass: 'bg-amber-600 text-white border-amber-600 shadow-sm' },
+        { id: 'low_sqd', label: 'Low SQD Score', icon: 'fa-solid fa-arrow-trend-down', activeClass: 'bg-orange-600 text-white border-orange-600 shadow-sm' },
+        { id: 'with_remarks', label: 'With Remarks', icon: 'fa-regular fa-comment-dots', activeClass: 'bg-blue-600 text-white border-blue-600 shadow-sm' },
+        { id: 'today', label: 'Submitted Today', icon: 'fa-regular fa-calendar-check', activeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-sm' },
+    ];
 
     useEffect(() => {
         if (isInitialRender.current) {
@@ -25,13 +36,15 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
             const params = {};
             if (searchQuery) params.search = searchQuery;
             if (sentimentFilter) params.sentiment = sentimentFilter;
+            if (presetFilter) params.preset = presetFilter;
+            if (departmentFilter) params.department = departmentFilter;
 
             router.get(window.location.pathname, params, { 
                 preserveState: true, preserveScroll: true, replace: true 
             });
         }, 300);
         return () => clearTimeout(timeout);
-    }, [searchQuery, sentimentFilter]);
+    }, [searchQuery, sentimentFilter, presetFilter, departmentFilter]);
 
     const openModal = (feedback) => {
         setSelectedFeedback(feedback);
@@ -165,45 +178,95 @@ export default function Feedback({ feedbacks, isSuperAdmin }) {
             <div className="p-8 bg-gray-50 min-h-screen">
                 <div className="max-w-7xl mx-auto space-y-6 pb-10">
                     
-                    {/* --- TOOLBAR WITH SEARCH & FILTER --- */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 gap-4">
-                     <SearchFilter 
-                            searchValue={searchQuery}
-                            onSearchChange={setSearchQuery}
-                            searchPlaceholder="Search date, requester, category, details, or status..."
-                            hasActiveFilters={hasActiveFilters}
-                            onFilterReset={() => setStatusFilter('')}
-                            filterTitle="Filter Requests"
-                        >
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Sentiment</label>
-                                <select 
-                                    className="block w-full py-2 px-3 border border-gray-300 rounded-md text-sm focus:ring-[#009639] focus:border-[#009639] bg-gray-50 hover:bg-white transition-colors cursor-pointer"
-                                    value={sentimentFilter}
-                                    onChange={(e) => setSentimentFilter(e.target.value)}
-                                >
-                                    <option value="">All Sentiments</option>
-                                    <option value="Positive">Positive</option>
-                                    <option value="Neutral">Neutral</option>
-                                    <option value="Mixed">Mixed</option>
-                                    <option value="Negative">Negative</option>
-                                </select>
-                            </div>
-                        </SearchFilter>
-
-                        {(searchQuery || sentimentFilter) && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSearchQuery('');
+                    {/* --- TOOLBAR WITH SEARCH, DROPDOWN FILTERS & PRESET PILLS --- */}
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <SearchFilter 
+                                searchValue={searchQuery}
+                                onSearchChange={setSearchQuery}
+                                searchPlaceholder="Search control no., office, date, sentiment, or answer..."
+                                hasActiveFilters={hasActiveFilters}
+                                onFilterReset={() => {
                                     setSentimentFilter('');
+                                    setDepartmentFilter('');
                                 }}
-                                className="px-3.5 py-2 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition"
+                                filterTitle="Filter Feedback"
                             >
-                                <i className="fa-solid fa-filter-circle-xmark mr-1.5"></i>
-                                Clear Feedback Filter
-                            </button>
-                        )}
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Sentiment</label>
+                                        <select 
+                                            className="block w-full py-2 px-3 border border-gray-300 rounded-md text-sm focus:ring-[#009639] focus:border-[#009639] bg-gray-50 hover:bg-white transition-colors cursor-pointer"
+                                            value={sentimentFilter}
+                                            onChange={(e) => setSentimentFilter(e.target.value)}
+                                        >
+                                            <option value="">All Sentiments</option>
+                                            <option value="Positive">Positive</option>
+                                            <option value="Neutral">Neutral</option>
+                                            <option value="Mixed">Mixed</option>
+                                            <option value="Negative">Negative</option>
+                                        </select>
+                                    </div>
+
+                                    {isSuperAdmin && uniqueDepartments?.length > 0 && (
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Department / Office</label>
+                                            <select 
+                                                className="block w-full py-2 px-3 border border-gray-300 rounded-md text-sm focus:ring-[#009639] focus:border-[#009639] bg-gray-50 hover:bg-white transition-colors cursor-pointer"
+                                                value={departmentFilter}
+                                                onChange={(e) => setDepartmentFilter(e.target.value)}
+                                            >
+                                                <option value="">All Offices</option>
+                                                {uniqueDepartments.map((dept, idx) => (
+                                                    <option key={idx} value={dept}>{dept}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            </SearchFilter>
+
+                            {(searchQuery || sentimentFilter || presetFilter || departmentFilter) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSearchQuery('');
+                                        setSentimentFilter('');
+                                        setPresetFilter('');
+                                        setDepartmentFilter('');
+                                    }}
+                                    className="px-3.5 py-2 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition shrink-0"
+                                >
+                                    <i className="fa-solid fa-filter-circle-xmark mr-1.5"></i>
+                                    Clear All Filters
+                                </button>
+                            )}
+                        </div>
+
+                        {/* One-Click Preset Filter Pills */}
+                        <div className="flex items-center gap-2 overflow-x-auto pt-3 border-t border-gray-100 pb-1">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mr-1 shrink-0">
+                                Quick View:
+                            </span>
+                            {presetOptions.map((preset) => {
+                                const isActive = presetFilter === preset.id;
+                                return (
+                                    <button
+                                        key={preset.id || 'all'}
+                                        type="button"
+                                        onClick={() => setPresetFilter(preset.id)}
+                                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shrink-0 ${
+                                            isActive
+                                                ? preset.activeClass
+                                                : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 hover:text-gray-900'
+                                        }`}
+                                    >
+                                        <i className={preset.icon}></i>
+                                        <span>{preset.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Data Table Section */}

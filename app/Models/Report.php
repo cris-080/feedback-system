@@ -183,4 +183,26 @@ class Report extends Model
 
         return $this->save();
     }
+
+    /**
+     * Local scope to handle archived report filtering.
+     */
+    public function scopeArchivedFiltered($query, array $filters)
+    {
+        $query->with('department')
+              ->where('report_data->metadata->is_deleted', true);
+
+        $query->when($filters['search'] ?? null, function ($q, $search) {
+            $like = '%' . trim($search) . '%';
+            $q->where(function ($sq) use ($like) {
+                $sq->where('report_name', 'LIKE', $like)
+                  ->orWhere('report_type', 'LIKE', $like)
+                  ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(report_data, '$.metadata.deleted_at')) LIKE ?", [$like])
+                  ->orWhereHas('department', function ($dq) use ($like) {
+                      $dq->where('department_name', 'LIKE', $like);
+                  });
+            });
+        });
+    }
+
 }

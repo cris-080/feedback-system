@@ -86,6 +86,27 @@ class Account extends Authenticatable
             });
     }
 
+    /**
+     * Local scope to handle archived account filtering.
+     */
+    public function scopeArchivedFiltered($query, array $filters)
+    {
+        $query->onlyTrashed();
+        
+        $query->when($filters['search'] ?? null, function ($q, $search) {
+            $like = '%' . trim($search) . '%';
+            $q->where(function ($sq) use ($like) {
+                $sq->where('firstname', 'LIKE', $like)
+                  ->orWhere('lastname', 'LIKE', $like)
+                  ->orWhereRaw("CONCAT(firstname, ' ', lastname) LIKE ?", [$like])
+                  ->orWhere('email', 'LIKE', $like)
+                  ->orWhere('role', 'LIKE', $like)
+                  ->orWhere('deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(deleted_at, '%b %e, %Y') LIKE ?", [$like]);
+            });
+        });
+    }
+
     // --- FAT MODEL METHODS ---
 
     public static function getPaginatedManagedUsers(array $filters, int $perPage = 10)
@@ -158,6 +179,28 @@ class Account extends Authenticatable
         }
 
         return $updated;
+    }
+
+   public function toggleSuspension(?string $reason = null): string
+    {
+        if ($this->status === 'Suspended') {
+            $this->status = 'Active';
+            $this->suspension_reason = null;
+            $action = 'Restored';
+        } else {
+            $this->status = 'Suspended';
+            $this->suspension_reason = $reason ?? 'Violation of system policies.';
+            $action = 'Suspended';
+        }
+        $this->save();
+        
+        return $action;
+    }
+
+    public function resetToDefaultPassword(): void
+    {
+        $this->password_hash = Hash::make('Password123!');
+        $this->save();
     }
 
     public function deleteUser(): ?bool

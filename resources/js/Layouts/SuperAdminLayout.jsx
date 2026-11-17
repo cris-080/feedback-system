@@ -430,6 +430,13 @@ return (
                                 text={"Forms"} 
                                 active={route().current('superadmin.forms.*')} 
                             />
+
+                            <NavLink 
+                                href={route('superadmin.users.index')} 
+                                icon="fa-solid fa-users-gear" 
+                                text={"Accounts"} 
+                                active={route().current('superadmin.users.*')} 
+                            />
                         </div>
                     )}
 
