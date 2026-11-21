@@ -16,18 +16,21 @@ class ReportGenerationService
     public function generateGlobalSnapshot(array $validated): ?Report
     {
         $targetId = $validated['department_id'];
-        
+        $dateExpr = \Illuminate\Support\Facades\Schema::hasColumn('feedback', 'created_at')
+            ? 'DATE(COALESCE(feedback.submitted_at, feedback.created_at))'
+            : 'DATE(feedback.submitted_at)';
+
         $query = DB::table('feedback')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
-            ->whereBetween(DB::raw('DATE(feedback.submitted_at)'), [$validated['start_date'], $validated['end_date']])
+            ->whereBetween(DB::raw($dateExpr), [$validated['start_date'], $validated['end_date']])
             ->where('feedback.status', 'Valid');
 
         if ($targetId === 'all_non_cc') {
-            $query->where('department.classification', 'Non-CC');
+            $query->whereRaw("LOWER(TRIM(COALESCE(department.classification, ''))) IN ('non-cc', 'non_cc', 'noncc')");
             $departmentName = 'University-Wide Summary (Non-CC)';
         } elseif ($targetId === 'all_cc') {
-            $query->where('department.classification', 'CC');
+            $query->whereRaw("LOWER(TRIM(COALESCE(department.classification, ''))) = 'cc'");
             $departmentName = 'University-Wide Summary (With CC)';
         } else {
             return null; // Safety catch
@@ -42,11 +45,14 @@ class ReportGenerationService
     public function generateLocalSnapshot(array $validated): ?Report
     {
         $targetId = (int) $validated['department_id'];
-        
+        $dateExpr = \Illuminate\Support\Facades\Schema::hasColumn('feedback', 'created_at')
+            ? 'DATE(COALESCE(feedback.submitted_at, feedback.created_at))'
+            : 'DATE(feedback.submitted_at)';
+
         $query = DB::table('feedback')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
-            ->whereBetween(DB::raw('DATE(feedback.submitted_at)'), [$validated['start_date'], $validated['end_date']])
+            ->whereBetween(DB::raw($dateExpr), [$validated['start_date'], $validated['end_date']])
             ->where('feedback.status', 'Valid')
             ->where('forms.department_id', $targetId);
 
@@ -166,25 +172,58 @@ class ReportGenerationService
                 'cc2' => $this->calculateFrequencies($collection, 'cc2', $totalRespondents),
                 'cc3' => $this->calculateFrequencies($collection, 'cc3', $totalRespondents),
             ];
-            
-            $cc1Valid = $totalRespondents - ($ccMetrics['cc1']['N/A']['count'] ?? 0);
-            $cc2Valid = $totalRespondents - ($ccMetrics['cc2']['5. N/A']['count'] ?? 0) - ($ccMetrics['cc2']['N/A']['count'] ?? 0);
-            $cc3Valid = $totalRespondents - ($ccMetrics['cc3']['N/A']['count'] ?? 0);
 
-            $cc1Aware = ($ccMetrics['cc1']['1. I know what a CC is and I saw this office’s CC.']['count'] ?? 0) + 
-                        ($ccMetrics['cc1']['2. I know what a CC is but I did NOT see this office’s CC.']['count'] ?? 0) + 
-                        ($ccMetrics['cc1']['3. I learned of the CC only when I saw this office’s CC.']['count'] ?? 0);
-                        
-            $cc2Visible = ($ccMetrics['cc2']['1. Easy to see']['count'] ?? 0) + 
-                          ($ccMetrics['cc2']['2. Somewhat easy to see']['count'] ?? 0) + 
-                          ($ccMetrics['cc2']['Easy to see']['count'] ?? 0) + 
-                          ($ccMetrics['cc2']['Somewhat easy to see']['count'] ?? 0);
+            $cc1Valid = 0; $cc1Aware = 0;
+            foreach ($ccMetrics['cc1'] as $label => $stats) {
+                $lbl = strtolower(trim((string) $label));
+                $cnt = (int) ($stats['count'] ?? 0);
+                if (in_array($lbl, ['n/a', 'na', ''], true)) {
+                    continue;
+                }
+                $cc1Valid += $cnt;
+                if (
+                    str_starts_with($lbl, '1') || str_starts_with($lbl, '2') || str_starts_with($lbl, '3')
+                    || (str_contains($lbl, 'know what a cc') && !str_contains($lbl, 'do not know') && !str_contains($lbl, 'not know'))
+                    || str_contains($lbl, 'learned of the cc')
+                ) {
+                    $cc1Aware += $cnt;
+                }
+            }
 
-            $cc3Helpful = ($ccMetrics['cc3']['Helped very much']['count'] ?? 0) + 
-                          ($ccMetrics['cc3']['Somewhat helped']['count'] ?? 0);
+            $cc2Valid = 0; $cc2Visible = 0;
+            foreach ($ccMetrics['cc2'] as $label => $stats) {
+                $lbl = strtolower(trim((string) $label));
+                $cnt = (int) ($stats['count'] ?? 0);
+                if (in_array($lbl, ['n/a', 'na', '5. n/a', ''], true) || str_contains($lbl, 'n/a')) {
+                    continue;
+                }
+                $cc2Valid += $cnt;
+                if (
+                    str_starts_with($lbl, '1') || str_starts_with($lbl, '2')
+                    || str_contains($lbl, 'easy to see')
+                ) {
+                    $cc2Visible += $cnt;
+                }
+            }
+
+            $cc3Valid = 0; $cc3Helpful = 0;
+            foreach ($ccMetrics['cc3'] as $label => $stats) {
+                $lbl = strtolower(trim((string) $label));
+                $cnt = (int) ($stats['count'] ?? 0);
+                if (in_array($lbl, ['n/a', 'na', '4. n/a', ''], true) || str_contains($lbl, 'n/a')) {
+                    continue;
+                }
+                $cc3Valid += $cnt;
+                if (
+                    str_starts_with($lbl, '1') || str_starts_with($lbl, '2')
+                    || str_contains($lbl, 'helped very much') || str_contains($lbl, 'somewhat helped')
+                ) {
+                    $cc3Helpful += $cnt;
+                }
+            }
 
             $ccFormulas = [
-                'cc1_aware' => $cc1Valid > 0 ? round(($cc1Aware / $cc1Valid) * 100, 2) : 0,
+                'cc1_aware'   => $cc1Valid > 0 ? round(($cc1Aware / $cc1Valid) * 100, 2) : 0,
                 'cc2_visible' => $cc2Valid > 0 ? round(($cc2Visible / $cc2Valid) * 100, 2) : 0,
                 'cc3_helpful' => $cc3Valid > 0 ? round(($cc3Helpful / $cc3Valid) * 100, 2) : 0,
             ];

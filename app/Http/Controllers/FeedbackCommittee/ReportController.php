@@ -55,6 +55,7 @@ class ReportController extends Controller
         ]);
 
         $hasData = Report::whereNotNull('department_id')
+            ->where('report_type', $validated['report_type'])
             ->whereIn('status', ['Submitted', 'Approved', 'Returned'])
             ->where(function($q) use ($validated) {
                 $q->whereBetween('start_date', [$validated['start_date'], $validated['end_date']])
@@ -63,7 +64,7 @@ class ReportController extends Controller
             ->exists();
 
         if (!$hasData) {
-            return back()->with('error', 'Cannot compile overall report: No submitted departmental reports found for the selected period.');
+            return back()->with('error', 'Cannot compile overall report: No submitted ' . strtoupper($validated['report_type']) . ' departmental reports found for the selected period.');
         }
 
         $request->merge([
@@ -71,10 +72,14 @@ class ReportController extends Controller
             'export_format' => 'pdf',
         ]);
 
-        app(SuperAdminReportController::class)->generate(
+        $response = app(SuperAdminReportController::class)->generate(
             $request,
             app(ReportGenerationService::class)
         );
+
+        if ($response instanceof \Illuminate\Http\RedirectResponse && $response->getSession()?->has('error')) {
+            return $response;
+        }
 
         return redirect()->route('feedback_committee.reports.index', ['tab' => 'global'])
             ->with('success', 'Global University-Wide report compiled and saved.');

@@ -158,18 +158,7 @@ class ReportController extends Controller
 
     public function downloadDocx(Request $request, $id)
     {
-        $report = Report::findOrFail($id);
-        $docxPath = storage_path('app/reports/' . $report->id . '.docx');
-
-        if (!file_exists($docxPath)) {
-            $docxPath = $this->documentService->generateFilledDocx($report);
-            if (!$docxPath) {
-                return back()->with('error', 'Word template missing from storage directory.');
-            }
-        }
-
-        $baseTitle = $report->report_data['metadata']['report_name'] ?? "CSM_Report_{$report->report_data['metadata']['department']}_{$report->report_data['metadata']['period']}";
-        return response()->download($docxPath, preg_replace('/[^A-Za-z0-9_\-]/', '_', $baseTitle) . '.docx');
+        return $this->downloadPdf($request, $id);
     }
 
     public function downloadPdf(Request $request, $id)
@@ -178,10 +167,21 @@ class ReportController extends Controller
         $pdfPath = storage_path('app/reports/' . $report->id . '.pdf');
 
         if (!file_exists($pdfPath) || filesize($pdfPath) === 0) {
-            return back()->with('error', 'PDF not found. Please try generating the report again or download the DOCX version.');
+            try {
+                $pdfPath = $this->documentService->generatePdf($report);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("On-demand PDF generation failed for Report {$report->id}: " . $e->getMessage());
+                return back()->with('error', 'Failed to generate PDF report. Please check the application logs.');
+            }
         }
 
-        $baseTitle = $report->report_data['metadata']['report_name'] ?? "CSM_Report_{$report->report_data['metadata']['department']}_{$report->report_data['metadata']['period']}";
+        if (!file_exists($pdfPath) || filesize($pdfPath) === 0) {
+            return back()->with('error', 'PDF could not be generated. Please try again.');
+        }
+
+        $baseTitle = $report->report_data['metadata']['report_name']
+            ?? "CSM_Report_{$report->report_data['metadata']['department']}_{$report->report_data['metadata']['period']}";
+
         return response()->download($pdfPath, preg_replace('/[^A-Za-z0-9_\-]/', '_', $baseTitle) . '.pdf');
     }
 

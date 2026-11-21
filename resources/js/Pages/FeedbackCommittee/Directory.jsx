@@ -34,40 +34,24 @@ export default function Directory({ focalPersons, filters }) {
 
             <div className="max-w-7xl mx-auto space-y-6">
                 
-                {/* Header Card */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3.5">
-                            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shadow-inner border border-blue-100">
-                                <i className="fa-solid fa-address-book"></i>
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900">Focal Person Roster</h2>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                    Official directory of assigned departmental representatives.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
+                
                 {/* Directory Workspace */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                     
                     {/* Toolbar */}
                     <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-2 mr-auto">
-                            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold border border-blue-200">
-                                {focalPersons?.total || 0} Registered
-                            </span>
-                        </div>
-                        
-                        <div className="w-full sm:w-auto flex-shrink-0">
+                        <div className="w-full sm:w-auto flex-shrink-0 mr-auto">
                             <SearchFilter 
                                 searchValue={searchQuery}
                                 onSearchChange={setSearchQuery}
                                 searchPlaceholder="Search names, emails, or offices..."
                             />
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold border border-blue-200">
+                                {focalPersons?.total || 0} Registered
+                            </span>
                         </div>
                     </div>
 
