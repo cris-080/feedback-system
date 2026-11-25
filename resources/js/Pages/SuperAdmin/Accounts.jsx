@@ -323,6 +323,7 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                                     onChange={(e) => setRoleFilter(e.target.value)}
                                                 >
                                                     <option value="">All Roles</option>
+                                                    <option value="SuperAdmin">SuperAdmin</option>
                                                     <option value="Feedback Committee">Feedback Committee</option>
                                                     <option value="Focal Person">Focal Person</option>
                                                 </select>
@@ -693,13 +694,11 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                 required
                             >
                                 <option value="" disabled>-- Select a Role --</option>
-                                {roles
-                                    .filter((role) => role.role_name !== 'SuperAdmin')
-                                    .map((role) => (
-                                        <option key={role.role_id} value={role.role_name}>
-                                            {role.role_name}
-                                        </option>
-                                    ))}
+                                {roles.map((role) => (
+                                    <option key={role.role_id} value={role.role_name}>
+                                        {role.role_name}
+                                    </option>
+                                ))}
                             </select>
                             {errors.role && <div className="text-red-500 text-xs mt-1 font-semibold">{errors.role}</div>}
                         </div>

@@ -22,7 +22,7 @@ export default function FormBuilder({ departments, departmentServices, departmen
             };
         });
 
-    const { data, setData, post, processing } = useForm({
+    const { data, setData, post, processing, transform } = useForm({
         header_1: 'Republic of the Philippines',
         header_2: 'CENTRAL LUZON STATE UNIVERSITY',
         header_3: 'Science City of Muñoz, Nueva Ecija',
@@ -191,11 +191,13 @@ export default function FormBuilder({ departments, departmentServices, departmen
 
     const submitForm = (e) => {
         e.preventDefault();
-        const finalData = { ...data };
-        if (finalData.form_type === 'Non-CC') {
-            finalData.fields = finalData.fields.filter(f => f.step_number !== 2);
-        }
-        post(route('superadmin.forms.store'), finalData); 
+        transform((currentData) => ({
+            ...currentData,
+            fields: currentData.form_type === 'Non-CC'
+                ? currentData.fields.filter(f => f.step_number !== 2)
+                : currentData.fields,
+        }));
+        post(route('superadmin.forms.store'));
     };
 
     const { flash } = usePage().props;
@@ -226,31 +228,22 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                 </select>
                             </div>
                             <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Form Type &amp; Title</label>
+                                <select className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 font-semibold" 
+                                    value={data.title} onChange={e => { setData('title', e.target.value); setData('form_type', e.target.value.includes('CHARTER') ? 'CC' : 'Non-CC'); }} required>
+                                    <option value="CITIZEN'S CHARTER FEEDBACK FORM">CITIZEN'S CHARTER FEEDBACK FORM (CC)</option>
+                                    <option value="FEEDBACK FORM">FEEDBACK FORM (Non-CC)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Landing Page Tagline</label>
+                                <input type="text" className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 uppercase"
+                                    value={data.tagline} onChange={e => setData('tagline', e.target.value)} placeholder="HELP US SERVE YOU BETTER!" />
+                            </div>
+                            <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">Form Description (Optional)</label>
                                 <textarea className="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" rows="1"
                                     value={data.description} onChange={e => setData('description', e.target.value)}></textarea>
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-8 rounded-lg border-2 border-gray-300 mb-8 shadow-sm relative">
-                            <div className="absolute top-0 left-0 bg-gray-200 text-gray-600 px-3 py-1 text-xs font-bold rounded-br-lg">
-                                <i className="fa-solid fa-eye mr-1"></i> Live Header Preview
-                            </div>
-                            <div className="flex flex-col items-center text-center space-y-1 mt-4">
-                                <input type="text" className="w-full max-w-md border-transparent hover:border-gray-300 focus:border-blue-500 rounded-md text-sm text-center focus:ring-0 p-1" value={data.header_1} onChange={e => setData('header_1', e.target.value)} />
-                                <input type="text" className="w-full max-w-md border-transparent hover:border-gray-300 focus:border-blue-500 rounded-md font-bold text-base text-center focus:ring-0 p-1 uppercase" value={data.header_2} onChange={e => setData('header_2', e.target.value)} />
-                                <input type="text" className="w-full max-w-md border-transparent hover:border-gray-300 focus:border-blue-500 rounded-md text-sm text-center focus:ring-0 p-1" value={data.header_3} onChange={e => setData('header_3', e.target.value)} />
-                                <div className="pt-4 pb-2 font-semibold text-gray-800 uppercase tracking-wide">({selectedDepartmentName})</div>
-                                <div className="pt-4 w-full max-w-lg">
-                                    <select className="w-full border-2 border-blue-400 bg-blue-50 rounded-md shadow-sm focus:ring-blue-600 focus:border-blue-600 text-center font-bold text-xl uppercase py-2 cursor-pointer" 
-                                        value={data.title} onChange={e => { setData('title', e.target.value); setData('form_type', e.target.value.includes('CHARTER') ? 'CC' : 'Non-CC'); }} required>
-                                        <option value="CITIZEN'S CHARTER FEEDBACK FORM">CITIZEN'S CHARTER FEEDBACK FORM</option>
-                                        <option value="FEEDBACK FORM">FEEDBACK FORM</option>
-                                    </select>
-                                </div>
-                                <div className="pt-4 w-full max-w-md">
-                                    <input type="text" className="w-full border-transparent hover:border-gray-300 focus:border-blue-500 rounded-md font-bold text-sm text-center text-gray-700 focus:ring-0 p-1 uppercase tracking-widest" value={data.tagline} onChange={e => setData('tagline', e.target.value)} />
-                                </div>
                             </div>
                         </div>
 
@@ -265,9 +258,15 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                     <h3 className="text-lg font-bold text-blue-700 border-b pb-3 mb-6">{getStepTitle(step)}</h3>
                                     
                                     {step === 1 && (
-                                        <div className="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-md">
-                                            <label className="block text-sm font-bold text-blue-800 mb-2"><i className="fa-solid fa-circle-info mr-1"></i> Step 1 Instructions</label>
-                                            <textarea className="w-full border-blue-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-700" rows="3" value={data.step_1_instruction} onChange={e => setData('step_1_instruction', e.target.value)}></textarea>
+                                        <div className="mb-6 space-y-3">
+                                            <div className="bg-blue-50 border border-blue-200 p-4 rounded-md">
+                                                <label className="block text-sm font-bold text-blue-800 mb-2"><i className="fa-solid fa-circle-info mr-1"></i> Step 1 Instructions</label>
+                                                <textarea className="w-full border-blue-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm text-gray-700" rows="3" value={data.step_1_instruction} onChange={e => setData('step_1_instruction', e.target.value)}></textarea>
+                                            </div>
+                                            <div className="bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-md text-xs text-emerald-800">
+                                                <i className="fa-solid fa-lock mr-1.5"></i>
+                                                <strong>Built-in Step 1 Fields:</strong> <em>Email Address</em> and <em>Date of Transaction</em> are automatically included on the live form—no need to add them below.
+                                            </div>
                                         </div>
                                     )}
 
@@ -285,10 +284,10 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                         const isSystemManaged = [
                                             'Name of Office/Department', 'Service Availed', 
                                             'Name of Service Provider', 'Position of Service Provider'
-                                        ].includes(normalizedLabel);
+                                        ].includes(normalizedLabel) || normalizedLabel.toLowerCase().includes('service availed');
                                         
                                         const isLocked = isSystemManaged && !unlockedFields.includes(field.field_id); 
-                                        const requiresOptions = ['dropdown', 'radio', 'multiselect'].includes(field.input_type);
+                                        const requiresOptions = ['dropdown', 'radio', 'radio_card', 'multiselect'].includes(field.input_type);
 
                                         return (
                                             <div key={`field-${step}-${field.field_id}-${index}`} className={`p-5 mb-5 rounded-md border ${isLocked ? 'bg-gray-100 border-gray-300 border-l-4 border-l-gray-500' : 'bg-gray-50 border-gray-200 border-l-4 border-l-blue-500'} relative`}>
@@ -326,6 +325,7 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                                             <option value="dropdown">Dropdown Menu</option>
                                                             <option value="radio">Normal Radio Buttons</option>
                                                             <option value="radio_card">Card/Chip Options</option>
+                                                            <option value="star_rating">Star Rating (1–5)</option>
                                                             <option value="multiselect">Multi-Select</option>
                                                         </select>
                                                     </div>
@@ -398,7 +398,7 @@ export default function FormBuilder({ departments, departmentServices, departmen
                                 {processing ? (
                                     <><i className="fa-solid fa-spinner fa-spin mr-2"></i> Publishing...</>
                                 ) : (
-                                    <><i className="fa-solid fa-paper-plane mr-2"></i> Publish Form</>
+                                    <><i className="fa-solid fa-paper-plane mr-2"></i> Create Form</>
                                 )}
                             </button>
                         </div>

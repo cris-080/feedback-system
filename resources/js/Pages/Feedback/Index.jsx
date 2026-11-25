@@ -78,14 +78,29 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders =
             return false;
         }
 
+        const stepFourFields = steps[4] || [];
+        const harassmentField = stepFourFields.find(
+            f => f.field_label.toLowerCase().includes('harassment') && !f.field_label.toLowerCase().includes('detail')
+        );
+        const showHarassmentDetails = Boolean(
+            harassmentField && data.answers[harassmentField.field_id]?.toUpperCase() === 'YES'
+        );
+
         for (const stepKey in steps) {
             // If it's a non-CC form, skip checking CC questions (step 2)
             if (!isCC && parseInt(stepKey) === 2) continue;
 
             for (const field of steps[stepKey]) {
-                if (field.field_label === 'Name of Office/Department') continue;
+                const normalizedLabel = field.field_label.trim().replace(/:$/, '');
+                if (normalizedLabel === 'Name of Office/Department') continue;
 
-                if (field.is_required) {
+                const isHarassmentDetails =
+                    parseInt(stepKey) === 4 &&
+                    (field.field_label.toLowerCase().includes('if yes') || field.field_label.toLowerCase().includes('detail'));
+
+                if (isHarassmentDetails && !showHarassmentDetails) continue;
+
+                if (field.is_required || isHarassmentDetails) {
                     const answer = data.answers[field.field_id];
                     const isEmptyArray = Array.isArray(answer) && answer.length === 0;
                     
@@ -272,7 +287,7 @@ export default function FeedbackIndex({ form, departmentName, serviceProviders =
                         <div>
                             <span className="text-lg sm:text-xl font-black tracking-wide text-white">CLSU <span className="text-[#FFD700]">FMS</span></span>
                             <span className="hidden sm:inline-block text-white/50 mx-2.5 text-sm">|</span>
-                            <span className="text-sm sm:text-base text-white/90 font-medium">Client Satisfaction Measurement</span>
+                            <span className="text-sm sm:text-base text-white/90 font-medium">{form.title || 'Client Satisfaction Measurement'}</span>
                         </div>
                     </div>
                     <div className="flex items-center gap-3 self-end sm:self-auto">
