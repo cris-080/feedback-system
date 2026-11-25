@@ -5,7 +5,7 @@ use App\Http\Controllers\FeedbackCommittee\FeedbackCommitteeRequestController;
 use App\Http\Controllers\SuperAdmin\FormController;
 use App\Http\Controllers\SuperAdmin\DepartmentController;
 use App\Http\Controllers\FeedbackCommittee\ReportController;
-use App\Http\Controllers\FeedbackCommittee\DashboardController;
+use App\Http\Controllers\SuperAdmin\DashboardController;
 use App\Http\Controllers\FeedbackCommittee\ArchiveController;
 use App\Http\Controllers\FeedbackCommittee\DirectoryController;
 use App\Http\Controllers\SuperAdmin\FeedbackController;

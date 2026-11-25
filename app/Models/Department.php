@@ -164,8 +164,9 @@ class Department extends Model
         if (!empty($data['initial_services']) && is_array($data['initial_services'])) {
             $serviceData = [];
             foreach ($data['initial_services'] as $service) {
-                if (!empty(trim($service['name']))) {
-                    $serviceData[] = ['department_id' => $department->department_id, 'service_name' => trim($service['name'])];
+                $serviceName = trim((string) ($service['name'] ?? ''));
+                if ($serviceName !== '') {
+                    $serviceData[] = ['department_id' => $department->department_id, 'service_name' => $serviceName];
                 }
             }
             if (!empty($serviceData)) {
@@ -177,8 +178,9 @@ class Department extends Model
         if (!empty($data['initial_positions']) && is_array($data['initial_positions'])) {
             $positionData = [];
             foreach ($data['initial_positions'] as $position) {
-                if (!empty(trim($position['name']))) {
-                    $positionData[] = ['department_id' => $department->department_id, 'position_name' => trim($position['name'])];
+                $positionName = trim((string) ($position['name'] ?? ''));
+                if ($positionName !== '') {
+                    $positionData[] = ['department_id' => $department->department_id, 'position_name' => $positionName];
                 }
             }
             if (!empty($positionData)) {
@@ -190,11 +192,13 @@ class Department extends Model
         if (!empty($data['initial_providers']) && is_array($data['initial_providers'])) {
             $providerData = [];
             foreach ($data['initial_providers'] as $provider) {
-                if (!empty(trim($provider['name']))) {
+                $providerName = trim((string) ($provider['name'] ?? ''));
+                $providerPosition = trim((string) ($provider['position'] ?? ''));
+                if ($providerName !== '') {
                     $providerData[] = [
-                        'department_id' => $department->department_id, 
-                        'name'          => trim($provider['name']), 
-                        'position'      => !empty(trim($provider['position'])) ? trim($provider['position']) : null
+                        'department_id' => $department->department_id,
+                        'name'          => $providerName,
+                        'position'      => $providerPosition !== '' ? $providerPosition : null,
                     ];
                 }
             }

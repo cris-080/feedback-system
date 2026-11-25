@@ -10,8 +10,21 @@
             <p><strong>Attention: Feedback Committee & Focal Person</strong></p>
             <p>A respondent has formally indicated that they experienced harassment during a transaction. Please review this immediately in the FMS Dashboard.</p>
             
+            @php
+                $providerPlaceholders = ['i do not know', "i don't know", 'unknown', 'n/a', 'na', 'none', 'wala', 'nothing'];
+                $providerName = trim((string) ($details['service_provider'] ?? ''));
+                $hasNamedProvider = $providerName !== '' && !in_array(strtolower($providerName), $providerPlaceholders, true);
+                $providerPosition = trim((string) ($details['service_provider_position'] ?? ''));
+                $hasPosition = $providerPosition !== '' && !in_array(strtolower($providerPosition), $providerPlaceholders, true);
+            @endphp
+
             <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0;">
                 <p style="margin: 0 0 10px 0;"><strong>Department/Office:</strong> {{ $details['department_name'] }}</p>
+                @if($hasNamedProvider)
+                    <p style="margin: 0 0 10px 0;">
+                        <strong>Reported Service Provider:</strong> {{ $providerName }}@if($hasPosition) ({{ $providerPosition }})@endif
+                    </p>
+                @endif
                 <p style="margin: 0 0 10px 0;"><strong>Transaction Date:</strong> {{ \Carbon\Carbon::parse($details['transaction_date'])->format('F j, Y') }}</p>
                 <p style="margin: 0;"><strong>Provided Details/Narrative:</strong></p>
                 <p style="margin: 5px 0 0 0; font-style: italic; color: #555;">"{{ $details['harassment_details'] }}"</p>

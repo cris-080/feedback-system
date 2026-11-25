@@ -111,9 +111,10 @@ class DashboardController extends Controller
                 $secureToken = Crypt::encryptString($activeForm->form_id);
                 $baseUrl = url('/feedback?token=' . $secureToken);
                 
-                $deploymentData = [
-                    'kiosk_link'   => $baseUrl . '&kiosk=true',
-                    'qr_image_url' => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2'
+               $deploymentData = [
+                    'kiosk_link'      => $baseUrl . '&kiosk=true',
+                    'qr_image_url'    => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2',
+                    'qr_fallback_url' => Form::generateLocalQrDataUri($baseUrl, 300),
                 ];
             }
         }
@@ -178,16 +179,54 @@ class DashboardController extends Controller
             ->limit(10)
             ->get();
 
-        // 4b. Fetch Dynamic Top 10 Service Providers
+        // 4b. Fetch Dynamic Top 10 Service Providers (excluding providers with valid harassment reports)
+        $providerPlaceholders = ['i do not know', "i don't know", 'unknown', 'n/a', 'na', 'none', 'wala', 'nothing'];
+
+        $flaggedProviderQuery = DB::table('feedback_answers as sp_ans')
+            ->join('form_fields as sp_ff', 'sp_ans.field_id', '=', 'sp_ff.field_id')
+            ->join('feedback_answers as h_ans', 'sp_ans.response_id', '=', 'h_ans.response_id')
+            ->join('form_fields as h_ff', 'h_ans.field_id', '=', 'h_ff.field_id')
+            ->join('feedback as f', 'sp_ans.response_id', '=', 'f.response_id')
+            ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
+            ->where('f.status', 'Valid')
+            ->where('sp_ff.field_label', 'LIKE', '%Name of Service Provider%')
+            ->whereNotNull('sp_ans.answer_text')
+            ->where('sp_ans.answer_text', '!=', '')
+            ->whereNotIn(DB::raw('LOWER(TRIM(sp_ans.answer_text))'), $providerPlaceholders)
+            ->where('h_ff.field_label', 'LIKE', '%harassment%')
+            ->where('h_ff.field_label', 'NOT LIKE', '%detail%')
+            ->where('h_ff.field_label', 'NOT LIKE', '%if yes%')
+            ->where('h_ff.field_label', 'NOT LIKE', '%specify%')
+            ->whereRaw("LOWER(TRIM(h_ans.answer_text)) = 'yes'");
+
+        if ($selectedDepartment !== 'overall') {
+            $flaggedProviderQuery->where('frm.department_id', $selectedDepartment);
+        }
+        $applyDateFilter($flaggedProviderQuery);
+
+        $flaggedProviderKeys = $flaggedProviderQuery
+            ->selectRaw("DISTINCT CONCAT(COALESCE(frm.department_id, 0), '|', LOWER(TRIM(sp_ans.answer_text))) as provider_key")
+            ->pluck('provider_key')
+            ->toArray();
+
         $providerQuery = DB::table('feedback_answers as fa')
             ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
             ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')
             ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
             ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
             ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id')
+            ->where('f.status', 'Valid')
             ->where('ff.field_label', 'LIKE', '%Name of Service Provider%')
             ->whereNotNull('fa.answer_text')
-            ->where('fa.answer_text', '!=', '');
+            ->where('fa.answer_text', '!=', '')
+            ->whereNotIn(DB::raw('LOWER(TRIM(fa.answer_text))'), $providerPlaceholders);
+
+        if (!empty($flaggedProviderKeys)) {
+            $providerQuery->whereNotIn(
+                DB::raw("CONCAT(COALESCE(frm.department_id, 0), '|', LOWER(TRIM(fa.answer_text)))"),
+                $flaggedProviderKeys
+            );
+        }
 
         if ($selectedDepartment !== 'overall') {
             $providerQuery->where('frm.department_id', $selectedDepartment);
@@ -195,12 +234,12 @@ class DashboardController extends Controller
         $applyDateFilter($providerQuery);
 
         $providerPerformance = $providerQuery->select(
-                'fa.answer_text as name',
+                DB::raw('TRIM(fa.answer_text) as name'),
                 DB::raw('COALESCE(d.department_name, "General") as department_name'),
                 DB::raw('COUNT(fa.response_id) as total'),
                 DB::raw('COALESCE(ROUND(AVG(sa.confidence_score), 0), 0) as score')
             )
-            ->groupBy('fa.answer_text', 'd.department_name')
+            ->groupBy(DB::raw('TRIM(fa.answer_text)'), 'd.department_name')
             ->orderByDesc('total')
             ->limit(10)
             ->get();
@@ -634,23 +673,54 @@ class DashboardController extends Controller
                     ->limit(10)
                     ->get();
 
-                $fcProviders = DB::table('feedback_answers as fa')
+                $fcFlaggedProviderKeys = DB::table('feedback_answers as sp_ans')
+                    ->join('form_fields as sp_ff', 'sp_ans.field_id', '=', 'sp_ff.field_id')
+                    ->join('feedback_answers as h_ans', 'sp_ans.response_id', '=', 'h_ans.response_id')
+                    ->join('form_fields as h_ff', 'h_ans.field_id', '=', 'h_ff.field_id')
+                    ->join('feedback as f', 'sp_ans.response_id', '=', 'f.response_id')
+                    ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
+                    ->whereIn('f.response_id', $auditedIds)
+                    ->where('f.status', 'Valid')
+                    ->where('sp_ff.field_label', 'LIKE', '%Name of Service Provider%')
+                    ->whereNotNull('sp_ans.answer_text')
+                    ->where('sp_ans.answer_text', '!=', '')
+                    ->whereNotIn(DB::raw('LOWER(TRIM(sp_ans.answer_text))'), $providerPlaceholders)
+                    ->where('h_ff.field_label', 'LIKE', '%harassment%')
+                    ->where('h_ff.field_label', 'NOT LIKE', '%detail%')
+                    ->where('h_ff.field_label', 'NOT LIKE', '%if yes%')
+                    ->where('h_ff.field_label', 'NOT LIKE', '%specify%')
+                    ->whereRaw("LOWER(TRIM(h_ans.answer_text)) = 'yes'")
+                    ->selectRaw("DISTINCT CONCAT(COALESCE(frm.department_id, 0), '|', LOWER(TRIM(sp_ans.answer_text))) as provider_key")
+                    ->pluck('provider_key')
+                    ->toArray();
+
+                $fcProvidersQuery = DB::table('feedback_answers as fa')
                     ->join('form_fields as ff', 'fa.field_id', '=', 'ff.field_id')
                     ->leftJoin('sentiment_analysis as sa', 'fa.response_id', '=', 'sa.response_id')
                     ->join('feedback as f', 'fa.response_id', '=', 'f.response_id')
                     ->join('forms as frm', 'f.form_id', '=', 'frm.form_id')
                     ->leftJoin('department as d', 'frm.department_id', '=', 'd.department_id')
                     ->whereIn('f.response_id', $auditedIds)
+                    ->where('f.status', 'Valid')
                     ->where('ff.field_label', 'LIKE', '%Name of Service Provider%')
                     ->whereNotNull('fa.answer_text')
                     ->where('fa.answer_text', '!=', '')
-                    ->select(
-                        'fa.answer_text as name',
+                    ->whereNotIn(DB::raw('LOWER(TRIM(fa.answer_text))'), $providerPlaceholders);
+
+                if (!empty($fcFlaggedProviderKeys)) {
+                    $fcProvidersQuery->whereNotIn(
+                        DB::raw("CONCAT(COALESCE(frm.department_id, 0), '|', LOWER(TRIM(fa.answer_text)))"),
+                        $fcFlaggedProviderKeys
+                    );
+                }
+
+                $fcProviders = $fcProvidersQuery->select(
+                        DB::raw('TRIM(fa.answer_text) as name'),
                         DB::raw('COALESCE(d.department_name, "General") as department_name'),
                         DB::raw('COUNT(fa.response_id) as total'),
                         DB::raw('COALESCE(ROUND(AVG(sa.confidence_score), 0), 0) as score')
                     )
-                    ->groupBy('fa.answer_text', 'd.department_name')
+                    ->groupBy(DB::raw('TRIM(fa.answer_text)'), 'd.department_name')
                     ->orderByDesc('total')
                     ->limit(10)
                     ->get();

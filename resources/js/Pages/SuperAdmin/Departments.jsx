@@ -170,19 +170,28 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
     // --- ACTIONS ---
     const submitDepartment = (e) => {
         e.preventDefault();
+        const handleValidationError = (errs) => {
+            const firstError = Object.values(errs)[0] || 'Please check the form fields and try again.';
+            Swal.fire({ title: 'Validation Error', text: firstError, icon: 'error', confirmButtonColor: '#dc2626' });
+        };
+
         if (isEditing) {
-            put(route('superadmin.departments.update', editDeptId), { 
+            put(route('superadmin.departments.update', editDeptId), {
+                replace: true,
                 onSuccess: () => {
                     closeModal();
                     Swal.fire({ title: 'Updated!', text: 'The department has been successfully updated.', icon: 'success', confirmButtonColor: '#009639' });
-                }
+                },
+                onError: handleValidationError
             });
         } else {
-            post(route('superadmin.departments.store'), { 
+            post(route('superadmin.departments.store'), {
+                replace: true,
                 onSuccess: () => {
                     closeModal();
                     Swal.fire({ title: 'Created!', text: 'The new department has been successfully created.', icon: 'success', confirmButtonColor: '#009639' });
-                }
+                },
+                onError: handleValidationError
             });
         }
     };

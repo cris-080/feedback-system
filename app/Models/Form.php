@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use SimpleSoftwareIO\QrCode\Facades\QrCode as QrCodeGenerator;
 
 class Form extends Model
 {
@@ -164,14 +165,25 @@ public static function getPaginatedActiveForms($filters, $perPage = 10)
         }])->findOrFail($id);
     }
 
+    public static function generateLocalQrDataUri(string $url, int $size = 300): string
+    {
+        $svg = (string) QrCodeGenerator::format('svg')
+            ->size($size)
+            ->margin(2)
+            ->generate($url);
+
+        return 'data:image/svg+xml;base64,' . base64_encode($svg);
+    }
+
     public function getDeploymentData(): array
     {
         $secureToken = \Illuminate\Support\Facades\Crypt::encryptString($this->form_id);
         $baseUrl = url('/feedback?token=' . $secureToken);
-        
+
         return [
-            'kiosk_link' => $baseUrl . '&kiosk=true',
-            'qr_image_url' => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2'
+            'kiosk_link'      => $baseUrl . '&kiosk=true',
+            'qr_image_url'    => 'https://quickchart.io/qr?text=' . urlencode($baseUrl) . '&size=300&margin=2',
+            'qr_fallback_url' => self::generateLocalQrDataUri($baseUrl, 300),
         ];
     }
 

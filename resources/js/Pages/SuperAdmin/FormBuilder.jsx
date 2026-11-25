@@ -197,7 +197,7 @@ export default function FormBuilder({ departments, departmentServices, departmen
                 ? currentData.fields.filter(f => f.step_number !== 2)
                 : currentData.fields,
         }));
-        post(route('superadmin.forms.store'));
+        post(route('superadmin.forms.store'), { replace: true });
     };
 
     const { flash } = usePage().props;

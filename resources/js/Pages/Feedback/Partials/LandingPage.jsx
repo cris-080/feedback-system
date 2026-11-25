@@ -83,7 +83,16 @@ export default function LandingPage({ form, departmentName, onStart, qrData }) {
                                   
                                   
                                 </div>
-                                <img src={qrData.base64} alt="Secure Dynamic QR Code" className="w-48 h-48 sm:w-39 sm:h-39 object-contain rounded-xl" />
+                               <img
+                                    src={qrData.base64}
+                                    onError={(e) => {
+                                        if (qrData.fallback_base64 && e.currentTarget.src !== qrData.fallback_base64) {
+                                            e.currentTarget.src = qrData.fallback_base64;
+                                        }
+                                    }}
+                                    alt="Secure Dynamic QR Code"
+                                    className="w-48 h-48 sm:w-39 sm:h-39 object-contain rounded-xl"
+                                />
                             </div>
                             <p className="text-[10px] text-gray-400 mt-4 tracking-wide text-center px-4">
                                 Secure Session: For your protection, this code automatically rotates every 15 minutes.

@@ -43,12 +43,26 @@ class AccountController extends Controller
             'email'         => 'required|email|max:100|unique:account,email',
             'role'          => 'required|string|in:SuperAdmin,Feedback Committee,Focal Person',
             'role_id'       => 'nullable|integer|exists:roles,role_id',
-            'department_id' => 'nullable|integer|exists:department,department_id',
+            'department_id' => 'required_if:role,Focal Person|nullable|integer|exists:department,department_id',
         ]);
 
         if ($request->role === 'Feedback Committee') {
             if (Account::where('role', 'Feedback Committee')->exists()) {
-                return back()->with('error', 'A Feedback Committee account already exists.');
+                throw ValidationException::withMessages([
+                    'role' => 'A Feedback Committee account already exists.',
+                ]);
+            }
+        }
+
+        if ($validated['role'] === 'Focal Person' && !empty($validated['department_id'])) {
+            $existingFocal = Account::where('role', 'Focal Person')
+                ->where('department_id', $validated['department_id'])
+                ->first();
+
+            if ($existingFocal) {
+                throw ValidationException::withMessages([
+                    'department_id' => "Only one Focal Person can be assigned per department. {$existingFocal->firstname} {$existingFocal->lastname} ({$existingFocal->email}) is already assigned to this department.",
+                ]);
             }
         }
     
@@ -97,7 +111,7 @@ class AccountController extends Controller
             'email'         => 'required|email|max:100|unique:account,email,' . $user->user_id . ',user_id',
             'role'          => 'required|string|in:SuperAdmin,Feedback Committee,Focal Person',
             'role_id'       => 'nullable|integer|exists:roles,role_id',
-            'department_id' => 'nullable|integer|exists:department,department_id',
+            'department_id' => 'required_if:role,Focal Person|nullable|integer|exists:department,department_id',
             'password'      => 'nullable|string|min:8',
         ]);
 
@@ -107,7 +121,22 @@ class AccountController extends Controller
                 ->exists();
 
             if ($existingCommittee) {
-                return back()->with('error', 'A Feedback Committee account already exists.');
+                throw ValidationException::withMessages([
+                    'role' => 'A Feedback Committee account already exists.',
+                ]);
+            }
+        }
+
+        if ($validated['role'] === 'Focal Person' && !empty($validated['department_id'])) {
+            $existingFocal = Account::where('role', 'Focal Person')
+                ->where('department_id', $validated['department_id'])
+                ->where('user_id', '!=', $user->user_id)
+                ->first();
+
+            if ($existingFocal) {
+                throw ValidationException::withMessages([
+                    'department_id' => "Only one Focal Person can be assigned per department. {$existingFocal->firstname} {$existingFocal->lastname} ({$existingFocal->email}) is already assigned to this department.",
+                ]);
             }
         }
 
@@ -171,7 +200,24 @@ class AccountController extends Controller
     public function restore($id)
     {
         $user = Account::withTrashed()->findOrFail($id);
+
+        if ($user->role === 'Focal Person' && !empty($user->department_id)) {
+            $existingFocal = Account::where('role', 'Focal Person')
+                ->where('department_id', $user->department_id)
+                ->where('user_id', '!=', $user->user_id)
+                ->first();
+
+            if ($existingFocal) {
+                return back()->with('error', "Cannot restore Focal Person: {$existingFocal->firstname} {$existingFocal->lastname} is already assigned to this department.");
+            }
+        }
+
         $user->restore();
+
+        if ($user->role === 'Focal Person' && !empty($user->department_id)) {
+            Department::where('department_id', $user->department_id)
+                ->update(['focal_person_id' => $user->user_id]);
+        }
 
         // --- AUDIT TRAIL ---
         AuditLog::logAction('Restored', 'Accounts', "Restored archived account: {$user->email}.");

@@ -443,7 +443,7 @@ return (
                                 <NavLink 
                                     href={route('superadmin.users.index')} 
                                     icon="fa-solid fa-users-gear" 
-                                    text={"System Accounts"} 
+                                    text={"Accounts"} 
                                     active={route().current('superadmin.users.*')} 
                                 />
                             )}
@@ -471,7 +471,7 @@ return (
                             <NavLink 
                                 href={isSuperAdmin ? route('superadmin.archives.index') : route('feedback_committee.archives.index')} 
                                 icon="fa-solid fa-box-archive" 
-                                text="System Archives" 
+                                text="Archives" 
                                 active={route().current('superadmin.archives.*') || route().current('feedback_committee.archives.*')} 
                             />
                             

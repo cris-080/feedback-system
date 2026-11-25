@@ -152,10 +152,21 @@ export default function Accounts({ accounts, departments, roles, filters }) {
     };
 
   // --- ACTION HANDLERS ---
-    const submitForm = (e) => {
+   const submitForm = (e) => {
         e.preventDefault();
+        const handleValidationError = (errs) => {
+            const firstError = Object.values(errs)[0] || 'Please check the form fields and try again.';
+            Swal.fire({
+                title: 'Assignment Restricted',
+                text: firstError,
+                icon: 'warning',
+                confirmButtonColor: '#f59e0b',
+            });
+        };
+
         if (isEditing) {
             put(route('superadmin.users.update', editUserId), {
+                replace: true,
                 onSuccess: () => {
                     closeModal();
                     Swal.fire({ 
@@ -167,16 +178,19 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                         timer: 3000, 
                         showConfirmButton: false });
                 },
+                onError: handleValidationError,
             });
         } else {
             post(route('superadmin.users.store'), {
+                replace: true,
                 onSuccess: () => {
                     closeModal();
                     Swal.fire({ title: 'Account Created!', text: 'The new user account has been created.', icon: 'success', toast: true, position: 'top-end', timer: 3000, showConfirmButton: false });
                 },
+                onError: handleValidationError,
             });
         }
-    };;
+    };
 
    // 1. ARCHIVE ACCOUNT (Formerly Delete)
     const handleArchive = (user) => {
@@ -670,7 +684,7 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                     </div>
                 </div>
 
-                {/* Section 3: Access Control & Permissions */}
+               {/* Section 3: Access Control & Permissions */}
                 <div className="bg-gray-50 border border-gray-200/80 rounded-xl p-4 space-y-4">
                     <div className="flex items-center gap-2 border-b border-gray-200/70 pb-2">
                         <i className="fa-solid fa-lock text-xs text-amber-600"></i>
@@ -714,12 +728,21 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                                     required
                                 >
                                     <option value="">-- Select Department --</option>
-                                    {departments.map(dept => (
-                                        <option key={dept.department_id} value={dept.department_id}>
-                                            {dept.department_name}
-                                        </option>
-                                    ))}
+                                    {departments.map(dept => {
+                                        const isTaken = Boolean(dept.focal_person_id) && String(dept.focal_person_id) !== String(editUserId);
+                                        return (
+                                            <option key={dept.department_id} value={dept.department_id}>
+                                                {dept.department_name}{isTaken ? ' (Already has a Focal Person)' : ''}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
+                                {data.department_id && departments.some(dept => String(dept.department_id) === String(data.department_id) && Boolean(dept.focal_person_id) && String(dept.focal_person_id) !== String(editUserId)) && (
+                                    <div className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 font-medium">
+                                        <i className="fa-solid fa-triangle-exclamation mr-1"></i>
+                                        Only one Focal Person is allowed per department. Please select another department or archive/reassign the existing one first.
+                                    </div>
+                                )}
                                 {errors.department_id && <div className="text-red-500 text-xs mt-1 font-medium">{errors.department_id}</div>}
                             </div>
                         )}

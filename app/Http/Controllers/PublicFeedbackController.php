@@ -78,19 +78,26 @@ class PublicFeedbackController extends Controller
             abort(404, 'No active feedback form is currently available for this link.');
         }
 
-        $phRegions = Cache::remember('ph_regions', 2592000, function () {
-            try {
-                $response = Http::timeout(5)->get('https://psgc.gitlab.io/api/regions/');
-                if ($response->successful()) {
-                    $data = $response->json();
-                    usort($data, fn($a, $b) => strcmp($a['name'], $b['name']));
-                    return $data;
-                }
-            } catch (\Exception $e) {
-                return [['name' => 'Central Luzon', 'regionName' => 'Region III']];
-            }
-            return [];
-        });
+        $phRegions = [
+            ['name' => 'BARMM', 'regionName' => 'Bangsamoro Autonomous Region in Muslim Mindanao'],
+            ['name' => 'CAR', 'regionName' => 'Cordillera Administrative Region'],
+            ['name' => 'NCR', 'regionName' => 'National Capital Region'],
+            ['name' => 'NIR', 'regionName' => 'Negros Island Region'],
+            ['name' => 'Region I', 'regionName' => 'Ilocos Region'],
+            ['name' => 'Region II', 'regionName' => 'Cagayan Valley'],
+            ['name' => 'Region III', 'regionName' => 'Central Luzon'],
+            ['name' => 'Region IV-A', 'regionName' => 'CALABARZON'],
+            ['name' => 'Region IV-B', 'regionName' => 'MIMAROPA Region'],
+            ['name' => 'Region IX', 'regionName' => 'Zamboanga Peninsula'],
+            ['name' => 'Region V', 'regionName' => 'Bicol Region'],
+            ['name' => 'Region VI', 'regionName' => 'Western Visayas'],
+            ['name' => 'Region VII', 'regionName' => 'Central Visayas'],
+            ['name' => 'Region VIII', 'regionName' => 'Eastern Visayas'],
+            ['name' => 'Region X', 'regionName' => 'Northern Mindanao'],
+            ['name' => 'Region XI', 'regionName' => 'Davao Region'],
+            ['name' => 'Region XII', 'regionName' => 'SOCCSKSARGEN'],
+            ['name' => 'Region XIII', 'regionName' => 'Caraga'],
+        ];
 
         $department = Department::with('service_providers')
             ->where('department_id', $fullForm->department_id)
@@ -99,23 +106,31 @@ class PublicFeedbackController extends Controller
         // 4. Kiosk Auto-Rotation Logic (Only runs if opened on the physical tablet)
         $isKiosk = $request->boolean('kiosk');
         $qrImageUrl = null;
+        $qrFallbackUrl = null;
 
         if ($isKiosk && $department) {
             $activeQrCode = QrCode::where('department_id', $fullForm->department_id)
                 ->where('is_active', 1)
                 ->first();
 
-           if ($activeQrCode) {
+            if (!$activeQrCode) {
+                $activeQrCode = new QrCode();
+                $activeQrCode->department_id = $fullForm->department_id;
+                $activeQrCode->label = Str::limit($department->department_name . ' Kiosk QR', 255, '');
+                $activeQrCode->qr_token = Str::random(40);
+                $activeQrCode->is_active = 1;
+                $activeQrCode->expires_at = now()->addMinutes(15);
+                $activeQrCode->save();
+            } elseif (is_null($activeQrCode->expires_at) || now()->greaterThan($activeQrCode->expires_at)) {
                 // If it's expired (or has no expiration), generate a fresh 15-minute token
-                if (is_null($activeQrCode->expires_at) || now()->greaterThan($activeQrCode->expires_at)) {
-                    $activeQrCode->qr_token = Str::random(40);
-                    $activeQrCode->expires_at = now()->addMinutes(15);
-                    $activeQrCode->save();
-                }
-
-                $scanUrl = url('/feedback?token=' . $activeQrCode->qr_token);
-                $qrImageUrl = 'https://quickchart.io/qr?text=' . urlencode($scanUrl) . '&size=400&margin=2';
+                $activeQrCode->qr_token = Str::random(40);
+                $activeQrCode->expires_at = now()->addMinutes(15);
+                $activeQrCode->save();
             }
+
+            $scanUrl = url('/feedback?token=' . $activeQrCode->qr_token);
+            $qrImageUrl = 'https://quickchart.io/qr?text=' . urlencode($scanUrl) . '&size=400&margin=2';
+            $qrFallbackUrl = Form::generateLocalQrDataUri($scanUrl, 400);
         }
 
        // 5. Drop the 2-Hour Session Cookie for mobile scanners
@@ -136,7 +151,8 @@ class PublicFeedbackController extends Controller
             'qr_id'            => $qrId,
             'ph_regions'       => $phRegions,
             'qr_data'          => $isKiosk && $qrImageUrl ? [
-                'base64' => $qrImageUrl,
+                'base64'          => $qrImageUrl,
+                'fallback_base64' => $qrFallbackUrl,
             ] : null
         ]);
     }

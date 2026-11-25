@@ -65,6 +65,9 @@ class FeedbackSubmissionService
         
         $hasHarassment = false;
         $harassmentDetails = 'No detailed narrative provided.';
+        $serviceProviderName = null;
+        $serviceProviderPosition = null;
+        $providerPlaceholders = ['i do not know', "i don't know", 'unknown', 'n/a', 'na', 'none', 'wala', 'nothing'];
 
         if ($fullForm) {
             foreach ($fullForm->getFormattedSteps() as $step => $fields) {
@@ -88,11 +91,25 @@ class FeedbackSubmissionService
                         }
                     }
 
-                    // CAPTURE: Extract the harassment explanation for the email body
+                   // CAPTURE: Extract the harassment explanation for the email body
                     if ($isHarassmentDetailsField && isset($validated['answers'][$fieldId])) {
                         $detailsText = trim($validated['answers'][$fieldId]);
                         if (!empty($detailsText) && !in_array(strtolower($detailsText), $placeholders)) {
                             $harassmentDetails = $detailsText;
+                        }
+                    }
+
+                    if (str_contains($fieldLabel, 'name of service provider') && isset($validated['answers'][$fieldId]) && is_string($validated['answers'][$fieldId])) {
+                        $rawProvider = trim($validated['answers'][$fieldId]);
+                        if ($rawProvider !== '' && !in_array(strtolower($rawProvider), $providerPlaceholders, true)) {
+                            $serviceProviderName = $rawProvider;
+                        }
+                    }
+
+                    if (str_contains($fieldLabel, 'position of service provider') && isset($validated['answers'][$fieldId]) && is_string($validated['answers'][$fieldId])) {
+                        $rawPosition = trim($validated['answers'][$fieldId]);
+                        if ($rawPosition !== '' && !in_array(strtolower($rawPosition), $providerPlaceholders, true)) {
+                            $serviceProviderPosition = $rawPosition;
                         }
                     }
                 }
@@ -131,14 +148,19 @@ class FeedbackSubmissionService
 
         // 5. URGENT ALERT: Send Harassment Email
         if ($hasHarassment) {
-            self::sendHarassmentAlert($validated, $harassmentDetails);
+            self::sendHarassmentAlert($validated, $harassmentDetails, $serviceProviderName, $serviceProviderPosition);
         }
     }
 
     /**
      * Handles compiling recipients and dispatching the harassment alert email.
      */
-    private static function sendHarassmentAlert(array $validated, string $harassmentDetails)
+    private static function sendHarassmentAlert(
+        array $validated,
+        string $harassmentDetails,
+        ?string $serviceProviderName = null,
+        ?string $serviceProviderPosition = null
+    )
     {
         $dept = Department::find($validated['department_id']);
         $deptName = $dept ? $dept->department_name : 'General Office';
@@ -158,9 +180,11 @@ class FeedbackSubmissionService
 
         if (!empty($recipients)) {
             $emailData = [
-                'department_name'    => $deptName,
-                'transaction_date'   => $validated['transaction_date'],
-                'harassment_details' => $harassmentDetails,
+                'department_name'           => $deptName,
+                'transaction_date'          => $validated['transaction_date'],
+                'harassment_details'        => $harassmentDetails,
+                'service_provider'          => $serviceProviderName,
+                'service_provider_position' => $serviceProviderPosition,
             ];
             
             try {

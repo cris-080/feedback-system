@@ -265,6 +265,7 @@ export default function EditForm({ currentForm, existingFields, departments, dep
 
         post(route('superadmin.forms.update', formId), {
             preserveScroll: true,
+            replace: true,
             // We removed the fake 'onSuccess' popup here. 
             // The global useEffect will now correctly handle real success/error alerts!
             onError: (errs) => {

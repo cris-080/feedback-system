@@ -58,7 +58,9 @@ class Account extends Authenticatable
         return $query
             ->select('account.*', 'department.department_name')
             ->leftJoin('department', 'account.department_id', '=', 'department.department_id')
-            ->excludeSuperAdmins()
+            ->when(auth()->id(), function ($q, $currentUserId) {
+                $q->where('account.user_id', '!=', $currentUserId);
+            })
             ->when(!empty($filters['search']), function ($q) use ($filters) {
                 $trimmed = trim($filters['search']);
                 $like = '%' . $trimmed . '%';
@@ -208,6 +210,10 @@ class Account extends Authenticatable
         if ($this->role === 'SuperAdmin' || $this->is_root) {
             return false; // <-- It blocks the deletion!
         }
+
+        Department::where('focal_person_id', $this->user_id)
+            ->update(['focal_person_id' => null]);
+
         return $this->delete();
     }
 

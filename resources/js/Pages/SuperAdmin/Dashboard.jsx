@@ -111,7 +111,11 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
             if (tempRange === 'custom_date' && tempDate) params.specific_date = tempDate;
             if (tempRange === 'custom_month' && tempMonth) params.specific_month = tempMonth;
 
-            const currentRoute = isSuperGroup ? 'superadmin.dashboard' : 'focalperson.dashboard';
+            const currentRoute = isSuperAdmin
+                ? 'superadmin.dashboard'
+                : isFeedbackCommittee
+                    ? 'feedback_committee.dashboard'
+                    : 'focalperson.dashboard';
             
             router.get(route(currentRoute), params, {
                 preserveState: true,
@@ -126,7 +130,11 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
             setTempDate('');
             setTempMonth('');
 
-            const currentRoute = isSuperGroup ? 'superadmin.dashboard' : 'focalperson.dashboard';
+            const currentRoute = isSuperAdmin
+                ? 'superadmin.dashboard'
+                : isFeedbackCommittee
+                    ? 'feedback_committee.dashboard'
+                    : 'focalperson.dashboard';
 
             router.get(
                 route(currentRoute),
@@ -745,7 +753,11 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                     ) : (
                                         <div className="flex flex-wrap gap-2 pt-1 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                                             {(complaintTab === 'complaints' ? topWords : harassmentWords).map((item, idx) => {
-                                                const feedbackRoute = isSuperGroup ? 'superadmin.feedbacks.index' : 'focalperson.feedbacks.index';
+                                               const feedbackRoute = isSuperAdmin
+                                                    ? 'superadmin.feedbacks.index'
+                                                    : isFeedbackCommittee
+                                                        ? 'feedback_committee.feedbacks.index'
+                                                        : 'focalperson.feedbacks.index';
                                                 const isComplaint = complaintTab === 'complaints';
                                                 
                                                 return (

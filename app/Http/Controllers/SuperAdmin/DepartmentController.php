@@ -44,13 +44,17 @@ class DepartmentController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'              => 'required|string|max:255|unique:department,department_name',
-            'description'       => 'nullable|string',
-            'classification'    => 'required|in:CC,Non-CC',
-            'initial_services'  => 'nullable|string',
-            'initial_positions' => 'nullable|string',
-            'initial_providers' => 'nullable|string',
-        ]);
+            'name'                         => 'required|string|max:255|unique:department,department_name',
+            'description'                  => 'nullable|string',
+            'classification'               => 'required|in:CC,Non-CC',
+            'initial_services'             => 'nullable|array',
+            'initial_services.*.name'      => 'nullable|string|max:255',
+            'initial_positions'            => 'nullable|array',
+            'initial_positions.*.name'     => 'nullable|string|max:255',
+            'initial_providers'            => 'nullable|array',
+            'initial_providers.*.name'     => 'nullable|string|max:255',
+            'initial_providers.*.position' => 'nullable|string|max:255',
+        ]);;
 
         // Delegate entirely to the Fat Model
         Department::createDepartment($validated);
