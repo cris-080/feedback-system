@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Pagination from '@/Components/Pagination';
 import Swal from 'sweetalert2';
 
 export default function AuditLogs({ logs, modules = [], filters = {} }) {
+    const { auth } = usePage().props;
+    const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (rawRole === 'feedback committee' || rawRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [roleFilter, setRoleFilter] = useState(filters.role || '');
     const [moduleFilter, setModuleFilter] = useState(filters.module || '');
@@ -29,7 +32,7 @@ export default function AuditLogs({ logs, modules = [], filters = {} }) {
             if (dateTo) params.date_to = dateTo;
 
             router.get(
-                route('superadmin.audit-logs.index'),
+                route(`${routePrefix}.audit-logs.index`),
                 params,
                 { preserveState: true, preserveScroll: true, replace: true }
             );
@@ -77,7 +80,7 @@ export default function AuditLogs({ logs, modules = [], filters = {} }) {
             confirmButtonText: '<i class="fa-solid fa-triangle-exclamation"></i> Yes, Wipe Everything'
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(route('superadmin.audit-logs.clear'), {
+                router.delete(route(`${routePrefix}.audit-logs.clear`), {
                     preserveScroll: true,
                     preserveState: false, // Forces a full data refresh to clear the table UI
                 });

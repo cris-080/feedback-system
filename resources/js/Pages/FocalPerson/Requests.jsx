@@ -5,12 +5,16 @@ import Swal from 'sweetalert2';
 import Pagination from '@/Components/Pagination';
 import SearchFilter from '@/Components/SearchFilter';
 
-export default function Requests({ requests }) {
+export default function Requests({ requests, carNotices }) {
     const { flash } = usePage().props;
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const carData = carNotices || { data: [], total: 0 };
+    const pendingCarCount = (carData.data || []).filter(c => c.status === 'Pending').length;
+    const [activeTab, setActiveTab] = useState(pendingCarCount > 0 ? 'car' : 'requests');
+
     const { data, setData, post, reset, errors } = useForm({
-        recipient: '',
+        recipient: 'Feedback Committee',
         request_type: '',
         details: '',
     });
@@ -88,59 +92,258 @@ export default function Requests({ requests }) {
         });
     };
 
-    // Determine options based on selected recipient
-    const typeOptions = data.recipient === 'Feedback Committee' 
-        ? ['Compliance Review', 'Report Extension', 'Audit Inquiry', 'Other']
-        : ['System Access', 'New Feature Request', 'Add Service/Position', 'Technical Support', 'Other'];
+    const handleRespondCar = (car) => {
+        Swal.fire({
+            title: 'Submit Action Taken',
+            html: `<p class="text-xs text-gray-600 mb-2 text-left"><strong>${car.request_type}:</strong> ${car.details}</p>`,
+            input: 'textarea',
+            inputPlaceholder: 'Describe the corrective action taken or explanation for the Feedback Committee...',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonColor: '#009639',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Submit Response',
+            inputValidator: (value) => {
+                if (!value || value.trim() === '') {
+                    return 'Please provide the corrective action taken before submitting.';
+                }
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.patch(
+                    route('focalperson.requests.car.respond', car.request_id),
+                    { fp_response: result.value.trim() },
+                    { preserveScroll: true }
+                );
+            }
+        });
+    };
+
+    // All Focal Person requests route exclusively to the Feedback Committee
+    const typeOptions = [
+        'Compliance Review',
+        'Report Extension',
+        'Audit Inquiry',
+        'Add Service/Position',
+        'Form Modification',
+        'Technical Support',
+        'Other',
+    ];
 
     return (
         <SuperAdminLayout headerTitle="Support & Requests">
             <Head title="My Requests" />
 
             <div className="p-8 bg-gray-50 min-h-screen">
-                <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="max-w-6xl mx-auto space-y-6">
+
+                    {/* Tab Switcher */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-xl shadow-sm border border-gray-200 gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-[#1E6031]/10 text-[#1E6031] flex items-center justify-center text-lg">
+                                <i className="fa-solid fa-clipboard-check"></i>
+                            </div>
+                            <div>
+                                <h2 className="text-base font-bold text-gray-900">Department Support & Compliance</h2>
+                                <p className="text-xs text-gray-500">Address Feedback Committee notices or submit support requests.</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-100 rounded-lg p-1 flex space-x-1 border border-gray-200 w-full sm:w-auto">
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('car')}
+                                className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                    activeTab === 'car' ? 'bg-amber-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fa-solid fa-triangle-exclamation"></i>
+                                Compliance Notices
+                                {pendingCarCount > 0 && (
+                                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-extrabold ${
+                                        activeTab === 'car' ? 'bg-white text-amber-700' : 'bg-red-600 text-white'
+                                    }`}>
+                                        {pendingCarCount}
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab('requests')}
+                                className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                    activeTab === 'requests' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fa-solid fa-paper-plane"></i> My Requests
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* TAB 1: COMPLIANCE NOTICES FROM FEEDBACK COMMITTEE */}
+                    {activeTab === 'car' && (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-fade-in-up">
+                            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-base font-bold text-gray-900">
+                                        <i className="fa-solid fa-clipboard-list mr-2 text-amber-600"></i>
+                                        Corrective Action Requests (From Feedback Committee)
+                                    </h2>
+                                    <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full">
+                                        {carData.total || 0}
+                                    </span>
+                                </div>
+                                <SearchFilter
+                                    searchValue={searchQuery}
+                                    onSearchChange={setSearchQuery}
+                                    searchPlaceholder="Search category, priority, details, status..."
+                                    hasActiveFilters={hasActiveFilters}
+                                    onFilterReset={() => setStatusFilter('')}
+                                    filterTitle="Filter Notices"
+                                >
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Status</label>
+                                        <select
+                                            className="block w-full py-2 px-3 border border-gray-300 rounded-md text-sm focus:ring-[#009639] focus:border-[#009639] bg-gray-50 hover:bg-white transition-colors cursor-pointer"
+                                            value={statusFilter}
+                                            onChange={(e) => setStatusFilter(e.target.value)}
+                                        >
+                                            <option value="">All Statuses</option>
+                                            <option value="Pending">Pending</option>
+                                            <option value="Addressed">Addressed</option>
+                                            <option value="Closed">Closed</option>
+                                        </select>
+                                    </div>
+                                </SearchFilter>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-[#1E6031] text-white text-xs uppercase">
+                                        <tr>
+                                            <th className="px-6 py-4 font-semibold">Priority & Due Date</th>
+                                            <th className="px-6 py-4 font-semibold">Category & Concern</th>
+                                            <th className="px-6 py-4 font-semibold text-center">Status</th>
+                                            <th className="px-6 py-4 font-semibold text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {(!carData.data || carData.data.length === 0) ? (
+                                            <tr>
+                                                <td colSpan="4" className="px-6 py-12 text-center text-gray-400">
+                                                    <i className="fa-solid fa-circle-check text-3xl mb-3 text-emerald-300 block"></i>
+                                                    <p>No compliance notices from the Feedback Committee.</p>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            carData.data.map(car => (
+                                                <tr key={car.request_id} className="hover:bg-gray-50 align-top">
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className={`px-2.5 py-0.5 text-[10px] font-bold uppercase rounded-full ${
+                                                            car.priority === 'Urgent'
+                                                                ? 'bg-red-100 text-red-700 border border-red-200'
+                                                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                                                        }`}>
+                                                            {car.priority || 'Normal'}
+                                                        </span>
+                                                        <div className="text-[11px] text-gray-500 mt-1.5">
+                                                            Issued: {new Date(car.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </div>
+                                                        {car.due_date && (
+                                                            <div className="text-[11px] font-semibold text-amber-700 mt-0.5">
+                                                                Due: {new Date(car.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 min-w-[280px]">
+                                                        <div className="font-bold text-gray-900">{car.request_type}</div>
+                                                        <p className="text-xs text-gray-700 mt-1 leading-relaxed whitespace-pre-wrap">{car.details}</p>
+                                                        {car.fp_response && (
+                                                            <div className="mt-2.5 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 text-xs text-emerald-900">
+                                                                <strong className="block text-[10px] uppercase tracking-wider text-emerald-700 mb-0.5">Your Action Taken:</strong>
+                                                                {car.fp_response}
+                                                            </div>
+                                                        )}
+                                                        {car.remarks && (
+                                                            <div className="mt-2 bg-blue-50 border border-blue-100 rounded-lg p-2 text-xs text-blue-800">
+                                                                <strong>FC Closing Remarks:</strong> {car.remarks}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                        <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full border ${
+                                                            car.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                            car.status === 'Addressed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                                            'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                        }`}>
+                                                            {car.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                        {car.status === 'Pending' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRespondCar(car)}
+                                                                className="bg-[#009639] hover:bg-[#1E6031] text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition shadow-xs"
+                                                            >
+                                                                <i className="fa-solid fa-reply mr-1.5"></i>
+                                                                Submit Action Taken
+                                                            </button>
+                                                        )}
+                                                        {car.status === 'Addressed' && (
+                                                            <span className="text-blue-600 text-xs font-semibold">
+                                                                <i className="fa-solid fa-hourglass-half mr-1"></i> Awaiting Verification
+                                                            </span>
+                                                        )}
+                                                        {car.status === 'Closed' && (
+                                                            <span className="text-emerald-600 text-xs font-semibold">
+                                                                <i className="fa-solid fa-circle-check mr-1"></i> Verified & Closed
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <Pagination dataObject={carData} />
+                        </div>
+                    )}
+
+                    {/* TAB 2: EXISTING MY REQUESTS GRID */}
+                    {activeTab === 'requests' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     
                     {/* Left Column: Create Request Form */}
                     <div className="lg:col-span-1">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
                             <div className="mb-5 border-b border-gray-100 pb-4">
                                 <h2 className="text-lg font-bold text-gray-900"><i className="fa-solid fa-paper-plane text-blue-600 mr-2"></i> Submit Request</h2>
-                                <p className="text-xs text-gray-500 mt-1">Route your inquiry to the correct administrative body.</p>
+                                <p className="text-xs text-gray-500 mt-1">Submit compliance, report, or department support requests to the Feedback Committee.</p>
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Send Request To <span className="text-red-500">*</span></label>
-                                    <select 
-                                        className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
-                                        value={data.recipient} 
-                                        onChange={e => {
-                                            setData(prev => ({ ...prev, recipient: e.target.value, request_type: '' }));
-                                        }} 
-                                        required
-                                    >
-                                        <option value="" disabled>-- Select Recipient --</option>
-                                        <option value="SuperAdmin">SuperAdmin (Technical & System)</option>
-                                        <option value="Feedback Committee">Feedback Committee (Reports & Compliance)</option>
-                                    </select>
-                                    {errors.recipient && <p className="text-red-500 text-xs mt-1">{errors.recipient}</p>}
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Recipient</label>
+                                    <div className="w-full text-sm bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg px-3 py-2 font-semibold flex items-center gap-2">
+                                        <i className="fa-solid fa-users text-emerald-600"></i>
+                                        <span>Feedback Committee</span>
+                                    </div>
                                 </div>
 
-                                {data.recipient && (
-                                    <div className="animate-fade-in-up">
-                                        <label className="block text-xs font-semibold text-gray-700 mb-1">Request Type <span className="text-red-500">*</span></label>
-                                        <select 
-                                            className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
-                                            value={data.request_type} 
-                                            onChange={e => setData('request_type', e.target.value)} 
-                                            required
-                                        >
-                                            <option value="" disabled>-- Select Topic --</option>
-                                            {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                                        </select>
-                                        {errors.request_type && <p className="text-red-500 text-xs mt-1">{errors.request_type}</p>}
-                                    </div>
-                                )}
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-700 mb-1">Request Type <span className="text-red-500">*</span></label>
+                                    <select 
+                                        className="w-full text-sm border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" 
+                                        value={data.request_type} 
+                                        onChange={e => setData('request_type', e.target.value)} 
+                                        required
+                                    >
+                                        <option value="" disabled>-- Select Topic --</option>
+                                        {typeOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                                    </select>
+                                    {errors.request_type && <p className="text-red-500 text-xs mt-1">{errors.request_type}</p>}
+                                </div>
 
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-700 mb-1">Details <span className="text-red-500">*</span></label>
@@ -156,7 +359,7 @@ export default function Requests({ requests }) {
 
                                 <button 
                                     type="submit" 
-                                    disabled={isSubmitting || !data.recipient || !data.request_type} 
+                                    disabled={isSubmitting || !data.request_type} 
                                     className="w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
                                 >
                                     {isSubmitting ? 'Sending...' : 'Send Request'}
@@ -224,8 +427,8 @@ export default function Requests({ requests }) {
                                                 <tr key={req.request_id} className="hover:bg-gray-50">
                                                     <td className="px-6 py-4">
                                                         <div className="font-bold text-gray-900">{req.request_type}</div>
-                                                        <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mt-1">
-                                                            <i className={`fa-solid ${req.recipient === 'SuperAdmin' ? 'fa-server text-blue-500' : 'fa-users text-emerald-500'} mr-1`}></i>
+                                                       <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mt-1">
+                                                            <i className="fa-solid fa-users text-emerald-500 mr-1"></i>
                                                             {req.recipient}
                                                         </div>
                                                         <div className="text-[10px] text-gray-400 mt-0.5">
@@ -277,6 +480,8 @@ export default function Requests({ requests }) {
                         </div>
                     </div>
 
+                </div>
+                    )}
                 </div>
             </div>
         </SuperAdminLayout>

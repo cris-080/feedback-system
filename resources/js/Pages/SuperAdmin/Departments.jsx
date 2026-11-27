@@ -6,7 +6,9 @@ import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
 export default function Departments({ departments, filters, isSuperAdmin }) {
-    const { flash } = usePage().props;
+    const { flash, auth } = usePage().props;
+    const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (rawRole === 'feedback committee' || rawRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
     const [activeServiceDept, setActiveServiceDept] = useState(null);
     const [activePositionDept, setActivePositionDept] = useState(null);
     const [activeProviderDept, setActiveProviderDept] = useState(null);
@@ -31,7 +33,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
             if (statusFilter !== 'all') queryParams.status = statusFilter;
 
             router.get(
-                route('superadmin.departments.index'),
+                route(`${routePrefix}.departments.index`),
                 queryParams,
                 { preserveState: true, preserveScroll: true, replace: true }
             );
@@ -405,7 +407,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                                         onClick={() => openModal()} 
                                         className="bg-[#009639] hover:bg-[#1E6031] text-white px-5 py-2.5 rounded-md font-semibold text-sm transition shadow-sm flex items-center"
                                     >
-                                        <i className="fa-solid fa-plus mr-2"></i> Add Department
+                                        <i className="fa-solid fa-plus mr-2"></i> Create
                                     </button>
                                 </>
                             )}
@@ -614,7 +616,7 @@ export default function Departments({ departments, filters, isSuperAdmin }) {
                         
                         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
                             <h3 className="text-lg font-bold text-gray-800">
-                                {isEditing ? <><i className="fa-solid fa-building-circle-check mr-2 text-[#009639]"></i>Edit Department Configuration</> : <><i className="fa-solid fa-plus mr-2 text-[#009639]"></i>Provision New Department</>}
+                                {isEditing ? <><i className="fa-solid fa-building-circle-check mr-2 text-[#009639]"></i>Edit Department Configuration</> : <><i className="fa-solid fa-plus mr-2 text-[#009639]"></i>Provision New Department or Offices</>}
                             </h3>
                             <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 transition"><i className="fa-solid fa-xmark text-xl"></i></button>
                         </div>

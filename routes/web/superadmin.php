@@ -4,7 +4,6 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SuperAdmin\DashboardController;
 use App\Http\Controllers\SuperAdmin\ReportController;
 use App\Http\Controllers\SuperAdmin\FeedbackController;
-use App\Http\Controllers\SuperAdmin\AdminRequestController;
 use App\Http\Controllers\SuperAdmin\RoleController;
 use App\Http\Controllers\SuperAdmin\DepartmentController;
 use App\Http\Controllers\SuperAdmin\FormController;
@@ -18,21 +17,20 @@ Route::prefix('superadmin')->name('superadmin.')->group(function () {
     // Dashboards & Feedback
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     
-    // Reports
+   // Reports
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::post('/reports/generate', [ReportController::class, 'generate'])->name('reports.generate');
     Route::get('/reports/{id}', [ReportController::class, 'show'])->name('reports.show');
+    Route::patch('/reports/{id}/approve', [ReportController::class, 'approve'])->name('reports.approve');
+    Route::patch('/reports/{id}/return', [ReportController::class, 'returnToSender'])->name('reports.return');
     Route::delete('/reports/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
     Route::get('/reports/{id}/docx', [ReportController::class, 'downloadDocx'])->name('reports.docx');
     Route::get('/reports/{id}/pdf', [ReportController::class, 'downloadPdf'])->name('reports.pdf');
 
-    // Feedbacks
+    // Feedbacks & SuperAdmin Harassment Notification Clearing
     Route::get('/feedbacks', [FeedbackController::class, 'index'])->name('feedbacks.index');
-
-    // Admin Requests Management
-    Route::get('/requests', [AdminRequestController::class, 'index'])->name('requests.index');
-    Route::patch('/requests/{id}/status', [AdminRequestController::class, 'updateStatus'])->name('requests.update');
-    Route::delete('/requests/{id}', [AdminRequestController::class, 'destroy'])->name('requests.destroy');
+    Route::delete('/feedbacks/{id}', [FeedbackController::class, 'archive'])->name('feedbacks.archive');
+    Route::delete('/notifications/{id}', [FeedbackController::class, 'clearNotification'])->name('notifications.clear');
     
     // Role Management
     Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
@@ -77,7 +75,6 @@ Route::prefix('superadmin')->name('superadmin.')->group(function () {
     Route::delete('/forms/{id}', [FormController::class, 'destroy'])->name('forms.destroy');
     Route::put('/forms/{form}/archive', [FormController::class, 'archive'])->name('forms.archive');
     Route::put('/forms/{form}/publish', [FormController::class, 'publish'])->name('forms.publish');
-    Route::post('/forms/{form}/clone', [FormController::class, 'clone'])->name('forms.clone');
     Route::get('/forms/{id}/preview', function ($id) {
         return redirect("/feedback?kiosk=true&token=" . Crypt::encryptString($id));
     })->name('forms.preview');
@@ -100,4 +97,5 @@ Route::prefix('superadmin')->name('superadmin.')->group(function () {
     Route::delete('/users/{id}/force-delete', [AccountController::class, 'forceDelete'])->name('users.force-delete');
     Route::put('/reports/{id}/restore', [ReportController::class, 'restore'])->name('reports.restore');
     Route::delete('/reports/{id}/force-delete', [ReportController::class, 'forceDelete'])->name('reports.force-delete');
+    Route::put('/feedbacks/{id}/restore', [FeedbackController::class, 'restore'])->name('feedbacks.restore');
 });

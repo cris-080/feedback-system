@@ -33,7 +33,7 @@ class DepartmentController extends Controller
         return inertia('SuperAdmin/Departments', [
             'departments'  => Department::getPaginatedWithRelations($request->input('search'),$request->input('status', 'all')),
             'filters'      => $request->only(['search','status']),
-            'isSuperAdmin' => $isSuperAdmin,
+            'isSuperAdmin' => $isSuperAdmin || $isFeedbackCommittee,
         ]);
     }
 

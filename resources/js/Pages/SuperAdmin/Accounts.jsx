@@ -7,6 +7,8 @@ import Pagination from '@/Components/Pagination';
 
 export default function Accounts({ accounts, departments, roles, filters }) {
     const { flash, auth } = usePage().props;
+    const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (rawRole === 'feedback committee' || rawRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
     
     // --- TAB STATE ('accounts' | 'roles') ---
     const [activeTab, setActiveTab] = useState('accounts');
@@ -720,7 +722,7 @@ export default function Accounts({ accounts, departments, roles, filters }) {
                         {/* Dynamic Department Scope */}
                         {(data.role !== 'SuperAdmin' && data.role !== 'Feedback Committee' && data.role !== '') && (
                             <div className="animate-fade-in-up">
-                                <label className="block text-xs font-semibold mb-1 text-gray-700">Department Scope <span className="text-red-500">*</span></label>
+                                <label className="block text-xs font-semibold mb-1 text-gray-700">Offices/DepartmentsScope <span className="text-red-500">*</span></label>
                                 <select 
                                     className="w-full text-sm bg-white border-gray-300 rounded-lg shadow-xs focus:ring-2 focus:ring-[#009639]/20 focus:border-[#009639] cursor-pointer" 
                                     value={data.department_id || ''} 

@@ -59,22 +59,56 @@ class HandleInertiaRequests extends Middleware
                 $count = 0;
 
                 if ($role === 'superadmin') {
-                    $count += AdminRequest::where('status', 'Pending')->where('is_notified_superadmin', false)->count();
+                    // SuperAdmin has no Requests module; only receives Harassment Alerts
                     $count += Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
                         ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
                         ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
                         ->where('feedback.is_notified_superadmin', false)->count();
-                } elseif (str_contains($role, 'feedback') || str_contains($role, 'focal')) {
-                    $count += AdminRequest::whereIn('status', ['Approved', 'Rejected'])->where('is_notified_committee', false)->where('admin_id', $userId)->count();
-                    
+                } elseif (str_contains($role, 'feedback')) {
+                    // Incoming Focal Person requests sent to FC
+                    $count += AdminRequest::where('recipient', 'Feedback Committee')
+                        ->where('status', 'Pending')
+                        ->where('is_notified_committee', false)
+                        ->count();
+
+                    // Addressed CARs awaiting FC verification
+                    $count += AdminRequest::where('recipient', 'Focal Person')
+                        ->where('status', 'Addressed')
+                        ->where('is_notified_committee', false)
+                        ->count();
+
+                    // Global Harassment Alerts
+                    $count += Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
+                        ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+                        ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+                        ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
+                        ->where('feedback.is_notified_committee', false)
+                        ->count();
+                } elseif (str_contains($role, 'focal')) {
+                    // FC replies to FP's own requests
+                    $count += AdminRequest::where('recipient', 'Feedback Committee')
+                        ->whereIn('status', ['Approved', 'Rejected'])
+                        ->where('is_notified_committee', false)
+                        ->where('admin_id', $userId)
+                        ->count();
+
+                    // Incoming/closed CARs from FC
+                    if ($deptId) {
+                        $count += AdminRequest::where('recipient', 'Focal Person')
+                            ->where('target_department_id', $deptId)
+                            ->whereIn('status', ['Pending', 'Closed'])
+                            ->where('is_notified_focal', false)
+                            ->count();
+                    }
+
+                    // Department-isolated Harassment Alerts
                     $harassmentQuery = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
                         ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
                         ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
                         ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
                         ->where('feedback.is_notified_committee', false);
-                    
-                    // Strictly isolate harassment alerts to the logged-in user's department unless they are FC acting globally
-                    if (str_contains($role, 'focal') && $deptId) {
+
+                    if ($deptId) {
                         $harassmentQuery->where('forms.department_id', $deptId);
                     }
                     $count += $harassmentQuery->count();
@@ -90,25 +124,66 @@ class HandleInertiaRequests extends Middleware
                 $notifications = collect();
 
                 if ($role === 'superadmin') {
-                    $adminReqs = AdminRequest::where('status', 'Pending')->where('is_notified_superadmin', false)->orderBy('created_at', 'desc')->take(5)->get();
-                    $harassments = \App\Models\Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
+                    // SuperAdmin has no Requests module; only receives Harassment Alerts
+                    $adminReqs = collect();
+                    $harassments = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
                         ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
                         ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
                         ->where('feedback.is_notified_superadmin', false)
                         ->select('feedback.response_id', 'feedback.submitted_at', 'feedback.control_number')
                         ->orderBy('feedback.submitted_at', 'desc')->take(5)->get();
-                } elseif (str_contains($role, 'feedback') || str_contains($role, 'focal')) {
-                    $adminReqs = AdminRequest::whereIn('status', ['Approved', 'Rejected'])->where('is_notified_committee', false)->where('admin_id', $userId)->orderBy('created_at', 'desc')->take(5)->get();
-                    
+                } elseif (str_contains($role, 'feedback')) {
+                    $incomingFpReqs = AdminRequest::where('recipient', 'Feedback Committee')
+                        ->where('status', 'Pending')
+                        ->where('is_notified_committee', false)
+                        ->orderBy('created_at', 'desc')
+                        ->take(5)
+                        ->get();
+
+                    $addressedCars = AdminRequest::where('recipient', 'Focal Person')
+                        ->where('status', 'Addressed')
+                        ->where('is_notified_committee', false)
+                        ->orderBy('updated_at', 'desc')
+                        ->take(5)
+                        ->get();
+
+                    $adminReqs = $incomingFpReqs->merge($addressedCars);
+
+                    $harassments = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
+                        ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+                        ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+                        ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
+                        ->where('feedback.is_notified_committee', false)
+                        ->select('feedback.response_id', 'feedback.submitted_at', 'feedback.control_number')
+                        ->orderBy('feedback.submitted_at', 'desc')->take(5)->get();
+                } elseif (str_contains($role, 'focal')) {
+                    $adminReqs = AdminRequest::where('recipient', 'Feedback Committee')
+                        ->whereIn('status', ['Approved', 'Rejected'])
+                        ->where('is_notified_committee', false)
+                        ->where('admin_id', $userId)
+                        ->orderBy('created_at', 'desc')
+                        ->take(5)
+                        ->get();
+
+                    if ($deptId) {
+                        $carReqs = AdminRequest::where('recipient', 'Focal Person')
+                            ->where('target_department_id', $deptId)
+                            ->whereIn('status', ['Pending', 'Closed'])
+                            ->where('is_notified_focal', false)
+                            ->orderBy('updated_at', 'desc')
+                            ->take(5)
+                            ->get();
+                        $adminReqs = $adminReqs->merge($carReqs);
+                    }
+
                     $harassmentQuery = Feedback::join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
                         ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
                         ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
                         ->where('form_fields.field_label', 'LIKE', '%harassment%')->where('feedback_answers.answer_text', 'Yes')
                         ->where('feedback.is_notified_committee', false)
                         ->select('feedback.response_id', 'feedback.submitted_at', 'feedback.control_number');
-                        
-                    // Limit visible harassment alerts for focal persons to their specific department
-                    if (str_contains($role, 'focal') && $deptId) {
+
+                    if ($deptId) {
                         $harassmentQuery->where('forms.department_id', $deptId);
                     }
                     $harassments = $harassmentQuery->orderBy('feedback.submitted_at', 'desc')->take(5)->get();

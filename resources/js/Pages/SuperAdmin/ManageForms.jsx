@@ -8,7 +8,8 @@ import Pagination from '@/Components/Pagination';
 
 export default function ManageForms({forms, uniqueDepartments, filters, isSuperAdmin }) {
     const { flash, auth } = usePage().props; // <-- auth is defined here
-    const userRole = auth?.user?.role?.toLowerCase() || '';
+    const userRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (userRole === 'feedback committee' || userRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
     // Safely fallback to an empty array if uniqueDepartments is undefined
     const safeDepartments = uniqueDepartments || [];
 
@@ -36,7 +37,7 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
             if (departmentFilter) queryParams.department = departmentFilter;
 
             router.get(
-                route('superadmin.forms.index'),
+                route(`${routePrefix}.forms.index`),
                 queryParams,
                 { preserveState: true, preserveScroll: true, replace: true }
             );
@@ -109,36 +110,6 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                         Swal.fire({
                             title: 'Archived!',
                             text: `"${formTitle}" has been successfully archived.`,
-                            icon: 'success',
-                            toast: true,
-                            position: 'top-end',
-                            timer: 3000,
-                            timerProgressBar: true,
-                            showConfirmButton: false
-                        });
-                    }
-                });
-            }
-        });
-    };
-
-    const handleClone = (formId) => {
-        Swal.fire({
-            title: 'Clone Form Blueprint?',
-            text: "This will create an exact duplicate of this form as a Draft.",
-            icon: 'info',
-            showCancelButton: true,
-            confirmButtonColor: '#3b82f6',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: '<i class="fa-solid fa-copy"></i> Yes, Clone it!'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                router.post(route('superadmin.forms.clone', formId), {}, { 
-                    preserveScroll: true,
-                    onSuccess: () => {
-                        Swal.fire({
-                            title: 'Cloned Successfully!',
-                            text: 'The form blueprint has been duplicated as a Draft.',
                             icon: 'success',
                             toast: true,
                             position: 'top-end',
@@ -247,7 +218,7 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                                     <tr>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">ID</th>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Form Title</th>
-                                        <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Department</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Offices/Departments</th>
                                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider">Status</th>
                                         <th className="px-6 py-4 text-center text-xs font-bold uppercase tracking-wider">Actions</th>
                                     </tr>
@@ -276,8 +247,8 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
                                                     
-                                                    {/* EVERYONE (SuperAdmin & Feedback Committee) gets the Preview Button */}
-                                                    <a href={isSuperAdmin ? route('superadmin.forms.preview', form.form_id) : route('feedback_committee.forms.preview', form.form_id)} 
+                                                   {/* EVERYONE (SuperAdmin & Feedback Committee) gets the Preview Button */}
+                                                    <a href={route(`${routePrefix}.forms.preview`, form.form_id)}
                                                         target="_blank" 
                                                         rel="noreferrer"
                                                         className="w-8 h-8 bg-purple-100 text-purple-600 hover:bg-purple-600 hover:text-white rounded inline-flex justify-center items-center transition" 
@@ -299,13 +270,8 @@ export default function ManageForms({forms, uniqueDepartments, filters, isSuperA
                                                                 className="w-8 h-8 bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white rounded inline-flex justify-center items-center transition" title="Archive">
                                                                 <i className="fa-solid fa-box-archive"></i>
                                                             </button>
-                                                            
-                                                            <button onClick={() => handleClone(form.form_id)} 
-                                                                className="w-8 h-8 bg-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Clone">
-                                                                <i className="fa-solid fa-copy"></i>
-                                                            </button>
-                                                                                                                
-                                                            <Link href={route('superadmin.forms.edit', form.form_id)} 
+
+                                                            <Link href={route('superadmin.forms.edit', form.form_id)}
                                                                 className="w-8 h-8 bg-gray-100 text-gray-600 hover:bg-gray-600 hover:text-white rounded inline-flex justify-center items-center transition" title="Edit">
                                                                 <i className="fa-solid fa-pen"></i>
                                                             </Link>

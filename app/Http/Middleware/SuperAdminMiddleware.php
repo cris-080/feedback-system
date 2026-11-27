@@ -17,29 +17,17 @@ class SuperAdminMiddleware
     {
         $role = strtolower(trim(auth()->user()->role ?? ''));
 
-        // 1. SuperAdmin gets unrestricted access to everything
-        if ($role === 'superadmin') {
+        // 1. SuperAdmin may only access /superadmin/* routes
+        if ($role === 'superadmin' && $request->is('superadmin', 'superadmin/*')) {
             return $next($request);
         }
 
-        // 2. Feedback Committee gets strictly limited access
-        if ($role === 'feedback committee' || $role === 'feedbackcommittee') {
-            
-            // Allow all GET (View) requests
-            if (in_array($request->method(), ['GET', 'HEAD'])) {
-                return $next($request);
-            }
-
-            // Allow them to update Admin Requests (since that's their job)
-            if ($request->is('superAdmin/requests*')) {
-                return $next($request);
-            }
-
-            // Block everything else (Adding/Editing/Deleting Departments, Forms, Services, Positions)
-            abort(403, 'Feedback Committee has View-Only access. You cannot modify departments or forms.');
+        // 2. Feedback Committee may only access /feedback-committee/* routes
+        if (in_array($role, ['feedback committee', 'feedbackcommittee']) && $request->is('feedback-committee', 'feedback-committee/*')) {
+            return $next($request);
         }
 
-        // 3. Kick out Focal Persons or unauthorized users
+        // 3. Block cross-prefix URLs, Focal Persons, or unauthorized users
         abort(403, 'Unauthorized Access.');
     }
 }

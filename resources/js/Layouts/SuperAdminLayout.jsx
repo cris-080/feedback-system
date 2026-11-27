@@ -16,7 +16,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
     
     const isSuperGroup = isSuperAdmin || isFeedbackCommittee;
     
-    // Explicitly map the role to the exact route prefix defined in web.php
+    /// Map each role to its own URL prefix
     let rolePrefix = 'focalperson';
     if (isSuperAdmin) {
         rolePrefix = 'superadmin';
@@ -68,12 +68,8 @@ export default function SuperAdminLayout({ children, headerTitle }) {
         if (flash?.login_success) {
             // Baseline current notifications for this specific user on login so the watcher doesn't overwrite the login toast
             const userKey = auth?.user?.id || 'guest';
-            if (recentNotifications && recentNotifications.length > 0) {
-                const currentLatest = recentNotifications[0];
-                sessionStorage.setItem(`latest_notif_id_${userKey}`, `${currentLatest.request_id}_${currentLatest.status}`);
-            } else {
-                sessionStorage.removeItem(`latest_notif_id_${userKey}`);
-            }
+            const initialIds = (recentNotifications || []).map(n => `${n.request_id}_${n.status}`);
+            sessionStorage.setItem(`seen_notif_ids_${userKey}`, JSON.stringify(initialIds));
             sessionStorage.setItem(`notifs_initialized_${userKey}`, 'true');
 
             const Toast = Swal.mixin({
@@ -129,7 +125,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                     // If the event is meant for this user, instantly reload metrics and notifications behind the scenes!
                     if (isTargetRole && isTargetDept) {
                         router.reload({
-                            only: ['metrics', 'pendingRequestsCount', 'recentNotifications', 'recentAccounts', 'recentForms'],
+                            only: ['metrics', 'pendingRequestsCount', 'recentNotifications', 'recentAccounts', 'recentForms', 'feedbacks'],
                             preserveState: true,
                             preserveScroll: true
                         });
@@ -147,16 +143,24 @@ export default function SuperAdminLayout({ children, headerTitle }) {
     // --- NEW NOTIFICATION TOAST WATCHER (Scoped per User ID) ---
     useEffect(() => {
         const userKey = auth?.user?.id || 'guest';
-        const storageKeyId = `latest_notif_id_${userKey}`;
+        const storageKeySeen = `seen_notif_ids_${userKey}`;
         const storageKeyInit = `notifs_initialized_${userKey}`;
 
-        if (recentNotifications && recentNotifications.length > 0) {
-            const currentLatest = recentNotifications[0];
-            const currentId = `${currentLatest.request_id}_${currentLatest.status}`;
-            const storedLatestId = sessionStorage.getItem(storageKeyId);
-            const isInitialized = sessionStorage.getItem(storageKeyInit);
+        let seenIds = [];
+        try {
+            seenIds = JSON.parse(sessionStorage.getItem(storageKeySeen) || '[]');
+        } catch {
+            seenIds = [];
+        }
 
-            if (isInitialized && storedLatestId !== currentId && !flash?.login_success) {
+        const isInitialized = sessionStorage.getItem(storageKeyInit);
+        const currentList = recentNotifications || [];
+        const currentIds = currentList.map(n => `${n.request_id}_${n.status}`);
+
+        if (isInitialized && currentList.length > 0 && !flash?.login_success) {
+            const unseenItem = currentList.find(n => !seenIds.includes(`${n.request_id}_${n.status}`));
+
+            if (unseenItem) {
                 const Toast = Swal.mixin({
                     toast: true,
                     position: 'top-end',
@@ -170,15 +174,15 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                 });
 
                 Toast.fire({
-                    icon: currentLatest.is_harassment ? 'warning' : 'info',
-                    title: currentLatest.is_harassment ? 'Urgent Alert!' : 'New Notification',
-                    text: currentLatest.is_harassment 
+                    icon: unseenItem.is_harassment ? 'warning' : 'info',
+                    title: unseenItem.is_harassment ? 'Urgent Alert!' : 'New Notification',
+                    text: unseenItem.is_harassment 
                         ? 'A new harassment report requires your attention.' 
                         : 'You have a new pending request or update.'
                 });
 
                 // --- REAL-TIME AUDIO ALERT FOR HARASSMENT ---
-                if (currentLatest.is_harassment) {
+                if (unseenItem.is_harassment) {
                     try {
                         // Generate a professional zero-dependency double-chime using AudioContext
                         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -207,13 +211,11 @@ export default function SuperAdminLayout({ children, headerTitle }) {
                     }
                 }
             }
-            
-            sessionStorage.setItem(storageKeyId, currentId);
-            sessionStorage.setItem(storageKeyInit, 'true');
-        } else {
-            sessionStorage.removeItem(storageKeyId);
-            sessionStorage.setItem(storageKeyInit, 'true'); 
         }
+
+        const mergedSeen = Array.from(new Set([...seenIds, ...currentIds])).slice(-50);
+        sessionStorage.setItem(storageKeySeen, JSON.stringify(mergedSeen));
+        sessionStorage.setItem(storageKeyInit, 'true');
     }, [recentNotifications, auth?.user?.id]);
 
    // --- BLAZING FAST NOTIFICATION CLEARING (Partial Reload) ---
@@ -226,7 +228,7 @@ export default function SuperAdminLayout({ children, headerTitle }) {
 
         let destroyRoute;
         if (isSuperAdmin) {
-            destroyRoute = route('superadmin.requests.destroy', routeId);
+            destroyRoute = route('superadmin.notifications.clear', routeId);
         } else if (isFeedbackCommittee) {
             destroyRoute = route('feedback_committee.requests.destroy', routeId);
         } else {
@@ -352,7 +354,7 @@ return (
                         />
 
                         <NavLink 
-                            href={isFeedbackCommittee ? route('feedback_committee.reports.index') : route(`${rolePrefix}.reports.index`)} 
+                            href={route(`${rolePrefix}.reports.index`)} 
                             icon="fa-solid fa-chart-pie" 
                             text="Reports" 
                             active={route().current('*.reports.*')} 
@@ -365,12 +367,13 @@ return (
                             active={route().current(`${rolePrefix}.feedbacks.*`)} 
                         />
                         
-                        {isSuperGroup && (
+                        {/* Requests is exclusive to Feedback Committee (SuperAdmin has no Requests page) */}
+                        {isFeedbackCommittee && (
                             <NavLink 
-                                href={isSuperAdmin ? route('superadmin.requests.index') : route('feedback_committee.requests.index')} 
+                                href={route('feedback_committee.requests.index')} 
                                 icon="fa-solid fa-bell" 
                                 text="Requests" 
-                                active={route().current('superadmin.requests.*') || route().current('feedback_committee.requests.*')} 
+                                active={route().current('feedback_committee.requests.*')} 
                             />
                         )}
                     </div>
@@ -425,10 +428,11 @@ return (
                             )}
 
                             {/* Both SuperAdmin and Feedback Committee can view Departments and Forms */}
+                            {/* Both SuperAdmin and Feedback Committee can view Offices & Departments and Forms */}
                             <NavLink 
                                 href={route(`${rolePrefix}.departments.index`)} 
                                 icon="fa-solid fa-building-flag" 
-                                text={"Departments"} 
+                                text={"Offices & Departments"} 
                                 active={route().current(`${rolePrefix}.departments.*`)} 
                             />
                             <NavLink 
@@ -438,25 +442,13 @@ return (
                                 active={route().current(`${rolePrefix}.forms.*`)} 
                             />
 
-                            {/* Only SuperAdmin manages System Accounts */}
-                            {isSuperAdmin && (
-                                <NavLink 
-                                    href={route('superadmin.users.index')} 
-                                    icon="fa-solid fa-users-gear" 
-                                    text={"Accounts"} 
-                                    active={route().current('superadmin.users.*')} 
-                                />
-                            )}
-
-                            {/* Feedback Committee gets the read-only Focal Person Directory instead of System Accounts */}
-                            {isFeedbackCommittee && (
-                                <NavLink 
-                                    href={route('feedback_committee.directory.index')} 
-                                    icon="fa-solid fa-address-book" 
-                                    text={"Focal Persons"} 
-                                    active={route().current('feedback_committee.directory.*')} 
-                                />
-                            )}
+                            {/* Both SuperAdmin and Feedback Committee manage System Accounts */}
+                            <NavLink 
+                                href={route(`${rolePrefix}.users.index`)} 
+                                icon="fa-solid fa-users-gear" 
+                                text={"Accounts"} 
+                                active={route().current(`${rolePrefix}.users.*`)} 
+                            />
                         </div>
                     )}
 
@@ -464,25 +456,23 @@ return (
                         <div className={`space-y-1 pt-2 ${!isCollapsed ? 'border-t border-white/5' : ''}`}>
                             {!isCollapsed && (
                                 <div className="px-6 pb-1 uppercase text-[11px] font-bold text-white/40 tracking-wider truncate">
-                                    {isSuperAdmin ? 'Administration' : 'Data Management'}
+                                    Administration
                                 </div>
                             )}
 
                             <NavLink 
-                                href={isSuperAdmin ? route('superadmin.archives.index') : route('feedback_committee.archives.index')} 
+                                href={route(`${rolePrefix}.archives.index`)} 
                                 icon="fa-solid fa-box-archive" 
                                 text="Archives" 
-                                active={route().current('superadmin.archives.*') || route().current('feedback_committee.archives.*')} 
+                                active={route().current(`${rolePrefix}.archives.*`)} 
                             />
                             
-                            {isSuperAdmin && (
-                                <NavLink 
-                                    href={route('superadmin.audit-logs.index')} 
-                                    icon="fa-solid fa-clipboard-list" 
-                                    text="Audit Logs" 
-                                    active={route().current('superadmin.audit-logs.*')} 
-                                />
-                            )}
+                            <NavLink 
+                                href={route(`${rolePrefix}.audit-logs.index`)} 
+                                icon="fa-solid fa-clipboard-list" 
+                                text="Audit Logs" 
+                                active={route().current(`${rolePrefix}.audit-logs.*`)} 
+                            />
                         </div>
                     )}
                 </nav>
@@ -558,21 +548,11 @@ return (
                                                 return (
                                                 <div key={`notif-${currentId}`} className="group relative flex items-start px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition">
                                                     
-                                                   {/* Clickable Area (Goes to Requests Page) */}
+                                                   {/* Clickable Area */}
                                                     <Link 
                                                         href={notif.is_harassment 
-                                                            ? (isSuperAdmin 
-                                                                ? route('superadmin.feedbacks.index') 
-                                                                : (auth.user.role.toLowerCase().includes('focal') 
-                                                                    ? route('focalperson.feedbacks.index') 
-                                                                    : route('feedback_committee.requests.index'))
-                                                              ) 
-                                                            : (isSuperAdmin 
-                                                                ? route('superadmin.requests.index') 
-                                                                : (isFeedbackCommittee 
-                                                                    ? route('feedback_committee.requests.index') 
-                                                                    : route('focalperson.requests.index'))
-                                                              )
+                                                            ? route(`${rolePrefix}.feedbacks.index`)
+                                                            : (isFeedbackCommittee ? route('feedback_committee.requests.index') : route('focalperson.requests.index'))
                                                         }
                                                         className="flex items-start flex-1"
                                                         onClick={() => setShowNotifications(false)}
@@ -580,12 +560,12 @@ return (
                                                         {/* 1. DYNAMIC ICON */}
                                                         <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                                                             notif.status === 'Pending' ? 'bg-blue-100 text-blue-600' : 
-                                                            notif.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' : 
+                                                            notif.status === 'Approved' || notif.status === 'Addressed' || notif.status === 'Closed' ? 'bg-emerald-100 text-emerald-600' : 
                                                             notif.status === 'Urgent' ? 'bg-red-100 text-red-600' : 'bg-red-100 text-red-600'
                                                         }`}>
                                                             <i className={`fa-solid ${
                                                                 notif.status === 'Pending' ? 'fa-file-signature' : 
-                                                                notif.status === 'Approved' ? 'fa-check-double' : 
+                                                                notif.status === 'Approved' || notif.status === 'Addressed' || notif.status === 'Closed' ? 'fa-check-double' : 
                                                                 notif.status === 'Urgent' ? 'fa-triangle-exclamation' : 'fa-circle-xmark'
                                                             } text-sm`}></i>
                                                         </div>
@@ -595,8 +575,10 @@ return (
                                                             {/* DYNAMIC TITLE */}
                                                             <p className="text-sm font-semibold text-gray-800 leading-tight">
                                                                 {notif.is_harassment 
-                                                                    ? 'Urgent: Harassment Alert' 
-                                                                    : (isSuperAdmin ? 'New Approval Request' : `Request ${notif.status}`)
+                                                                    ? 'Urgent: Harassment Alert'
+                                                                    : isFeedbackCommittee
+                                                                        ? (notif.status === 'Addressed' ? 'CAR Addressed by Focal Person' : 'New Focal Person Request')
+                                                                        : (notif.status === 'Pending' ? 'New Compliance Notice' : `Request ${notif.status}`)
                                                                 }
                                                             </p>
                                                             
@@ -604,10 +586,13 @@ return (
                                                             <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                                                                 {notif.is_harassment
                                                                     ? notif.remarks
-                                                                    : (isSuperAdmin 
-                                                                        ? `A new request (${notif.request_type || 'Form Publication'}) is pending your review.`
-                                                                        : `Your request was ${notif.status.toLowerCase()}. ${notif.remarks ? `Remarks: ${notif.remarks}` : ''}`
-                                                                    )
+                                                                    : isFeedbackCommittee
+                                                                        ? (notif.status === 'Addressed'
+                                                                            ? `A corrective action notice (${notif.request_type || 'Compliance'}) has been addressed and is ready for verification.`
+                                                                            : `A new request (${notif.request_type || 'Support'}) from a Focal Person is pending your review.`)
+                                                                        : (notif.status === 'Pending'
+                                                                            ? `A compliance notice (${notif.request_type || 'CAR'}) requires your department's action.`
+                                                                            : `Your request was ${notif.status.toLowerCase()}. ${notif.remarks ? `Remarks: ${notif.remarks}` : ''}`)
                                                                 }
                                                             </p>
                                                             

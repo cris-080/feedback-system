@@ -3,14 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
-    class Feedback extends Model
+class Feedback extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'feedback';
     protected $primaryKey = 'response_id';
-    public $timestamps = false; 
+    public $timestamps = false;
 
     // GLOBALLY SCOPE FC DASHBOARD TO AUDITED IDs
     public static $auditedIdsOverride = null;
@@ -24,8 +28,13 @@ use Carbon\Carbon;
         'transaction_date',
         'sex',
         'age',
-        // ... (Keep your other mass assignable fields here if any)
+        'deleted_at',
     ];
+
+    public function form()
+    {
+        return $this->belongsTo(Form::class, 'form_id', 'form_id');
+    }
 
     /**
      * Process and store the submitted feedback, answers, and AI sentiment.
@@ -138,7 +147,8 @@ use Carbon\Carbon;
     public static function getFilteredCount($range, $departmentId = 'overall')
     {
         $query = DB::table('feedback')
-            ->join('forms', 'feedback.form_id', '=', 'forms.form_id');
+            ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->whereNull('feedback.deleted_at');
 
         if ($departmentId !== 'overall') {
             $query->where('forms.department_id', $departmentId);
@@ -157,6 +167,7 @@ use Carbon\Carbon;
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+            ->whereNull('feedback.deleted_at')
             ->where('form_fields.field_label', 'LIKE', '%harassment%')
             ->where('feedback_answers.answer_text', 'Yes');
 
@@ -174,7 +185,8 @@ use Carbon\Carbon;
     public static function getGlobalSentiment($range)
     {
         $query = DB::table('sentiment_analysis')
-            ->join('feedback', 'sentiment_analysis.response_id', '=', 'feedback.response_id');
+            ->join('feedback', 'sentiment_analysis.response_id', '=', 'feedback.response_id')
+            ->whereNull('feedback.deleted_at');
         
         self::applyDateFilter($query, 'feedback.submitted_at', $range);
 
@@ -247,6 +259,7 @@ use Carbon\Carbon;
         $query = DB::table('sentiment_analysis')
             ->join('feedback', 'sentiment_analysis.response_id', '=', 'feedback.response_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->whereNull('feedback.deleted_at')
             ->select(
                 DB::raw("DATE_FORMAT(feedback.submitted_at, '{$dateFormat}') as time_label"),
                 'sentiment_analysis.sentiment',
@@ -296,6 +309,7 @@ use Carbon\Carbon;
             $query = DB::table('feedback')
                 ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
                 ->leftJoin('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
+                ->whereNull('feedback.deleted_at')
                 ->where('forms.department_id', $dept->department_id);
 
             self::applyDateFilter($query, 'feedback.submitted_at', $range);
@@ -372,7 +386,8 @@ use Carbon\Carbon;
         }
 
         $baseFeedback = DB::table('feedback')
-            ->join('forms', 'feedback.form_id', '=', 'forms.form_id');
+            ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->whereNull('feedback.deleted_at');
 
         if ($departmentId !== 'overall') {
             $baseFeedback->where('forms.department_id', $departmentId);
@@ -386,6 +401,7 @@ use Carbon\Carbon;
                 ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
                 ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
                 ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+                ->whereNull('feedback.deleted_at')
                 ->where('form_fields.field_label', 'LIKE', '%harassment%')
                 ->where('feedback_answers.answer_text', 'Yes')
                 ->whereBetween('feedback.submitted_at', [$start, $end]);
@@ -413,6 +429,7 @@ use Carbon\Carbon;
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->whereNull('feedback.deleted_at')
             ->where('form_fields.field_label', 'LIKE', '%SQD%') 
             ->select(
                 'form_fields.field_label',
@@ -476,6 +493,7 @@ use Carbon\Carbon;
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->whereNull('feedback.deleted_at')
             // Using COUNT(DISTINCT) is an extra safety measure to prevent row duplication
             ->select('feedback_answers.answer_text as name', DB::raw('COUNT(DISTINCT feedback.response_id) as value'));
 
@@ -512,7 +530,83 @@ use Carbon\Carbon;
 
         // Apply ranking and limit for open-text demographics like Region
         if ($keyword === 'region') {
-            $results->orderByDesc('value')->limit(8);
+            $regionMap = [
+                'ncr'                                              => 'NCR - National Capital Region',
+                'national capital region'                          => 'NCR - National Capital Region',
+                'metro manila'                                     => 'NCR - National Capital Region',
+                'car'                                              => 'CAR - Cordillera Administrative Region',
+                'cordillera administrative region'                 => 'CAR - Cordillera Administrative Region',
+                'region i'                                         => 'Region I - Ilocos Region',
+                'region 1'                                         => 'Region I - Ilocos Region',
+                'ilocos region'                                    => 'Region I - Ilocos Region',
+                'region ii'                                        => 'Region II - Cagayan Valley',
+                'region 2'                                         => 'Region II - Cagayan Valley',
+                'cagayan valley'                                   => 'Region II - Cagayan Valley',
+                'region iii'                                       => 'Region III - Central Luzon',
+                'region 3'                                         => 'Region III - Central Luzon',
+                'central luzon'                                    => 'Region III - Central Luzon',
+                'region iv-a'                                      => 'Region IV-A - CALABARZON',
+                'region 4a'                                        => 'Region IV-A - CALABARZON',
+                'region 4-a'                                       => 'Region IV-A - CALABARZON',
+                'calabarzon'                                       => 'Region IV-A - CALABARZON',
+                'region iv-b'                                      => 'Region IV-B - MIMAROPA',
+                'region 4b'                                        => 'Region IV-B - MIMAROPA',
+                'region 4-b'                                       => 'Region IV-B - MIMAROPA',
+                'mimaropa'                                         => 'Region IV-B - MIMAROPA',
+                'mimaropa region'                                  => 'Region IV-B - MIMAROPA',
+                'region v'                                         => 'Region V - Bicol Region',
+                'region 5'                                         => 'Region V - Bicol Region',
+                'bicol region'                                     => 'Region V - Bicol Region',
+                'region vi'                                        => 'Region VI - Western Visayas',
+                'region 6'                                         => 'Region VI - Western Visayas',
+                'western visayas'                                  => 'Region VI - Western Visayas',
+                'region vii'                                       => 'Region VII - Central Visayas',
+                'region 7'                                         => 'Region VII - Central Visayas',
+                'central visayas'                                  => 'Region VII - Central Visayas',
+                'region viii'                                      => 'Region VIII - Eastern Visayas',
+                'region 8'                                         => 'Region VIII - Eastern Visayas',
+                'eastern visayas'                                  => 'Region VIII - Eastern Visayas',
+                'region ix'                                        => 'Region IX - Zamboanga Peninsula',
+                'region 9'                                         => 'Region IX - Zamboanga Peninsula',
+                'zamboanga peninsula'                              => 'Region IX - Zamboanga Peninsula',
+                'region x'                                         => 'Region X - Northern Mindanao',
+                'region 10'                                        => 'Region X - Northern Mindanao',
+                'northern mindanao'                                => 'Region X - Northern Mindanao',
+                'region xi'                                        => 'Region XI - Davao Region',
+                'region 11'                                        => 'Region XI - Davao Region',
+                'davao region'                                     => 'Region XI - Davao Region',
+                'region xii'                                       => 'Region XII - SOCCSKSARGEN',
+                'region 12'                                        => 'Region XII - SOCCSKSARGEN',
+                'soccsksargen'                                     => 'Region XII - SOCCSKSARGEN',
+                'region xiii'                                      => 'Region XIII - Caraga',
+                'region 13'                                        => 'Region XIII - Caraga',
+                'caraga'                                           => 'Region XIII - Caraga',
+                'barmm'                                            => 'BARMM',
+                'bangsamoro autonomous region in muslim mindanao'  => 'BARMM',
+                'armm'                                             => 'BARMM',
+                'nir'                                              => 'NIR - Negros Island Region',
+                'negros island region'                             => 'NIR - Negros Island Region',
+            ];
+
+            $merged = [];
+            foreach ($results->get() as $item) {
+                $rawName = trim((string) $item->name);
+                $normalizedKey = strtolower(preg_replace('/\s+/', ' ', $rawName));
+                $canonical = $regionMap[$normalizedKey] ?? $rawName;
+
+                if (!isset($merged[$canonical])) {
+                    $merged[$canonical] = [
+                        'name'  => $canonical,
+                        'value' => 0,
+                    ];
+                }
+                $merged[$canonical]['value'] += (int) $item->value;
+            }
+
+            return collect(array_values($merged))
+                ->sortByDesc('value')
+                ->take(8)
+                ->values();
         }
 
         return $results->get()->map(function ($item) {
@@ -532,6 +626,7 @@ use Carbon\Carbon;
             ->join('feedback', 'feedback_answers.response_id', '=', 'feedback.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->whereNull('feedback.deleted_at')
             ->where('form_fields.field_label', 'LIKE', '%CC%')
             ->select('form_fields.field_label', 'feedback_answers.answer_text');
 
@@ -592,13 +687,13 @@ use Carbon\Carbon;
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
             ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->join('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
+            ->whereNull('feedback.deleted_at')
             ->whereIn('sentiment_analysis.sentiment', ['Negative', 'Mixed']) // Only analyze Negative or Mixed feedback
             ->where(function ($q) {
-                // STRICT INCLUSION: Only look at actual text boxes meant for remarks/complaints
+                // STRICT INCLUSION: Only look at general remarks/complaints (exclude harassment details)
                 $q->where('form_fields.field_label', 'LIKE', '%Suggestions%')
                   ->orWhere('form_fields.field_label', 'LIKE', '%Comments%')
-                  ->orWhere('form_fields.field_label', 'LIKE', '%Remarks%')
-                  ->orWhere('form_fields.field_label', 'LIKE', '%detail the harassment%');
+                  ->orWhere('form_fields.field_label', 'LIKE', '%Remarks%');
             })
             ->whereNotNull('feedback_answers.answer_text')
             ->where('feedback_answers.answer_text', '!=', '')
@@ -650,11 +745,12 @@ use Carbon\Carbon;
     /**
      * Mass clear all harassment notifications based on the user's role.
      */
-    public static function clearAllHarassmentNotifications($role)
+   public static function clearAllHarassmentNotifications($role)
     {
         $ids = DB::table('feedback')
             ->join('feedback_answers', 'feedback.response_id', '=', 'feedback_answers.response_id')
             ->join('form_fields', 'feedback_answers.field_id', '=', 'form_fields.field_id')
+            ->whereNull('feedback.deleted_at')
             ->where('form_fields.field_label', 'LIKE', '%harassment%')
             ->where('feedback_answers.answer_text', 'Yes')
             ->pluck('feedback.response_id');
@@ -672,7 +768,10 @@ use Carbon\Carbon;
      */
     public static function getPaginatedDatastore($user, array $filters, $perPage = 10)
     {
-        $isSuperAdmin = $user->role === 'SuperAdmin';
+        $rawRole = strtolower(trim($user->role ?? ''));
+        $isSuperAdmin = $rawRole === 'superadmin';
+        $isFeedbackCommittee = $rawRole === 'feedback committee' || $rawRole === 'feedbackcommittee';
+
         $keyword = $filters['search'] ?? null;
         $sentiment = $filters['sentiment'] ?? null;
         $preset = $filters['preset'] ?? null;
@@ -682,6 +781,7 @@ use Carbon\Carbon;
             ->leftJoin('forms', 'feedback.form_id', '=', 'forms.form_id')
             ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
             ->leftJoin('sentiment_analysis', 'feedback.response_id', '=', 'sentiment_analysis.response_id')
+            ->whereNull('feedback.deleted_at')
             ->select(
                 'feedback.*',
                 DB::raw('COALESCE(department.department_name, "Unknown/Deleted Office") as department_name'),
@@ -689,7 +789,47 @@ use Carbon\Carbon;
                 'sentiment_analysis.confidence_score as sentiment_score'
             );
 
-        if (!$isSuperAdmin) {
+        if ($isFeedbackCommittee) {
+            $reportQuery = DB::table('reports')->whereIn('status', ['Submitted', 'Approved']);
+
+            if (Schema::hasColumn('reports', 'deleted_at')) {
+                $reportQuery->whereNull('deleted_at');
+            }
+
+            $reportQuery->where(function ($q) {
+                $q->whereNull('report_data->metadata->is_deleted')
+                  ->orWhere('report_data->metadata->is_deleted', false);
+            });
+
+            $fcReports = $reportQuery->get(['department_id', 'start_date', 'end_date', 'report_data']);
+            $auditedIds = [];
+
+            foreach ($fcReports as $r) {
+                $data = json_decode($r->report_data, true);
+                if (!empty($data['feedbacks_logged']) && is_array($data['feedbacks_logged'])) {
+                    $auditedIds = array_merge($auditedIds, $data['feedbacks_logged']);
+                } else {
+                    $fbQuery = DB::table('feedback')
+                        ->join('forms', 'feedback.form_id', '=', 'forms.form_id')
+                        ->whereNull('feedback.deleted_at')
+                        ->whereDate('feedback.submitted_at', '>=', $r->start_date)
+                        ->whereDate('feedback.submitted_at', '<=', $r->end_date);
+
+                    if ($r->department_id) {
+                        $fbQuery->where('forms.department_id', $r->department_id);
+                    }
+
+                    $auditedIds = array_merge($auditedIds, $fbQuery->pluck('feedback.response_id')->toArray());
+                }
+            }
+
+            $auditedIds = array_values(array_unique($auditedIds));
+            $query->whereIn('feedback.response_id', !empty($auditedIds) ? $auditedIds : [0]);
+
+            if (!empty($department)) {
+                $query->where('department.department_name', $department);
+            }
+        } elseif (!$isSuperAdmin) {
             $query->where('forms.department_id', $user->department_id);
         } elseif (!empty($department)) {
             $query->where('department.department_name', $department);

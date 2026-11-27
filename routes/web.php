@@ -46,7 +46,7 @@ Route::middleware(['auth', FocalPersonMiddleware::class])->group(function () {
     require __DIR__.'/web/focalperson.php';
 });
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', SuperAdminMiddleware::class])->group(function () {
     require __DIR__.'/web/feedbackcommittee.php';
 });
 

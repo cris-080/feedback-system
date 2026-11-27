@@ -125,7 +125,7 @@ export default function CommitteeReports() {
         
         Swal.fire({
             title: 'Compiling Global Report...',
-            html: 'Aggregating University-Wide metrics and generating final DOCX & PDF documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
+            html: 'Aggregating University-Wide metrics and generating final documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
             allowOutsideClick: false,
             allowEscapeKey: false,
             showConfirmButton: false,

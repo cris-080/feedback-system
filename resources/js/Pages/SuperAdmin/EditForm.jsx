@@ -4,7 +4,10 @@ import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import Swal from 'sweetalert2';
 
 export default function EditForm({ currentForm, existingFields, departments, departmentServices, departmentProviders}) {
-    
+    const { flash, auth } = usePage().props;
+    const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (rawRole === 'feedback committee' || rawRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
+
     const formDetails = currentForm?.data || currentForm || {};
 
    const formattedFields = (existingFields || []).map(f => {
@@ -263,11 +266,9 @@ export default function EditForm({ currentForm, existingFields, departments, dep
                 : currentData.fields,
         }));
 
-        post(route('superadmin.forms.update', formId), {
+        post(route(`${routePrefix}.forms.update`, formId), {
             preserveScroll: true,
             replace: true,
-            // We removed the fake 'onSuccess' popup here. 
-            // The global useEffect will now correctly handle real success/error alerts!
             onError: (errs) => {
                 Swal.fire({
                     title: 'Save Failed',
@@ -278,8 +279,6 @@ export default function EditForm({ currentForm, existingFields, departments, dep
             }
         });
     };
-
-    const { flash } = usePage().props;
 
     useEffect(() => {
         if (flash?.success) {
@@ -503,7 +502,7 @@ export default function EditForm({ currentForm, existingFields, departments, dep
                                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest text-right">Unsaved Changes</p>
                                 <p className="text-sm font-bold text-[#009639]">Ready to Save</p>
                             </div>
-                            <Link href={route('superadmin.forms.index')} className="px-5 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition flex items-center border border-gray-200">
+                           <Link href={route(`${routePrefix}.forms.index`)} className="px-5 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition flex items-center border border-gray-200">
                                 <i className="fa-solid fa-xmark mr-2 text-red-500"></i> Cancel
                             </Link>
                             <button type="submit" disabled={processing} className="bg-[#009639] text-white px-8 py-2.5 rounded-xl font-bold hover:bg-[#1E6031] transition shadow-md disabled:opacity-75 flex items-center">

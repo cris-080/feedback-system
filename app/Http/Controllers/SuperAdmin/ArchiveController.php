@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Form;
 use App\Models\Department;
-use App\Models\Account; // <-- Added Account model import
-
+use App\Models\Account;
+use App\Models\Feedback;
 class ArchiveController extends Controller
 {
     public function index(Request $request)
@@ -91,11 +91,35 @@ class ArchiveController extends Controller
             });
         }
 
+        // 5. Fetch Archived Feedback
+        $feedbacksQuery = Feedback::onlyTrashed()
+            ->leftJoin('forms', 'feedback.form_id', '=', 'forms.form_id')
+            ->leftJoin('department', 'forms.department_id', '=', 'department.department_id')
+            ->select(
+                'feedback.response_id',
+                'feedback.control_number',
+                'feedback.submitted_at',
+                'feedback.deleted_at',
+                'department.department_name'
+            );
+
+        if (!empty($search)) {
+            $like = '%' . trim($search) . '%';
+            $feedbacksQuery->where(function ($q) use ($like) {
+                $q->where('feedback.control_number', 'LIKE', $like)
+                  ->orWhere('feedback.response_id', 'LIKE', $like)
+                  ->orWhere('department.department_name', 'LIKE', $like)
+                  ->orWhere('feedback.deleted_at', 'LIKE', $like)
+                  ->orWhereRaw("DATE_FORMAT(feedback.deleted_at, '%b %e, %Y') LIKE ?", [$like]);
+            });
+        }
+
         return inertia('SuperAdmin/Archives', [
             'archivedForms'       => $activeTab === 'forms' ? $formsQuery->orderBy('forms.deleted_at', 'desc')->paginate(10)->withQueryString() : [],
             'archivedDepartments' => $activeTab === 'departments' ? $departmentsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString() : [],
             'archivedAccounts'    => $activeTab === 'accounts' ? $accountsQuery->orderBy('deleted_at', 'desc')->paginate(10)->withQueryString() : [],
             'archivedReports'     => $activeTab === 'reports' ? $reportsQuery->orderBy('updated_at', 'desc')->paginate(10)->withQueryString() : [],
+            'archivedFeedbacks'   => $activeTab === 'feedbacks' ? $feedbacksQuery->orderBy('feedback.deleted_at', 'desc')->paginate(10)->withQueryString() : [],
             'uniqueDepartments'   => Department::withTrashed()->orderBy('department_name', 'asc')->pluck('department_name'),
             'filters'             => $request->only(['search', 'department', 'tab'])
         ]);

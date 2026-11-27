@@ -84,47 +84,8 @@ class FormService
         });
     }
 
-    /**
-     * Clone a form, generating a new group ID and resetting the version[cite: 4].
-     */
-   /**
-     * Clone a form, generating a new group ID and resetting the version[cite: 23].
-     */
-    public function cloneForm($originalForm)
-    {
-        DB::transaction(function () use ($originalForm) {
-            // 1. Duplicate the parent Form
-            $newForm = $originalForm->replicate();
-            $newForm->title = $originalForm->title . ' (Copy)';
-            $newForm->status = 'Draft';
-            $newForm->form_group_id = (string) \Illuminate\Support\Str::uuid();
-            $newForm->version_number = 1;
-            $newForm->created_at = now();
-            $newForm->updated_at = now();
-            $newForm->save();
-
-            // 2. Duplicate Form Fields
-            foreach ($originalForm->fields as $field) {
-                $newField = $field->replicate();
-                unset($newField->field_id); // Explicitly remove primary key
-                $newField->form_id = $newForm->form_id;
-                $newField->save();
-
-                // 3. Duplicate Options for this field
-                foreach ($field->options as $option) {
-                    $newOption = $option->replicate();
-                    unset($newOption->option_id); // Explicitly remove primary key
-                    $newOption->field_id = $newField->field_id;
-                    $newOption->save();
-                }
-            }
-        });
-    }
 
     /**
-     * Helper to process and save fields and their options[cite: 4].
-     */
-/**
      * Helper to process and save fields and their options[cite: 4, 22].
      */
     private function saveFields(Form $form, array $fields)

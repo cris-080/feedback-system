@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
+import Swal from 'sweetalert2';
 import SuperAdminLayout from '@/Layouts/SuperAdminLayout';
 import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
-export default function Feedback({ feedbacks, isSuperAdmin, uniqueDepartments = [] }) {
+export default function Feedback({ feedbacks, isSuperAdmin, isFeedbackCommittee = false, uniqueDepartments = [] }) {
     // --- MODAL STATE ---
     const [selectedFeedback, setSelectedFeedback] = useState(null);
     const [animateModal, setAnimateModal] = useState(false);
@@ -58,6 +59,37 @@ export default function Feedback({ feedbacks, isSuperAdmin, uniqueDepartments = 
         setTimeout(() => {
             setSelectedFeedback(null);
         }, 300);
+    };
+
+    const handleArchive = (item) => {
+        Swal.fire({
+            title: 'Archive Feedback?',
+            text: `Warning: Archiving control #${item.control_number} (${item.department_name}) will immediately hide its data from dashboard charts and metrics until restored.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fa-solid fa-box-archive mr-1"></i> Yes, Archive It',
+            cancelButtonText: 'Cancel',
+        }).then((result) => {
+            if (result.isConfirmed) {
+            router.delete(route(isFeedbackCommittee ? 'feedback_committee.feedbacks.archive' : 'superadmin.feedbacks.archive', item.response_id), {  
+                    preserveScroll: true,
+                    replace: true,
+                    onSuccess: () => {
+                        Swal.fire({
+                            title: 'Archived!',
+                            text: `Feedback #${item.control_number} was moved to archives and excluded from dashboard analytics.`,
+                            icon: 'success',
+                            toast: true,
+                            position: 'top-end',
+                            timer: 3000,
+                            showConfirmButton: false,
+                        });
+                    },
+                });
+            }
+        });
     };
 
     // --- HELPER FUNCTIONS ---
@@ -173,7 +205,7 @@ export default function Feedback({ feedbacks, isSuperAdmin, uniqueDepartments = 
 
     return (
         <SuperAdminLayout headerTitle="Feedback Datastore">
-            <Head title={isSuperAdmin ? "Feedback Datastore" : "Department Feedback Datastore"} />
+           <Head title={(isSuperAdmin || isFeedbackCommittee) ? "Feedback Datastore" : "Department Feedback Datastore"} />
             
             <div className="p-8 bg-gray-50 min-h-screen">
                 <div className="max-w-7xl mx-auto space-y-6 pb-10">
@@ -208,7 +240,7 @@ export default function Feedback({ feedbacks, isSuperAdmin, uniqueDepartments = 
                                         </select>
                                     </div>
 
-                                    {isSuperAdmin && uniqueDepartments?.length > 0 && (
+                                    {(isSuperAdmin || isFeedbackCommittee) && uniqueDepartments?.length > 0 && (
                                         <div>
                                             <label className="block text-xs font-semibold text-gray-600 mb-1.5">By Department / Office</label>
                                             <select 
@@ -319,15 +351,27 @@ export default function Feedback({ feedbacks, isSuperAdmin, uniqueDepartments = 
                                                     <td className="px-6 py-4 whitespace-nowrap text-center">
                                                         {renderSentimentBadge(item.sentiment, item.sentiment_score)}
                                                     </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <button 
-                                                            type="button"
-                                                            title="View Full Feedback"
-                                                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition active:scale-95"
-                                                            onClick={() => openModal(item)}
-                                                        >
-                                                            <i className="fa-solid fa-eye"></i>
-                                                        </button>
+                                                    <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                        <div className="inline-flex items-center justify-center gap-1.5">
+                                                            <button 
+                                                                type="button"
+                                                                title="View Full Feedback"
+                                                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition active:scale-95"
+                                                                onClick={() => openModal(item)}
+                                                            >
+                                                                <i className="fa-solid fa-eye"></i>
+                                                            </button>
+                                                           {(isSuperAdmin || isFeedbackCommittee) && (
+                                                                <button 
+                                                                    type="button"
+                                                                    title="Archive Feedback"
+                                                                    className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-500 hover:text-white transition active:scale-95"
+                                                                    onClick={() => handleArchive(item)}
+                                                                >
+                                                                    <i className="fa-solid fa-box-archive"></i>
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );

@@ -27,6 +27,12 @@ class ReportController extends Controller
         $this->documentService = $documentService;
     }
 
+    private function getRoutePrefix(): string
+    {
+        $role = strtolower(trim(auth()->user()->role ?? ''));
+        return in_array($role, ['feedback committee', 'feedbackcommittee']) ? 'feedback_committee' : 'superadmin';
+    }
+
     public function index(Request $request)
     {
         $departments = $this->getDepartmentsWithTemplateType();
@@ -114,8 +120,47 @@ class ReportController extends Controller
         event(new SystemDataUpdated('superadmin', $validated['department_id']));
         event(new SystemDataUpdated('feedbackcommittee', $validated['department_id']));
 
-        return redirect()->route('superadmin.reports.index')
+        return redirect()->route($this->getRoutePrefix() . '.reports.index')
             ->with('success', 'Report "' . $report->report_data['metadata']['report_name'] . '" compiled and saved to archive.');
+    }
+
+    public function approve($id)
+    {
+        $report = Report::where('id', $id)->where('status', 'Submitted')->firstOrFail();
+        $report->status = 'Approved';
+        $report->save();
+
+        $reportName = $report->report_name ?? ($report->report_data['metadata']['report_name'] ?? "Report #{$report->id}");
+        AuditLog::logAction('Approved', 'Reports', "Approved departmental report: {$reportName}");
+
+        event(new SystemDataUpdated('focalperson', $report->department_id));
+        event(new SystemDataUpdated('superadmin', $report->department_id));
+        event(new SystemDataUpdated('feedbackcommittee', $report->department_id));
+
+        return back()->with('success', 'Report has been officially approved.');
+    }
+
+    public function returnToSender(Request $request, $id)
+    {
+        $request->validate(['remarks' => 'required|string']);
+
+        $report = Report::where('id', $id)->where('status', 'Submitted')->firstOrFail();
+        $report->status = 'Returned';
+
+        $reportData = $report->report_data;
+        $reportData['metadata']['return_remarks'] = $request->input('remarks');
+        $reportData['metadata']['returned_at'] = now()->toDateTimeString();
+        $report->report_data = $reportData;
+        $report->save();
+
+        $reportName = $report->report_name ?? ($report->report_data['metadata']['report_name'] ?? "Report #{$report->id}");
+        AuditLog::logAction('Returned', 'Reports', "Returned report '{$reportName}' to Focal Person for revisions.");
+
+        event(new SystemDataUpdated('focalperson', $report->department_id));
+        event(new SystemDataUpdated('superadmin', $report->department_id));
+        event(new SystemDataUpdated('feedbackcommittee', $report->department_id));
+
+        return back()->with('success', 'Report returned to Focal Person successfully.');
     }
 
     public function destroy($id)

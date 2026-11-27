@@ -5,8 +5,10 @@ import Swal from 'sweetalert2';
 import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
-export default function Archives({ archivedForms, archivedDepartments, archivedAccounts, archivedReports, uniqueDepartments, filters }) {
-    const { flash } = usePage().props;;
+export default function Archives({ archivedForms, archivedDepartments, archivedAccounts, archivedReports, archivedFeedbacks = [], uniqueDepartments, filters }) {
+    const { flash, auth } = usePage().props;
+    const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (rawRole === 'feedback committee' || rawRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
 
     // --- STATE MANAGEMENT ---
     const queryParams = new URLSearchParams(window.location.search);
@@ -47,6 +49,7 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
     const deptList = archivedDepartments?.data || archivedDepartments || [];
     const accountList = archivedAccounts?.data || archivedAccounts || [];
     const reportList = archivedReports?.data || archivedReports || [];
+    const feedbackList = archivedFeedbacks?.data || archivedFeedbacks || [];
 
     // --- SWEETALERT2 TOAST NOTIFICATIONS ---
     useEffect(() => {
@@ -200,6 +203,25 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
         });
     };
 
+    const handleRestoreFeedback = (responseId, controlNumber) => {
+        Swal.fire({
+            title: 'Restore Feedback?',
+            text: `Restore control #${controlNumber}? Its data will reappear in dashboard analytics.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fa-solid fa-undo"></i> Yes, Restore!',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.put(route('superadmin.feedbacks.restore', responseId), {}, {
+                    preserveScroll: true,
+                    replace: true,
+                });
+            }
+        });
+    };
+
     return (
         <SuperAdminLayout headerTitle="System Archives">
             <Head title="System Archives" />
@@ -208,7 +230,7 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
                 <div className="max-w-7xl mx-auto space-y-6">
                     
                 {/* --- TABS NAVIGATION --- */}
-                    <div className="flex flex-wrap sm:flex-nowrap gap-1 bg-gray-200 p-1 rounded-lg w-full max-w-2xl">
+                    <div className="flex flex-wrap lg:flex-nowrap gap-1 bg-gray-200 p-1 rounded-lg w-full max-w-4xl">
                         <button
                             onClick={() => setActiveTab('forms')}
                             className={`flex-1 py-2.5 px-2 text-sm font-bold rounded-md transition-all whitespace-nowrap ${
@@ -240,6 +262,14 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
                             }`}
                         >
                             <i className="fa-solid fa-file-pdf mr-2"></i> Archived Reports
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('feedbacks')}
+                            className={`flex-1 py-2.5 px-2 text-sm font-bold rounded-md transition-all whitespace-nowrap ${
+                                activeTab === 'feedbacks' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <i className="fa-solid fa-comments mr-2"></i> Archived Feedback
                         </button>
                     </div>
 
@@ -393,6 +423,48 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
                                 </table>
                             )}
 
+                           {/* FEEDBACK TABLE */}
+                            {activeTab === 'feedbacks' && (
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-[#009639] text-white">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Control Number</th>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Department</th>
+                                            <th className="px-6 py-4 text-left font-semibold uppercase tracking-wider">Date Archived</th>
+                                            <th className="px-6 py-4 text-center font-semibold uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {feedbackList.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                                                    <i className="fa-solid fa-comment-slash text-4xl mb-4 block text-gray-300"></i>
+                                                    <p className="text-base font-semibold">No archived feedback found</p>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            feedbackList.map((fb) => (
+                                                <tr key={fb.response_id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-6 py-4 font-semibold text-gray-800">{fb.control_number}</td>
+                                                    <td className="px-6 py-4 text-gray-600">{fb.department_name || 'General'}</td>
+                                                    <td className="px-6 py-4 text-gray-500">{formatDate(fb.deleted_at || fb.submitted_at)}</td>
+                                                    <td className="px-6 py-4 text-center space-x-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRestoreFeedback(fb.response_id, fb.control_number)}
+                                                            className="w-8 h-8 bg-emerald-100 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded transition tooltip"
+                                                            title="Restore Feedback"
+                                                        >
+                                                            <i className="fa-solid fa-undo"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            )}
+
                             {/* REPORTS TABLE */}
                             {activeTab === 'reports' && (
                                 <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -442,9 +514,11 @@ export default function Archives({ archivedForms, archivedDepartments, archivedA
                                 activeTab === 'forms' ? archivedForms : 
                                 activeTab === 'departments' ? archivedDepartments : 
                                 activeTab === 'reports' ? archivedReports : 
+                                activeTab === 'feedbacks' ? archivedFeedbacks :
                                 archivedAccounts
                             } 
                         />
+                       
                     </div>
                 </div>
             </div>

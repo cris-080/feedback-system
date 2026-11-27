@@ -138,8 +138,8 @@ class PublicFeedbackController extends Controller
             \Illuminate\Support\Facades\Cookie::queue('csm_session_' . $formId, 'valid', 120);
         }
 
-        // 6. Check if this specific user has ALREADY submitted feedback in this session
-        $hasAlreadySubmitted = $request->cookie('csm_completed_' . $formId) ? true : false;
+        // 6. Check if this mobile user already submitted recently (never lock shared kiosk tablets)
+        $hasAlreadySubmitted = !$isKiosk && (bool) $request->cookie('csm_completed_' . $formId);
 
         return Inertia::render('Feedback/Index', [
             'already_submitted' => $hasAlreadySubmitted,
@@ -182,10 +182,10 @@ class PublicFeedbackController extends Controller
         // 2. Delegate all complex processing (Payload Splitting, AI Sentiment, Emails) to the Service
         FeedbackSubmissionService::process($validated);
 
-        // 3. Drop a "Completed" cookie to prevent duplicate submissions on refresh
+        // 3. Drop a short-lived "Completed" cookie to prevent accidental duplicates on refresh
         if (!$validated['is_kiosk']) {
-            // Lock out the mobile browser for 2 hours (120 mins) so they can't answer it again
-            \Illuminate\Support\Facades\Cookie::queue('csm_completed_' . $validated['form_id'], 'true', 120);
+            // 10-minute cooldown prevents double-submits without blocking returning clients later
+            \Illuminate\Support\Facades\Cookie::queue('csm_completed_' . $validated['form_id'], 'true', 10);
         }
 
         // 4. Return HTTP Response

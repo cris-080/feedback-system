@@ -131,7 +131,7 @@ export default function Reports() {
         // Blocking Loader for LibreOffice Pre-Compile
         Swal.fire({
             title: 'Compiling Report Data...',
-            html: 'Aggregating metrics and exporting official DOCX & PDF documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
+            html: 'Aggregating metrics and exporting official documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
             allowOutsideClick: false,
             allowEscapeKey: false,
             showConfirmButton: false,

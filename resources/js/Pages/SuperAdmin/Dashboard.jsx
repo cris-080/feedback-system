@@ -11,6 +11,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
         const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
         const isFeedbackCommittee = rawRole === 'feedback committee' || rawRole === 'feedbackcommittee';
         const isSuperGroup = isSuperAdmin || isFeedbackCommittee;
+        const routePrefix = isFeedbackCommittee ? 'feedback_committee' : isSuperAdmin ? 'superadmin' : 'focalperson';
 
         // Active server filter states from backend
         const currentRange = metrics?.current_range || 'month';
@@ -111,11 +112,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
             if (tempRange === 'custom_date' && tempDate) params.specific_date = tempDate;
             if (tempRange === 'custom_month' && tempMonth) params.specific_month = tempMonth;
 
-            const currentRoute = isSuperAdmin
-                ? 'superadmin.dashboard'
-                : isFeedbackCommittee
-                    ? 'feedback_committee.dashboard'
-                    : 'focalperson.dashboard';
+            const currentRoute = `${routePrefix}.dashboard`;
             
             router.get(route(currentRoute), params, {
                 preserveState: true,
@@ -130,11 +127,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
             setTempDate('');
             setTempMonth('');
 
-            const currentRoute = isSuperAdmin
-                ? 'superadmin.dashboard'
-                : isFeedbackCommittee
-                    ? 'feedback_committee.dashboard'
-                    : 'focalperson.dashboard';
+            const currentRoute = `${routePrefix}.dashboard`;
 
             router.get(
                 route(currentRoute),
@@ -338,7 +331,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                         {isSuperAdmin && (
                             <>
                                 <Link 
-                                    href={route('superadmin.users.index')} 
+                                    href={route(`${routePrefix}.users.index`)} 
                                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-xs text-white bg-blue-600 hover:bg-blue-700 active:scale-98 transition shadow-xs"
                                 >
                                     <i className="fa-solid fa-user-plus text-xs"></i>
@@ -346,7 +339,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                 </Link>
 
                                 <Link 
-                                    href={route('superadmin.forms.builder')} 
+                                    href={route(`${routePrefix}.forms.builder`)} 
                                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-700 active:scale-98 transition shadow-xs"
                                 >
                                     <i className="fa-solid fa-file-circle-plus text-xs"></i>
@@ -366,97 +359,9 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                 )}
 
                 {/* Primary KPI Metrics Grid */}
-                <div className={`grid grid-cols-1 md:grid-cols-2 ${isSuperAdmin ? 'lg:grid-cols-3 xl:grid-cols-6' : isFeedbackCommittee ? 'lg:grid-cols-5' : 'lg:grid-cols-2'} gap-4`}>
-                    
-                    {/* --- FEEDBACK COMMITTEE AUDIT KPIs --- */}
-                    {isFeedbackCommittee && (
-                        <>
-                            {/* 1. Audited Feedback */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Audited Feedback</p>
-                                        <p className="text-2xl font-bold text-gray-900 mt-0.5">{metrics?.total_audited_feedback || 0}</p>
-                                    </div>
-                                    <div className="bg-orange-100 p-2 rounded-lg text-orange-600 text-base">
-                                        <i className="fa-solid fa-comments"></i>
-                                    </div>
-                                </div>
-                                <div className="mt-2 text-xs text-gray-400 font-medium">From compliant departments</div>
-                            </div>
-
-                            {/* 2. Active Forms */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Active Forms</p>
-                                        <p className="text-2xl font-bold text-gray-900 mt-0.5">{metrics?.active_forms || 0}</p>
-                                    </div>
-                                    <div className="bg-purple-100 p-2 rounded-lg text-purple-600 text-base">
-                                        <i className="fa-solid fa-file-signature"></i>
-                                    </div>
-                                </div>
-                                <div className="mt-2 text-xs font-medium">
-                                    {metrics?.trends?.forms > 0 ? (
-                                        <span className="text-green-600 font-semibold"><i className="fa-solid fa-arrow-up mr-1"></i>+{metrics.trends.forms}</span>
-                                    ) : metrics?.trends?.forms < 0 ? (
-                                        <span className="text-red-600 font-semibold"><i className="fa-solid fa-arrow-down mr-1"></i>{metrics.trends.forms}</span>
-                                    ) : (
-                                        <span className="text-gray-400">0</span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* 3. Departments */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Departments</p>
-                                        <p className="text-2xl font-bold text-gray-900 mt-0.5">{metrics?.total_departments || 0}</p>
-                                    </div>
-                                    <div className="bg-blue-100 p-2 rounded-lg text-blue-600 text-base">
-                                        <i className="fa-solid fa-building"></i>
-                                    </div>
-                                </div>
-                                <div className="mt-2 text-xs text-gray-400 font-medium">Total integrated</div>
-                            </div>
-
-                            {/* 4. Report Submissions */}
-                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Report Submissions</p>
-                                        <p className="text-2xl font-bold text-gray-900 mt-0.5">
-                                            {metrics?.compliant_departments || 0} <span className="text-gray-400 text-lg">/ {metrics?.total_departments || 0}</span>
-                                        </p>
-                                    </div>
-                                    <div className="bg-emerald-100 p-2 rounded-lg text-emerald-600 text-base">
-                                        <i className="fa-solid fa-file-circle-check"></i>
-                                    </div>
-                                </div>
-                                <div className="mt-2 text-xs text-gray-400 font-medium">
-                                    <span className="font-semibold text-gray-600">{metrics?.pending_reports || 0}</span> pending review
-                                </div>
-                            </div>
-
-                            {/* 5. Flagged Harassment */}
-                            <div className={`bg-white p-4 rounded-lg shadow-sm border-2 flex flex-col justify-between hover:shadow-md transition ${(metrics?.audited_harassment || 0) > 0 ? 'border-red-500' : 'border-gray-200'}`}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className={`text-xs font-semibold uppercase tracking-wide ${(metrics?.audited_harassment || 0) > 0 ? 'text-red-600' : 'text-gray-500'}`}>Flagged Harassment</p>
-                                        <p className="text-2xl font-bold text-gray-900 mt-0.5">{metrics?.audited_harassment || 0}</p>
-                                    </div>
-                                    <div className={`p-2 rounded-lg text-base ${(metrics?.audited_harassment || 0) > 0 ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
-                                        <i className="fa-solid fa-triangle-exclamation"></i>
-                                    </div>
-                                </div>
-                                <div className="mt-2 text-xs text-gray-400 font-medium">Escalated via reports</div>
-                            </div>
-                        </>
-                    )}
-
-                    {/* --- SUPERADMIN & FOCAL PERSON KPIs --- */}
-                    {!isFeedbackCommittee && (
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${isSuperGroup ? 'lg:grid-cols-3 xl:grid-cols-6' : 'lg:grid-cols-2'} gap-4`}>
+                    {/* --- UNIFIED LIVE KPIs (SuperAdmin, Feedback Committee, Focal Person) --- */}
+                    {true && (
                         <>
                             {/* 1. Total Feedback */}
                             <div className={`p-4 rounded-lg border flex flex-col justify-between transition-all duration-700 ${
@@ -598,17 +503,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                 </div>
 
                 {/* --- Data Visualization Section --- */}
-                {isFeedbackCommittee && (metrics?.total_audited_feedback || 0) === 0 ? (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 flex flex-col items-center justify-center text-center mt-6">
-                        <div className="w-24 h-24 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-5 border-4 border-blue-100/50">
-                            <i className="fa-solid fa-file-shield text-4xl"></i>
-                        </div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">Awaiting  Submissions</h3>
-                        <p className="text-gray-500 max-w-lg mx-auto text-sm leading-relaxed">
-                            No official reports have been submitted for this period yet. Analytics, compliance tracking, and demographic trends will populate here automatically once Focal Persons finalize and submit their audited feedback data.
-                        </p>
-                    </div>
-                ) : (
+                {false ? null : (
                     <>
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
                             
@@ -753,11 +648,7 @@ export default function Dashboard({ metrics, recentAccounts, recentForms, isSupe
                                     ) : (
                                         <div className="flex flex-wrap gap-2 pt-1 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                                             {(complaintTab === 'complaints' ? topWords : harassmentWords).map((item, idx) => {
-                                               const feedbackRoute = isSuperAdmin
-                                                    ? 'superadmin.feedbacks.index'
-                                                    : isFeedbackCommittee
-                                                        ? 'feedback_committee.feedbacks.index'
-                                                        : 'focalperson.feedbacks.index';
+                                               const feedbackRoute = `${routePrefix}.feedbacks.index`;
                                                 const isComplaint = complaintTab === 'complaints';
                                                 
                                                 return (

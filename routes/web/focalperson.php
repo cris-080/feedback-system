@@ -36,9 +36,10 @@ Route::prefix('focal')->name('focalperson.')->group(function () {
     Route::post('/department/providers', [FocalDepartmentController::class, 'storeProvider'])->name('department.providers.store');
     Route::delete('/department/providers/{id}', [FocalDepartmentController::class, 'destroyProvider'])->name('department.providers.destroy');
 
-    // Focal Person Requests
+   // Focal Person Requests
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
+    Route::patch('/requests/{id}/respond-car', [RequestController::class, 'respondCar'])->name('requests.car.respond');
     Route::delete('/requests/{id}', [RequestController::class, 'destroy'])->name('requests.destroy');
 
     // Archive System

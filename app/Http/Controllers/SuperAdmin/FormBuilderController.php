@@ -15,6 +15,12 @@ use Inertia\Inertia;
 
 class FormBuilderController extends Controller
 {
+    private function getRoutePrefix(): string
+    {
+        $role = strtolower(trim(auth()->user()->role ?? ''));
+        return in_array($role, ['feedback committee', 'feedbackcommittee']) ? 'feedback_committee' : 'superadmin';
+    }
+
     /**
      * Display the Form Builder UI and pass required data to React.
      */
@@ -81,7 +87,7 @@ class FormBuilderController extends Controller
         // --- AUDIT TRAIL ---
         AuditLog::logAction('Created', 'Form Builder', "Created a new {$validated['form_type']} form blueprint: {$validated['title']}.");
 
-        return to_route('superadmin.forms.index')->with('success', 'Form blueprint created successfully!');
+      return to_route($this->getRoutePrefix() . '.forms.index')->with('success', 'Form blueprint created successfully!');
     }
 
     /**
@@ -141,6 +147,6 @@ class FormBuilderController extends Controller
         // --- AUDIT TRAIL ---
         AuditLog::logAction('Updated', 'Form Builder', "Published a new version for form (ID: {$id}): {$validated['title']}.");
 
-        return to_route('superadmin.forms.index')->with('success', 'New form version published successfully!');
+       return to_route($this->getRoutePrefix() . '.forms.index')->with('success', 'New form version published successfully!');
     }
 }

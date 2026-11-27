@@ -6,7 +6,9 @@ import SearchFilter from '@/Components/SearchFilter';
 import Pagination from '@/Components/Pagination';
 
 export default function Reports({ departments = [], reports = { data: [] }, filters = {} }) {
-    const { flash } = usePage().props;
+    const { flash, auth } = usePage().props;
+    const rawRole = auth?.user?.role?.toLowerCase()?.trim() || '';
+    const routePrefix = (rawRole === 'feedback committee' || rawRole === 'feedbackcommittee') ? 'feedback_committee' : 'superadmin';
 
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState(String(currentYear));
@@ -137,7 +139,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
         // Show a blocking loading screen that cannot be closed
         Swal.fire({
             title: 'Compiling Report Data...',
-            html: 'Aggregating metrics and exporting official DOCX & PDF documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
+            html: 'Aggregating metrics and exporting official documents.<br><br><span class="text-sm font-bold text-[#009639]">This may take up to 30 seconds. Please do not close this window.</span>',
             allowOutsideClick: false,
             allowEscapeKey: false,
             showConfirmButton: false,
@@ -146,7 +148,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
             }
         });
 
-        post('/superadmin/reports/generate', {
+        post(route(`${routePrefix}.reports.generate`), {
             preserveScroll: true,
             onSuccess: () => {
                 setData('report_name', '');
@@ -201,6 +203,48 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200"><span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> DRAFT</span>;
     };
 
+   const handleApprove = (rep, title) => {
+        Swal.fire({
+            title: 'Mark as Approved?',
+            text: `This will officially approve "${title}" and finalize it in the system.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#009639',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, Approve Report',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.patch(route(`${routePrefix}.reports.approve`, rep.id), {}, {
+                    preserveScroll: true,
+                });
+            }
+        });
+    };
+
+    const handleReturn = (rep, title) => {
+        Swal.fire({
+            title: 'Return to Sender?',
+            text: `This will return "${title}" back to the Focal Person for revisions.`,
+            icon: 'warning',
+            input: 'textarea',
+            inputLabel: 'Reason for return',
+            inputPlaceholder: 'Type your remarks here...',
+            inputValidator: (value) => {
+                if (!value || value.trim() === '') return 'Please provide a reason for returning this report.';
+            },
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Return Report',
+        }).then((result) => {
+            if (result.isConfirmed) {
+                router.patch(route(`${routePrefix}.reports.return`, rep.id), { remarks: result.value }, {
+                    preserveScroll: true,
+                });
+            }
+        });
+    };
+
     // Soft Delete confirmation
     const handleSoftDelete = (rep) => {
         const deptName = rep.report_data?.metadata?.department ?? rep.department?.department_name ?? 'All Departments';
@@ -218,7 +262,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
             cancelButtonText: 'Cancel',
         }).then((result) => {
             if (result.isConfirmed) {
-                router.delete(`/superadmin/reports/${rep.id}`, {
+               router.delete(route(`${routePrefix}.reports.destroy`, rep.id), {
                     preserveScroll: true,
                 });
             }
@@ -239,7 +283,7 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
             if (deptFilter !== 'all') params.department = deptFilter;
 
             router.get(
-                '/superadmin/reports',
+                route(`${routePrefix}.reports.index`),
                 params,
                 {
                     preserveState: true,
@@ -418,11 +462,35 @@ export default function Reports({ departments = [], reports = { data: [] }, filt
                                                         {activeDropdown === rep.id && (
                                                             <div className="absolute right-6 top-10 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 flex flex-col">
                                                                 <a
-                                                                    href={`/superadmin/reports/${rep.id}/pdf`}
+                                                                   href={route(`${routePrefix}.reports.pdf`, rep.id)}
                                                                     className="px-4 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                                                 >
                                                                     <i className="fa-solid fa-file-pdf text-red-500 w-4"></i> Download as PDF
                                                                 </a>
+                                                                {rep.department_id && rep.status === 'Submitted' && (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setActiveDropdown(null);
+                                                                                handleApprove(rep, customTitle);
+                                                                            }}
+                                                                            className="px-4 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                                                                        >
+                                                                            <i className="fa-solid fa-check text-emerald-600 w-4"></i> Approve Report
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setActiveDropdown(null);
+                                                                                handleReturn(rep, customTitle);
+                                                                            }}
+                                                                            className="px-4 py-2 text-left text-xs font-semibold text-amber-700 hover:bg-amber-50 flex items-center gap-2 border-t border-gray-100 mt-1"
+                                                                        >
+                                                                            <i className="fa-solid fa-rotate-left text-amber-600 w-4"></i> Return to Sender
+                                                                        </button>
+                                                                    </>
+                                                                )}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {

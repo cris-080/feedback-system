@@ -25,6 +25,12 @@ class FormController extends Controller
         $this->formService = $formService;
     }
 
+    private function getRoutePrefix(): string
+    {
+        $role = strtolower(trim(auth()->user()->role ?? ''));
+        return in_array($role, ['feedback committee', 'feedbackcommittee']) ? 'feedback_committee' : 'superadmin';
+    }
+
   public function index(Request $request)
     {
         $userRole = strtolower(trim(auth()->user()->role ?? ''));
@@ -47,7 +53,7 @@ class FormController extends Controller
             // Both SuperAdmin and Feedback Committee need the full list of departments for the dropdown
             'uniqueDepartments' => ($isSuperAdmin || $isFeedbackCommittee) ? Department::orderBy('department_name', 'asc')->pluck('department_name') : [],
             'filters'           => $filters,
-            'isSuperAdmin'      => $isSuperAdmin // This strictly controls the action buttons in ManageForms.jsx
+            'isSuperAdmin'      => $isSuperAdmin || $isFeedbackCommittee // Grants full form management to both SuperAdmin and FC
         ]);
     }
 
@@ -86,17 +92,6 @@ class FormController extends Controller
         return back()->with('success', "Form published successfully! Previous active {$form->form_type} form for this department has been archived.");
     }
     
-    public function clone($id)
-    {
-        $form = Form::with('fields.options')->findOrFail($id);
-        $this->formService->cloneForm($form);
-
-        // --- AUDIT TRAIL ---
-        AuditLog::logAction('Created', 'Forms', "Cloned form (ID: {$id}) into a new Draft.");
-
-        return back()->with('success', 'Form cloned successfully! You can now edit the newly created Draft.');
-    }
-
    
 
    public function update(UpdateFormVersionRequest $request, $id)
@@ -107,7 +102,7 @@ class FormController extends Controller
         // --- AUDIT TRAIL ---
         AuditLog::logAction('Updated', 'Forms', "Updated form (ID: {$id}) by creating a new version.");
 
-        return redirect()->route('superadmin.forms.index')->with('success', 'Form updated successfully! (New version created)');
+        return redirect()->route($this->getRoutePrefix() . '.forms.index')->with('success', 'Form updated successfully! (New version created)');
     }
 
     public function destroy($id)
@@ -120,7 +115,7 @@ class FormController extends Controller
             // --- AUDIT TRAIL ---
             AuditLog::logAction('Deleted', 'Forms', "Deleted form (ID: {$id}).");
             
-            return to_route('superadmin.forms.index')->with('success', 'Form permanently deleted.');
+            return to_route($this->getRoutePrefix() . '.forms.index')->with('success', 'Form permanently deleted.');
         } catch (ValidationException $e) {
             return back()->with('error', $e->getMessage());
         }

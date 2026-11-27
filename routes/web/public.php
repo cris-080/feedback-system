@@ -13,8 +13,11 @@ Route::post('/feedback', [PublicFeedbackController::class, 'store'])->middleware
 Route::get('/', function () {
     if (Auth::check()) {
         $role = strtolower(trim(Auth::user()->role ?? ''));
-        if (in_array($role, ['superadmin', 'feedback committee', 'feedbackcommittee'])) {
+        if ($role === 'superadmin') {
             return redirect()->route('superadmin.dashboard');
+        }
+        if (in_array($role, ['feedback committee', 'feedbackcommittee'])) {
+            return redirect()->route('feedback_committee.dashboard');
         }
         return redirect()->route('focalperson.dashboard');
     }
